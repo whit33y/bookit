@@ -1,2 +1,21 @@
-<h1>Welcome web</h1>
-<router-outlet></router-outlet>
+<header>
+  <nav aria-label="Nawigacja główna">
+    <a routerLink="/">Bookit</a>
+    @if (auth.isLoggedIn()) {
+      <a routerLink="/client">Moje wizyty</a>
+      @if (role() === 'OWNER' || role() === 'EMPLOYEE') {
+        <a routerLink="/business">Panel firmy</a>
+      }
+      @if (role() === 'ADMIN') {
+        <a routerLink="/admin">Admin</a>
+      }
+      <button type="button" (click)="auth.logout()">Wyloguj</button>
+    } @else {
+      <a routerLink="/login">Zaloguj</a>
+      <a routerLink="/register">Rejestracja</a>
+    }
+  </nav>
+</header>
+<main>
+  <router-outlet></router-outlet>
+</main>
