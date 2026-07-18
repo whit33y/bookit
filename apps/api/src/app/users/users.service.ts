@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -19,18 +19,32 @@ const profileSelect = {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  getMe(userId: string) {
-    return this.prisma.user.findUnique({
+  // ważny token dla usera usuniętego w międzyczasie → 404 zamiast 200 null
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: profileSelect,
     });
+    if (!user) throw new NotFoundException('Nie znaleziono użytkownika');
+    return user;
   }
 
-  updateMe(userId: string, dto: UpdateMeDto) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: dto,
-      select: profileSelect,
-    });
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: dto,
+        select: profileSelect,
+      });
+    } catch (e) {
+      // usunięty user (ważny token) → 404 zamiast 500 z P2025
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
+        throw new NotFoundException('Nie znaleziono użytkownika');
+      }
+      throw e;
+    }
   }
 }

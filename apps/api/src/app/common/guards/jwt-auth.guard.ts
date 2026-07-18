@@ -19,7 +19,8 @@ export class JwtAuthGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<Request>();
     const [type, token] = req.headers.authorization?.split(' ') ?? [];
-    if (type !== 'Bearer' || !token) {
+    // schemat wg RFC 6750 jest case-insensitive
+    if (type?.toLowerCase() !== 'bearer' || !token) {
       throw new UnauthorizedException('Brak tokenu');
     }
 
