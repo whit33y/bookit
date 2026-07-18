@@ -7,7 +7,8 @@ import { AuthService } from './auth.service';
 
 @Module({
   imports: [
-    JwtModule.register({}),
+    // global: JwtService dostępny w guardach innych modułów bez re-importu
+    JwtModule.register({ global: true }),
     MailModule,
     // ponytail: in-memory storage per instancję — przy wielu replikach podmienić
     // na ThrottlerStorageRedis
