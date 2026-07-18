@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  OWNER
+  EMPLOYEE
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+  CANCELLED_BY_CLIENT
+  CANCELLED_BY_BUSINESS
+  COMPLETED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         UserRole @default(CLIENT)
+  isBlocked    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business      Business?
+  employee      Employee?
+  bookings      Booking[]
+  refreshTokens RefreshToken[]
+  resetTokens   PasswordResetToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id         String     @id @default(uuid())
+  name       String     @unique
+  slug       String     @unique
+  businesses Business[]
+}
+
+model Business {
+  id          String  @id @default(uuid())
+  ownerId     String  @unique
+  categoryId  String
+  name        String
+  slug        String  @unique
+  description String?
+  phone       String?
+  street      String
+  city        String
+  postalCode  String?
+  lat         Float
+  lng         Float
+  // polityka odwołań: klient może odwołać/przenieść do X godzin przed wizytą
+  cancellationHours Int      @default(24)
+  isBlocked         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  owner     User       @relation(fields: [ownerId], references: [id])
+  category  Category   @relation(fields: [categoryId], references: [id])
+  employees Employee[]
+  services  Service[]
+  bookings  Booking[]
+
+  @@index([city])
+  @@index([categoryId])
+}
+
+model Employee {
+  id         String  @id @default(uuid())
+  businessId String
+  userId     String? @unique // pracownik może (nie musi) mieć konto w systemie
+  name       String
+  isActive   Boolean @default(true)
+
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user         User?          @relation(fields: [userId], references: [id])
+  services     Service[]
+  workingHours WorkingHours[]
+  timeOffs     TimeOff[]
+  bookings     Booking[]
+}
+
+model Service {
+  id          String  @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  durationMin Int
+  priceCents  Int // cena informacyjna, płatność na miejscu
+  isActive    Boolean @default(true)
+
+  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  employees Employee[]
+  bookings  Booking[]
+}
+
+model WorkingHours {
+  id         String @id @default(uuid())
+  employeeId String
+  weekday    Int // 0 = poniedziałek … 6 = niedziela
+  startTime  String // "09:00" — czas lokalny firmy
+  endTime    String // "17:00"
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, weekday])
+}
+
+model TimeOff {
+  id         String   @id @default(uuid())
+  employeeId String
+  startsAt   DateTime
+  endsAt     DateTime
+  reason     String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id             String        @id @default(uuid())
+  clientId       String
+  businessId     String
+  employeeId     String
+  serviceId      String
+  startsAt       DateTime
+  endsAt         DateTime
+  status         BookingStatus @default(PENDING)
+  clientNote     String?
+  reminderSentAt DateTime? // ustawiane przez cron po wysłaniu przypomnienia
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  client   User     @relation(fields: [clientId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+  service  Service  @relation(fields: [serviceId], references: [id])
+
+  @@index([employeeId, startsAt])
+  @@index([clientId])
+  @@index([businessId, startsAt])
+}

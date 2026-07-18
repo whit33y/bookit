@@ -16,6 +16,7 @@
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@prisma/client": "^6.19.3",
     "reflect-metadata": "^0.2.0",
     "rxjs": "~7.8.0"
   },
@@ -67,6 +68,7 @@
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "23.1.0",
     "prettier": "^3.8.1",
+    "prisma": "^6.19.3",
     "supertest": "^7.1.4",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",
