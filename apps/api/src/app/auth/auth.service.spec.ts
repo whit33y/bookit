@@ -6,6 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 
+// compare owinięte w spy delegujący do prawdziwej implementacji — reszta testów
+// używa realnego bcrypt, a możemy sprawdzić, że compare jest wołane też bez usera
+vi.mock('bcrypt', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('bcrypt')>();
+  return { ...actual, compare: vi.fn(actual.compare) };
+});
+
 // ponytail: AuthService instancjonowany wprost zamiast Test.createTestingModule —
 // vitest/esbuild nie emituje decorator metadata wymaganej przez DI Nesta
 const user = (overrides: Partial<User> = {}): User => ({
@@ -49,7 +56,7 @@ describe('AuthService', () => {
       prisma.user.create.mockResolvedValue(user());
 
       const tokens = await service.register({
-        email: 'jan@example.com',
+        email: '  JAN@Example.COM ',
         password: 'poprawne-haslo',
         firstName: 'Jan',
         lastName: 'Kowalski',
@@ -60,6 +67,7 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.create).toHaveBeenCalledOnce();
       const created = prisma.user.create.mock.calls[0][0].data;
       expect(created.passwordHash).not.toBe('poprawne-haslo');
+      expect(created.email).toBe('jan@example.com');
     });
 
     it('duplikat emaila → ConflictException (409)', async () => {
@@ -110,6 +118,30 @@ describe('AuthService', () => {
       expect(unknownEmail.message).toBe(badPassword.message);
     });
 
+    it('przy nieznanym emailu i tak wykonuje bcrypt.compare (ochrona przed timing-atakiem)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      vi.mocked(bcrypt.compare).mockClear();
+
+      await service
+        .login({ email: 'nikt@example.com', password: 'x' })
+        .catch(() => undefined);
+
+      expect(bcrypt.compare).toHaveBeenCalledOnce();
+    });
+
+    it('normalizuje email (trim + lowercase) przed wyszukaniem', async () => {
+      prisma.user.findUnique.mockResolvedValue(user());
+
+      await service.login({
+        email: '  JAN@Example.COM ',
+        password: 'poprawne-haslo',
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'jan@example.com' },
+      });
+    });
+
     it('zablokowany user → ForbiddenException (403)', async () => {
       prisma.user.findUnique.mockResolvedValue(user({ isBlocked: true }));
 
@@ -135,10 +167,17 @@ describe('AuthService', () => {
       const refreshToken = await issueAndGrabToken();
       prisma.user.findUnique.mockResolvedValue(user());
       prisma.refreshToken.create.mockClear();
+      prisma.refreshToken.deleteMany.mockClear();
 
       const tokens = await service.refresh(refreshToken);
 
-      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledOnce();
+      // rotacja usuwa dokładnie stary token po jego haszu
+      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: {
+          tokenHash: expect.any(String),
+          expiresAt: { gt: expect.any(Date) },
+        },
+      });
       expect(prisma.refreshToken.create).toHaveBeenCalledOnce();
       expect(tokens.refreshToken).not.toBe(refreshToken);
       expect(tokens.accessToken).toBeTruthy();

@@ -15,6 +15,12 @@ import { LoginDto, RegisterDto } from './dto/auth.dto';
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 
+// stały hash o tym samym koszcie co produkcyjny — porównanie przy nieistniejącym
+// userze zajmuje tyle samo czasu co przy istniejącym, więc czas odpowiedzi nie
+// zdradza, czy konto istnieje
+const DUMMY_PASSWORD_HASH =
+  '$2b$10$AW9FsaUHFQ3gAJfUnxcPLu5t7ETXO5QIHibbcpe0jElJePlAcfs2i';
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -22,6 +28,8 @@ export interface TokenPair {
 
 const sha256 = (value: string) =>
   createHash('sha256').update(value).digest('hex');
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 @Injectable()
 export class AuthService {
@@ -36,7 +44,7 @@ export class AuthService {
     try {
       const user = await this.prisma.user.create({
         data: {
-          email: dto.email,
+          email: normalizeEmail(dto.email),
           passwordHash,
           firstName: dto.firstName,
           lastName: dto.lastName,
@@ -56,9 +64,15 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<TokenPair> {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { email: normalizeEmail(dto.email) },
     });
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    // porównanie wykonywane zawsze (dummy hash gdy brak usera), by czas odpowiedzi
+    // nie ujawniał istnienia konta
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+    );
+    if (!user || !passwordMatches) {
       throw new UnauthorizedException('Nieprawidłowy email lub hasło');
     }
     if (user.isBlocked) {
@@ -114,6 +128,11 @@ export class AuthService {
     );
     await this.prisma.refreshToken.create({
       data: { userId: user.id, tokenHash: sha256(refreshToken), expiresAt },
+    });
+    // sprzątanie wygasłych tokenów tego usera przy każdym wydaniu pary
+    // ponytail: prune per-user; globalny cron dopiero gdyby okazał się potrzebny
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: user.id, expiresAt: { lte: new Date() } },
     });
     return { accessToken, refreshToken };
   }
