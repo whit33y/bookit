@@ -23,8 +23,13 @@ const REFRESH_KEY = 'bookit.refreshToken';
 
 function decodeJwt(token: string): AuthUser | null {
   try {
-    const payload = token.split('.')[1];
-    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    const payload: unknown = JSON.parse(
+      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')),
+    );
+    // guard kształtu: JSON.parse('123') to też poprawny JSON, ale nie user
+    return typeof (payload as AuthUser)?.role === 'string'
+      ? (payload as AuthUser)
+      : null;
   } catch {
     return null;
   }
@@ -76,13 +81,19 @@ export class AuthStore {
   }
 
   private async doRefresh(): Promise<void> {
-    const refreshToken = this.refreshTokenSignal();
-    if (!refreshToken) {
-      throw new Error('Brak refresh tokenu');
+    try {
+      const refreshToken = this.refreshTokenSignal();
+      if (!refreshToken) {
+        throw new Error('Brak refresh tokenu');
+      }
+      const pair = await firstValueFrom(
+        this.api.post<TokenPair>('/auth/refresh', { refreshToken }),
+      );
+      this.setTokens(pair);
+    } catch (err) {
+      // sesja nie do uratowania — wylogowanie raz, niezależnie od liczby czekających 401
+      this.logout();
+      throw err;
     }
-    const pair = await firstValueFrom(
-      this.api.post<TokenPair>('/auth/refresh', { refreshToken }),
-    );
-    this.setTokens(pair);
   }
 }

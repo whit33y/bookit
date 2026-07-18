@@ -28,13 +28,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       if (!is401 || req.url.startsWith('/api/auth/')) {
         return throwError(() => err);
       }
-      return from(store.refresh()).pipe(
-        switchMap(() => next(withToken(req))),
-        catchError((refreshErr: unknown) => {
-          store.logout();
-          return throwError(() => refreshErr);
-        }),
-      );
+      // logout przy nieudanym refreshu robi AuthStore (raz, mimo N równoległych 401);
+      // błąd ponowionego żądania propaguje bez wylogowania
+      return from(store.refresh()).pipe(switchMap(() => next(withToken(req))));
     }),
   );
 };

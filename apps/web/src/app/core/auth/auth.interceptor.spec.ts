@@ -75,6 +75,29 @@ describe('authInterceptor', () => {
     expect(localStorage.getItem('bookit.refreshToken')).toBe('nowy-refresh');
   });
 
+  it('udany refresh + błąd ponowionego żądania nie wylogowuje', async () => {
+    const nowyAccess = fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' });
+    let error: unknown;
+    http.get('/api/users/me').subscribe({ error: (e) => (error = e) });
+
+    httpMock
+      .expectOne('/api/users/me')
+      .flush(null, { status: 401, statusText: 'Unauthorized' });
+    httpMock
+      .expectOne('/api/auth/refresh')
+      .flush({ accessToken: nowyAccess, refreshToken: 'nowy-refresh' });
+    await flushMicrotasks();
+
+    httpMock
+      .expectOne('/api/users/me')
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    await flushMicrotasks();
+
+    expect(error).toBeTruthy();
+    expect(store.isLoggedIn()).toBe(true);
+    expect(localStorage.getItem('bookit.refreshToken')).toBe('nowy-refresh');
+  });
+
   it('nieudany refresh → wylogowanie i propagacja błędu', async () => {
     let error: unknown;
     http.get('/api/users/me').subscribe({ error: (e) => (error = e) });
