@@ -1,0 +1,49 @@
+/* ── BookIt design tokens ──────────────────────────────────────
+   Jedno źródło prawdy dla kolorów, typografii, cieni i radiusów.
+   Showcase: docs/design-system/index.html linkuje ten plik.      */
+:root {
+  /* Kolory marki */
+  --brand-50: #FFF7ED;   /* tint — tła aktywnych elementów */
+  --brand-100: #FFEDD5;
+  --brand-200: #FED7AA;  /* ringi na tintach */
+  --brand-500: #F97316;
+  --brand-600: #EA580C;  /* focus ring, akcenty */
+  --brand-700: #C2410C;  /* primary */
+  --brand-800: #9A3412;  /* primary hover */
+  --brand-ring: rgb(234 88 12 / 0.2); /* focus ring pól formularzy */
+
+  /* Gradient sygnaturowy — tylko logo i okładka profilu */
+  --gradient-brand: linear-gradient(135deg, #FDBA74 0%, #F97316 55%, #C2410C 100%);
+
+  /* Neutrale */
+  --color-bg: #FAFAF9;            /* tło strony */
+  --color-surface: #FFFFFF;       /* karty, panele */
+  --color-border: #E7E5E4;
+  --color-border-strong: #D6D3D1;
+  --color-text: #292524;
+  --color-text-secondary: #78716C;
+  --color-text-muted: #A8A29E;
+
+  /* Statusy */
+  --color-success: #059669;
+  --color-success-bg: #ECFDF5;
+  --color-warning: #B45309;
+  --color-warning-bg: #FFFBEB;
+  --color-danger: #E11D48;
+  --color-danger-bg: #FFF1F2;
+  --color-info: #0284C7;
+  --color-info-bg: #F0F9FF;
+
+  /* Cienie */
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.08);
+  --shadow-lifted: 0 8px 24px -8px rgba(28, 25, 23, 0.14);
+  --shadow-raised: 0 20px 48px -12px rgba(28, 25, 23, 0.25);
+
+  /* Radiusy */
+  --radius-sm: 8px;   /* przyciski, inputy */
+  --radius-md: 12px;  /* karty */
+  --radius-lg: 16px;  /* duże kontenery */
+
+  /* Typografia */
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+}
