@@ -1,5 +1,29 @@
-/* You can add global styles to this file, and also import other style files */
+@import 'tailwindcss';
 @import './styles/tokens.css';
+
+/* Mapowanie tokenów marki na utility Tailwinda (bg-brand-700, ring-brand-ring…).
+   Neutrale (stone-*) i danger (rose-600) pokrywają się z domyślną paletą Tailwinda,
+   więc mapujemy tylko brand. Wartości: styles/tokens.css. */
+@theme inline {
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-ring: var(--brand-ring);
+
+  /* tokens.css definiuje --radius-sm/md/lg (8/12/16px) poza @layer i nadpisałby
+     Tailwindowe wartości w utility rounded-*; inline przywraca pełną skalę domyślną.
+     ponytail: docelowo tokeny radiusów powinny dostać własny namespace w tokens.css */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+
+  /* inline wstawia var() do utility, więc wartość nadal pochodzi z tokens.css */
+  --shadow-card: var(--shadow-card);
+}
 
 body {
   margin: 0;
