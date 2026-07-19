@@ -3,10 +3,16 @@ import { Service, inject } from '@angular/core';
 
 /** Wyciąga polski komunikat z odpowiedzi błędu API. Błędy biznesowe (401/403/409)
  *  mają pojedynczy polski string; walidacyjne 400 mają message: string[] po angielsku
- *  (domyślne komunikaty class-validator) — te zastępujemy ogólnym polskim fallbackiem. */
+ *  (domyślne komunikaty class-validator) — te zastępujemy ogólnym polskim fallbackiem.
+ *  429 (ThrottlerGuard) ma angielski string, więc dostaje własny polski komunikat. */
 export function apiErrorMessage(err: unknown): string {
-  if (err instanceof HttpErrorResponse && typeof err.error?.message === 'string') {
-    return err.error.message;
+  if (err instanceof HttpErrorResponse) {
+    if (err.status === 429) {
+      return 'Zbyt wiele prób. Spróbuj ponownie za chwilę.';
+    }
+    if (typeof err.error?.message === 'string') {
+      return err.error.message;
+    }
   }
   return 'Coś poszło nie tak. Spróbuj ponownie.';
 }

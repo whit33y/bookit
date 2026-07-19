@@ -1,11 +1,38 @@
 import { Component, computed, input } from '@angular/core';
 import { WritableSignal } from '@angular/core';
-import { Field, FieldTree, FormField, submit } from '@angular/forms/signals';
+import {
+  Field,
+  FieldTree,
+  FormField,
+  email,
+  maxLength,
+  minLength,
+  pattern,
+  required,
+  schema,
+  submit,
+} from '@angular/forms/signals';
 import { apiErrorMessage } from '../../core/api-client';
 
 // backendowy @IsEmail() wymaga TLD, a email() Angulara nie — bez tego 'a@b' przechodziłby
 // walidację klienta i wracał z serwera jako angielski błąd 400
 export const EMAIL_WITH_TLD = /^\S+@\S+\.\S+$/;
+
+/** Wspólne reguły pola email stron auth — w komponencie: apply(p.email, emailSchema). */
+export const emailSchema = schema<string>((p) => {
+  required(p, { message: 'Email jest wymagany' });
+  email(p, { message: 'Nieprawidłowy format adresu email' });
+  pattern(p, EMAIL_WITH_TLD, {
+    message: 'Nieprawidłowy format adresu email',
+  });
+});
+
+/** Reguły nowego hasła zgodne z backendowym DTO (8–72 znaki) — register i reset hasła. */
+export const passwordSchema = schema<string>((p) => {
+  required(p, { message: 'Hasło jest wymagane' });
+  minLength(p, 8, { message: 'Hasło musi mieć co najmniej 8 znaków' });
+  maxLength(p, 72, { message: 'Hasło może mieć maksymalnie 72 znaki' });
+});
 
 /** Etykieta + input spięty z Signal Forms + inline błąd walidacji (wzorce z design systemu). */
 @Component({
