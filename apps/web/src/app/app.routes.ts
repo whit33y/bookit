@@ -14,6 +14,16 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./public/register/register'),
   },
   {
+    // bez guestGuard: „Wyślij nowy link” z ekranu wygasłego tokenu musi działać też przy żywej sesji
+    path: 'forgot-password',
+    loadComponent: () => import('./public/forgot-password/forgot-password'),
+  },
+  {
+    // bez guestGuard: link z maila musi się otworzyć nawet przy żywej sesji
+    path: 'reset-password',
+    loadComponent: () => import('./public/reset-password/reset-password'),
+  },
+  {
     path: 'client',
     canActivate: [authGuard],
     loadChildren: () => import('./client/client.routes'),

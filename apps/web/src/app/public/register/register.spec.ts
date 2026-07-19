@@ -5,15 +5,11 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { setValue, settle } from '../testing-helpers';
 import Register from './register';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
-
-const setValue = (input: HTMLInputElement, value: string) => {
-  input.value = value;
-  input.dispatchEvent(new Event('input'));
-};
 
 describe('Register', () => {
   beforeEach(async () => {
@@ -76,9 +72,7 @@ describe('Register', () => {
       accessToken: fakeJwt({ sub: '1', email: 'jan@bookit.pl', role: 'CLIENT' }),
       refreshToken: 'refresh',
     });
-    // tick makrotaska: łańcuch promisów submit() musi się rozliczyć przed asercją
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await fixture.whenStable();
+    await settle(fixture);
 
     expect(navigate).toHaveBeenCalledWith('/client');
   });

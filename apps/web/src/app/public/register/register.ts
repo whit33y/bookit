@@ -1,16 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import {
-  email,
-  form,
-  maxLength,
-  minLength,
-  pattern,
-  required,
-} from '@angular/forms/signals';
+import { apply, form, required } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, {
-  EMAIL_WITH_TLD,
+  emailSchema,
+  passwordSchema,
   submitAuthForm,
 } from '../form-field/form-field';
 
@@ -26,10 +20,7 @@ import AppFormField, {
         <p class="mt-1 text-sm text-stone-500">Załóż konto w BookIt</p>
 
         @if (serverError(); as msg) {
-          <p
-            role="alert"
-            class="mt-4 rounded-lg bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-600"
-          >
+          <p role="alert" class="alert-danger mt-4">
             {{ msg }}
           </p>
         }
@@ -69,7 +60,7 @@ import AppFormField, {
           <button
             type="submit"
             [disabled]="registerForm().submitting()"
-            class="mt-6 w-full rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
+            class="btn-primary mt-6"
           >
             {{
               registerForm().submitting() ? 'Rejestracja…' : 'Zarejestruj się'
@@ -103,18 +94,8 @@ export default class Register {
   protected readonly registerForm = form(this.model, (p) => {
     required(p.firstName, { message: 'Imię jest wymagane' });
     required(p.lastName, { message: 'Nazwisko jest wymagane' });
-    required(p.email, { message: 'Email jest wymagany' });
-    email(p.email, { message: 'Nieprawidłowy format adresu email' });
-    pattern(p.email, EMAIL_WITH_TLD, {
-      message: 'Nieprawidłowy format adresu email',
-    });
-    required(p.password, { message: 'Hasło jest wymagane' });
-    minLength(p.password, 8, {
-      message: 'Hasło musi mieć co najmniej 8 znaków',
-    });
-    maxLength(p.password, 72, {
-      message: 'Hasło może mieć maksymalnie 72 znaki',
-    });
+    apply(p.email, emailSchema);
+    apply(p.password, passwordSchema);
   });
 
   protected async onSubmit(event: Event): Promise<void> {

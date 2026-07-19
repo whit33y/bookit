@@ -5,12 +5,8 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { setValue, settle } from '../testing-helpers';
 import Login from './login';
-
-const setValue = (input: HTMLInputElement, value: string) => {
-  input.value = value;
-  input.dispatchEvent(new Event('input'));
-};
 
 describe('Login', () => {
   beforeEach(async () => {
@@ -64,9 +60,7 @@ describe('Login', () => {
       },
       { status: 401, statusText: 'Unauthorized' },
     );
-    // tick makrotaska: łańcuch promisów submit() musi się rozliczyć przed asercją
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await fixture.whenStable();
+    await settle(fixture);
 
     expect(el.querySelector('[role="alert"]')?.textContent).toContain(
       'Nieprawidłowy email lub hasło',

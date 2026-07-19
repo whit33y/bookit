@@ -25,6 +25,16 @@
   --shadow-card: var(--shadow-card);
 }
 
+/* Wspólne klocki stron auth — jedna definicja zamiast kopii ściany utility w każdym szablonie. */
+@layer components {
+  .btn-primary {
+    @apply w-full rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400;
+  }
+  .alert-danger {
+    @apply rounded-lg bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-600;
+  }
+}
+
 body {
   margin: 0;
   background: var(--color-bg);
