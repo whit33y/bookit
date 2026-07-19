@@ -16,6 +16,21 @@ export interface AuthUser {
   sub: string;
   email: string;
   role: UserRole;
+  /** Standardowe pole JWT — unix timestamp wygaśnięcia (sekundy). */
+  exp?: number;
+}
+
+/** Strona domowa dla roli — cel redirectów po logowaniu/rejestracji. */
+export function homeFor(role: UserRole): string {
+  switch (role) {
+    case 'ADMIN':
+      return '/admin';
+    case 'OWNER':
+    case 'EMPLOYEE':
+      return '/business';
+    default:
+      return '/client';
+  }
 }
 
 const ACCESS_KEY = 'bookit.accessToken';
@@ -56,6 +71,34 @@ export class AuthStore {
   readonly isLoggedIn = computed(() => this.user() !== null);
 
   private refreshPromise: Promise<void> | null = null;
+
+  /** Po sukcesie przekierowuje na stronę domową roli (symetria z logout → /login). */
+  async login(dto: { email: string; password: string }): Promise<void> {
+    const pair = await firstValueFrom(
+      this.api.post<TokenPair>('/auth/login', dto),
+    );
+    this.setTokens(pair);
+    await this.goHome();
+  }
+
+  /** Backend zwraca od razu TokenPair → rejestracja = auto-login + redirect. */
+  async register(dto: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+  }): Promise<void> {
+    const pair = await firstValueFrom(
+      this.api.post<TokenPair>('/auth/register', dto),
+    );
+    this.setTokens(pair);
+    await this.goHome();
+  }
+
+  private async goHome(): Promise<void> {
+    const role = this.user()?.role;
+    await this.router.navigateByUrl(role ? homeFor(role) : '/');
+  }
 
   setTokens(pair: TokenPair): void {
     localStorage.setItem(ACCESS_KEY, pair.accessToken);

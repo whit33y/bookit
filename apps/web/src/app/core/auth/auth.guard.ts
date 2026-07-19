@@ -1,6 +1,16 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { AuthStore, UserRole } from './auth-store';
+import { AuthStore, UserRole, homeFor } from './auth-store';
+
+/** Wpuszcza tylko niezalogowanych (login/register); inaczej redirect na stronę domową roli.
+ *  Wygasły access token nie blokuje /login — inaczej martwa sesja (wygasły też refresh)
+ *  odcinałaby formularz logowania do czasu ręcznego wyczyszczenia localStorage. */
+export const guestGuard: CanActivateFn = () => {
+  const user = inject(AuthStore).user();
+  const fresh =
+    user !== null && (user.exp === undefined || user.exp * 1000 > Date.now());
+  return fresh ? inject(Router).createUrlTree([homeFor(user.role)]) : true;
+};
 
 /** Wpuszcza tylko zalogowanych; inaczej redirect na /login. */
 export const authGuard: CanActivateFn = () => {

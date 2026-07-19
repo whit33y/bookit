@@ -1,0 +1,19 @@
+/* Shell wypełnia viewport; strony rozciągają się na resztę wysokości pod nagłówkiem
+   (flex-1 w komponencie strony zamiast min-h-dvh, które przelewało się poza viewport). */
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+main > :not(router-outlet) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
