@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
@@ -25,6 +26,40 @@ const businessSelect = {
   createdAt: true,
 } satisfies Prisma.BusinessSelect;
 
+// publiczny profil: zagnieżdżona kategoria + aktywne usługi/pracownicy; bez ownerId/isBlocked/owner
+const publicProfileSelect = {
+  id: true,
+  slug: true,
+  name: true,
+  description: true,
+  phone: true,
+  street: true,
+  city: true,
+  postalCode: true,
+  lat: true,
+  lng: true,
+  cancellationHours: true,
+  category: { select: { id: true, name: true, slug: true } },
+  services: {
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      durationMin: true,
+      priceCents: true,
+      // przypisania pracownik↔usługa (m:n) — którzy aktywni pracownicy wykonują usługę
+      employees: { where: { isActive: true }, select: { id: true, name: true } },
+    },
+    orderBy: { name: 'asc' },
+  },
+  employees: {
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  },
+} satisfies Prisma.BusinessSelect;
+
 const SLUG_ATTEMPTS = 3;
 
 // NFD rozkłada ą/ć/ę/…, ale nie ł — stąd osobne podmiany
@@ -46,6 +81,18 @@ const isUniqueViolationOn = (e: unknown, field: string) =>
 @Injectable()
 export class BusinessesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async findBySlug(slug: string) {
+    // isBlocked w WHERE, nie po fetchu → zablokowana i nieistniejąca dają identyczne 404 (nie zdradza istnienia)
+    const business = await this.prisma.business.findFirst({
+      where: { slug, isBlocked: false },
+      select: publicProfileSelect,
+    });
+    if (!business) {
+      throw new NotFoundException('Nie znaleziono firmy');
+    }
+    return business;
+  }
 
   async create(userId: string, dto: CreateBusinessDto) {
     const base = slugify(dto.name);
