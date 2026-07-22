@@ -8,6 +8,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { EmployeesModule } from './employees/employees.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ServicesModule } from './services/services.module';
+import { TimeOffsModule } from './time-offs/time-offs.module';
 import { UsersModule } from './users/users.module';
 import { WorkingHoursModule } from './working-hours/working-hours.module';
 
@@ -22,6 +23,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     ServicesModule,
     EmployeesModule,
     WorkingHoursModule,
+    TimeOffsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
