@@ -146,6 +146,8 @@ model TimeOff {
   reason     String?
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
 }
 
 model Booking {
