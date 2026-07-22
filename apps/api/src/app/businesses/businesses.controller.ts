@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -7,6 +15,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthUser } from '../common/types/auth-user';
 import { BusinessesService } from './businesses.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
+import { UpdateBusinessDto } from './dto/update-business.dto';
 
 @Controller('businesses')
 export class BusinessesController {
@@ -26,5 +35,13 @@ export class BusinessesController {
   @Roles(UserRole.CLIENT, UserRole.OWNER)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateBusinessDto) {
     return this.businessesService.create(user.sub, dto);
+  }
+
+  // tylko OWNER; firmę wskazuje ownerId z tokena, nie z body
+  @Patch('mine')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  updateMine(@CurrentUser() user: AuthUser, @Body() dto: UpdateBusinessDto) {
+    return this.businessesService.updateMine(user.sub, dto);
   }
 }
