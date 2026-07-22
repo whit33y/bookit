@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthUser } from '../common/types/auth-user';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { SetServiceEmployeesDto } from './dto/set-service-employees.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServicesService } from './services.service';
 
@@ -47,5 +49,15 @@ export class ServicesController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.servicesService.remove(user.sub, id);
+  }
+
+  // przypisanie pracowników do usługi (m:n) — replace całej listy
+  @Put(':id/employees')
+  setEmployees(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetServiceEmployeesDto,
+  ) {
+    return this.servicesService.setEmployees(user.sub, id, dto.employeeIds);
   }
 }
