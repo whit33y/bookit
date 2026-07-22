@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { ServicesService } from './services.service';
@@ -8,6 +9,12 @@ const dto: CreateServiceDto = {
   durationMin: 30,
   priceCents: 5000,
 };
+
+const prismaError = (code: string) =>
+  new Prisma.PrismaClientKnownRequestError('błąd', {
+    code,
+    clientVersion: 'test',
+  });
 
 describe('ServicesService', () => {
   let businessFindUnique: ReturnType<typeof vi.fn>;
@@ -88,7 +95,7 @@ describe('ServicesService', () => {
 
     expect(update.mock.calls[0][0].data).toEqual({ isActive: false });
     expect(remove).not.toHaveBeenCalled();
-    expect(result).toEqual({ id: 's1', isActive: false });
+    expect(result).toEqual({ id: 's1', isActive: false, deactivated: true });
   });
 
   it('remove bez rezerwacji → twarde usunięcie', async () => {
@@ -99,7 +106,18 @@ describe('ServicesService', () => {
 
     expect(remove).toHaveBeenCalledWith({ where: { id: 's1' } });
     expect(update).not.toHaveBeenCalled();
-    expect(result).toEqual({ id: 's1' });
+    expect(result).toEqual({ id: 's1', deactivated: false });
+  });
+
+  it('wyścig: rezerwacja po zliczeniu → delete rzuca P2003 → dezaktywacja zamiast 500', async () => {
+    findFirst.mockResolvedValue({ id: 's1', _count: { bookings: 0 } });
+    remove.mockRejectedValue(prismaError('P2003'));
+    update.mockResolvedValue({ id: 's1', isActive: false });
+
+    const result = await service.remove('user-1', 's1');
+
+    expect(update.mock.calls[0][0].data).toEqual({ isActive: false });
+    expect(result).toEqual({ id: 's1', isActive: false, deactivated: true });
   });
 
   it('remove cudzej/nieistniejącej usługi → 404', async () => {

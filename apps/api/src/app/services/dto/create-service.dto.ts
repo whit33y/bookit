@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -21,13 +22,16 @@ export class CreateServiceDto {
   @MaxLength(2000)
   description?: string;
 
-  // czas trwania w minutach — musi być dodatni (AC #16)
+  // czas trwania w minutach — dodatni, max doba; górny limit chroni przed
+  // przepełnieniem kolumny Int (Int4) → 400 zamiast 500 (AC #16)
   @IsInt()
   @Min(1)
+  @Max(1440)
   durationMin!: number;
 
-  // cena informacyjna w groszach — nieujemna (AC #16)
+  // cena informacyjna w groszach — nieujemna, max 1 mln zł; górny limit jw. (AC #16)
   @IsInt()
   @Min(0)
+  @Max(100_000_000)
   priceCents!: number;
 }

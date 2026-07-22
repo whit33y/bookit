@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -24,14 +25,17 @@ export class UpdateServiceDto {
   @MaxLength(2000)
   description?: string;
 
+  // górne limity jak w CreateServiceDto — chronią kolumnę Int przed przepełnieniem
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(1440)
   durationMin?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(100_000_000)
   priceCents?: number;
 
   @IsOptional()

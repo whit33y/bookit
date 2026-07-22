@@ -4,13 +4,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 
-// widok właściciela — z isActive (publiczny profil #11 filtruje isActive osobno)
-const serviceSelect = {
+// pola usługi widoczne dla klienta — reużywane w publicznym profilu firmy (#11),
+// żeby kształt usługi nie rozjechał się między modułami
+export const serviceClientFields = {
   id: true,
   name: true,
   description: true,
   durationMin: true,
   priceCents: true,
+} satisfies Prisma.ServiceSelect;
+
+// widok właściciela — dodatkowo isActive (publiczny profil #11 filtruje isActive osobno)
+const serviceSelect = {
+  ...serviceClientFields,
   isActive: true,
 } satisfies Prisma.ServiceSelect;
 
@@ -75,13 +81,30 @@ export class ServicesService {
     // usługa z rezerwacjami: dezaktywacja zamiast usunięcia (AC #16) —
     // zachowuje historię i nie łamie FK Booking→Service (brak cascade)
     if (service._count.bookings > 0) {
-      return this.prisma.service.update({
-        where: { id },
-        data: { isActive: false },
-        select: serviceSelect,
-      });
+      return this.deactivate(id);
     }
-    await this.prisma.service.delete({ where: { id } });
-    return { id };
+    try {
+      await this.prisma.service.delete({ where: { id } });
+    } catch (e) {
+      // wyścig: rezerwacja powstała po zliczeniu → FK (P2003); zamiast 500 dezaktywujemy
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2003'
+      ) {
+        return this.deactivate(id);
+      }
+      throw e;
+    }
+    return { id, deactivated: false };
+  }
+
+  // spójny kształt odpowiedzi z remove(): deactivated rozróżnia dezaktywację od usunięcia
+  private async deactivate(id: string) {
+    const service = await this.prisma.service.update({
+      where: { id },
+      data: { isActive: false },
+      select: serviceSelect,
+    });
+    return { ...service, deactivated: true };
   }
 }
