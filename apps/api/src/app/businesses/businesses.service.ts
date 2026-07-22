@@ -8,6 +8,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
+import { UpdateBusinessDto } from './dto/update-business.dto';
 
 // bez ownerId i isBlocked — profil firmy jest publiczny
 const businessSelect = {
@@ -132,5 +133,25 @@ export class BusinessesService {
     }
 
     throw new ConflictException('Nie udało się wygenerować unikalnego adresu');
+  }
+
+  async updateMine(userId: string, dto: UpdateBusinessDto) {
+    try {
+      // ownerId @unique → edytuje wyłącznie własną firmę (klucz z tokena, nie z body)
+      return await this.prisma.business.update({
+        where: { ownerId: userId },
+        data: dto,
+        select: businessSelect,
+      });
+    } catch (e) {
+      // OWNER bez firmy (ważny token) → 404 zamiast 500 z P2025
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
+        throw new NotFoundException('Nie znaleziono firmy');
+      }
+      throw e;
+    }
   }
 }

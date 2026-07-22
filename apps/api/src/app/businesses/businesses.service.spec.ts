@@ -26,6 +26,7 @@ describe('BusinessesService', () => {
     user: { update: ReturnType<typeof vi.fn> };
   };
   let findFirst: ReturnType<typeof vi.fn>;
+  let update: ReturnType<typeof vi.fn>;
   let service: BusinessesService;
 
   beforeEach(() => {
@@ -34,9 +35,10 @@ describe('BusinessesService', () => {
       user: { update: vi.fn() },
     };
     findFirst = vi.fn();
+    update = vi.fn();
     const prisma = {
       $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-      business: { findFirst },
+      business: { findFirst, update },
     };
     service = new BusinessesService(prisma as unknown as PrismaService);
   });
@@ -110,6 +112,27 @@ describe('BusinessesService', () => {
 
     await expect(service.create('user-1', dto)).rejects.toMatchObject({
       status: 400,
+    });
+  });
+
+  it('updateMine edytuje firmę po ownerId i nie zwraca pól wrażliwych', async () => {
+    update.mockResolvedValue({ id: 'b1' });
+
+    const result = await service.updateMine('user-1', { cancellationHours: 48 });
+
+    const arg = update.mock.calls[0][0];
+    expect(arg.where).toEqual({ ownerId: 'user-1' });
+    expect(arg.data).toEqual({ cancellationHours: 48 });
+    expect(arg.select.ownerId).toBeUndefined();
+    expect(arg.select.isBlocked).toBeUndefined();
+    expect(result).toEqual({ id: 'b1' });
+  });
+
+  it('updateMine → 404 gdy OWNER nie ma firmy (P2025)', async () => {
+    update.mockRejectedValue(prismaError('P2025'));
+
+    await expect(service.updateMine('user-1', {})).rejects.toMatchObject({
+      status: 404,
     });
   });
 });
