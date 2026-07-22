@@ -44,5 +44,10 @@ export const appRoutes: Route[] = [
     canActivate: [roleGuard('ADMIN')],
     loadChildren: () => import('./admin/admin.routes'),
   },
-  { path: '**', redirectTo: '' },
+  {
+    // po wszystkich literalnych ścieżkach, żeby nie przesłaniać login/register/itd.
+    path: ':slug',
+    loadComponent: () => import('./public/business-profile/business-profile'),
+  },
+  { path: '**', loadComponent: () => import('./public/not-found/not-found') },
 ];
