@@ -7,6 +7,7 @@ import {
 import { Prisma, UserRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { serviceClientFields } from '../services/services.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 
@@ -44,11 +45,7 @@ const publicProfileSelect = {
   services: {
     where: { isActive: true },
     select: {
-      id: true,
-      name: true,
-      description: true,
-      durationMin: true,
-      priceCents: true,
+      ...serviceClientFields,
       // przypisania pracownik↔usługa (m:n) — którzy aktywni pracownicy wykonują usługę
       employees: { where: { isActive: true }, select: { id: true, name: true } },
     },
