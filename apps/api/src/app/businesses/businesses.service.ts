@@ -95,6 +95,18 @@ export class BusinessesService {
     return business;
   }
 
+  async findMine(userId: string) {
+    // ownerId @unique → własna firma z tokena; brak firmy (ważny token OWNER) → 404
+    const business = await this.prisma.business.findUnique({
+      where: { ownerId: userId },
+      select: businessSelect,
+    });
+    if (!business) {
+      throw new NotFoundException('Nie znaleziono firmy');
+    }
+    return business;
+  }
+
   async create(userId: string, dto: CreateBusinessDto) {
     const base = slugify(dto.name);
 

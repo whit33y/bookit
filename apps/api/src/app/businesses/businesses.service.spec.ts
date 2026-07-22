@@ -26,6 +26,7 @@ describe('BusinessesService', () => {
     user: { update: ReturnType<typeof vi.fn> };
   };
   let findFirst: ReturnType<typeof vi.fn>;
+  let findUnique: ReturnType<typeof vi.fn>;
   let update: ReturnType<typeof vi.fn>;
   let service: BusinessesService;
 
@@ -35,10 +36,11 @@ describe('BusinessesService', () => {
       user: { update: vi.fn() },
     };
     findFirst = vi.fn();
+    findUnique = vi.fn();
     update = vi.fn();
     const prisma = {
       $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-      business: { findFirst, update },
+      business: { findFirst, findUnique, update },
     };
     service = new BusinessesService(prisma as unknown as PrismaService);
   });
@@ -65,6 +67,28 @@ describe('BusinessesService', () => {
     findFirst.mockResolvedValue(null);
 
     await expect(service.findBySlug('nie-ma')).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('findMine zwraca własną firmę po ownerId bez pól wrażliwych', async () => {
+    findUnique.mockResolvedValue({ id: 'b1', slug: 'salon' });
+
+    const result = await service.findMine('user-1');
+
+    const arg = findUnique.mock.calls[0][0];
+    expect(arg.where).toEqual({ ownerId: 'user-1' });
+    expect(arg.select.ownerId).toBeUndefined();
+    expect(arg.select.isBlocked).toBeUndefined();
+    // cancellationHours potrzebne do prefillu formularza ustawień (AC #14)
+    expect(arg.select.cancellationHours).toBe(true);
+    expect(result).toEqual({ id: 'b1', slug: 'salon' });
+  });
+
+  it('findMine → 404 gdy OWNER nie ma jeszcze firmy', async () => {
+    findUnique.mockResolvedValue(null);
+
+    await expect(service.findMine('user-1')).rejects.toMatchObject({
       status: 404,
     });
   });
