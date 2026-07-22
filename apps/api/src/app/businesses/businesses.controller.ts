@@ -21,6 +21,14 @@ import { UpdateBusinessDto } from './dto/update-business.dto';
 export class BusinessesController {
   constructor(private readonly businessesService: BusinessesService) {}
 
+  // przed @Get(':slug') — inaczej trasa parametryczna złapie „mine"
+  @Get('mine')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  findMine(@CurrentUser() user: AuthUser) {
+    return this.businessesService.findMine(user.sub);
+  }
+
   // publiczny profil firmy — bez guardów (jak categories)
   @Get(':slug')
   findBySlug(@Param('slug') slug: string) {
