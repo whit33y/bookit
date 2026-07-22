@@ -9,4 +9,10 @@ export default [
     canActivate: [roleGuard('OWNER')],
     loadComponent: () => import('./settings/settings'),
   },
+  {
+    // panel usług tylko dla OWNER (backend @Roles(OWNER))
+    path: 'services',
+    canActivate: [roleGuard('OWNER')],
+    loadComponent: () => import('./services/services'),
+  },
 ] satisfies Route[];
