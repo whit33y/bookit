@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -44,6 +48,46 @@ export class ServicesService {
       select: serviceSelect,
       orderBy: { name: 'asc' },
     });
+  }
+
+  // przypisanie pracowników do usługi (m:n) — replace całej listy (idempotentne)
+  async setEmployees(userId: string, serviceId: string, employeeIds: string[]) {
+    const businessId = await this.resolveBusinessId(userId);
+    // usługa musi należeć do firmy właściciela; cudza/nieistniejąca → 404
+    const service = await this.prisma.service.findFirst({
+      where: { id: serviceId, businessId },
+      select: { id: true },
+    });
+    if (!service) {
+      throw new NotFoundException('Nie znaleziono usługi');
+    }
+    // każdy pracownik musi być z tej samej firmy; count < długość →
+    // ktoś spoza firmy lub nieistniejący → 400 (AC #18).
+    // DTO (@ArrayUnique) gwarantuje brak duplikatów, więc length == liczba unikatów.
+    if (employeeIds.length > 0) {
+      const count = await this.prisma.employee.count({
+        where: { id: { in: employeeIds }, businessId },
+      });
+      if (count !== employeeIds.length) {
+        throw new BadRequestException('Pracownik spoza Twojej firmy');
+      }
+    }
+    try {
+      return await this.prisma.service.update({
+        where: { id: serviceId },
+        data: { employees: { set: employeeIds.map((id) => ({ id })) } },
+        select: {
+          ...serviceSelect,
+          employees: { select: { id: true, name: true }, orderBy: { name: 'asc' } },
+        },
+      });
+    } catch (e) {
+      // wyścig: pracownik usunięty po zliczeniu → set rzuca P2025; zamiast 500 → 400
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new BadRequestException('Pracownik spoza Twojej firmy');
+      }
+      throw e;
+    }
   }
 
   async create(userId: string, dto: CreateServiceDto) {

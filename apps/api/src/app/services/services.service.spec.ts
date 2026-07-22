@@ -25,6 +25,7 @@ describe('ServicesService', () => {
   let updateMany: ReturnType<typeof vi.fn>;
   let update: ReturnType<typeof vi.fn>;
   let remove: ReturnType<typeof vi.fn>;
+  let employeeCount: ReturnType<typeof vi.fn>;
   let service: ServicesService;
 
   beforeEach(() => {
@@ -36,9 +37,11 @@ describe('ServicesService', () => {
     updateMany = vi.fn();
     update = vi.fn();
     remove = vi.fn();
+    employeeCount = vi.fn();
     const prisma = {
       business: { findUnique: businessFindUnique },
       service: { findMany, findFirst, findUnique, create, updateMany, update, delete: remove },
+      employee: { count: employeeCount },
     };
     service = new ServicesService(prisma as unknown as PrismaService);
   });
@@ -124,5 +127,64 @@ describe('ServicesService', () => {
     findFirst.mockResolvedValue(null);
 
     await expect(service.remove('user-1', 's1')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('setEmployees ustawia pracowników (replace) scope po businessId', async () => {
+    findFirst.mockResolvedValue({ id: 's1' });
+    employeeCount.mockResolvedValue(2);
+    update.mockResolvedValue({ id: 's1', employees: [{ id: 'e1' }, { id: 'e2' }] });
+
+    const result = await service.setEmployees('user-1', 's1', ['e1', 'e2']);
+
+    expect(findFirst.mock.calls[0][0].where).toEqual({ id: 's1', businessId: 'b1' });
+    expect(employeeCount.mock.calls[0][0].where).toEqual({
+      id: { in: ['e1', 'e2'] },
+      businessId: 'b1',
+    });
+    expect(update.mock.calls[0][0].data).toEqual({
+      employees: { set: [{ id: 'e1' }, { id: 'e2' }] },
+    });
+    expect(result).toEqual({ id: 's1', employees: [{ id: 'e1' }, { id: 'e2' }] });
+  });
+
+  it('setEmployees z pracownikiem spoza firmy/nieistniejącym → 400', async () => {
+    findFirst.mockResolvedValue({ id: 's1' });
+    // dwa id, ale tylko jeden należy do firmy
+    employeeCount.mockResolvedValue(1);
+
+    await expect(
+      service.setEmployees('user-1', 's1', ['e1', 'obcy']),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('setEmployees na cudzej/nieistniejącej usłudze → 404', async () => {
+    findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.setEmployees('user-1', 's1', ['e1']),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(employeeCount).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('setEmployees: wyścig — set rzuca P2025 (pracownik usunięty) → 400 zamiast 500', async () => {
+    findFirst.mockResolvedValue({ id: 's1' });
+    employeeCount.mockResolvedValue(1);
+    update.mockRejectedValue(prismaError('P2025'));
+
+    await expect(
+      service.setEmployees('user-1', 's1', ['e1']),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('setEmployees z pustą listą czyści przypisania bez sprawdzania pracowników', async () => {
+    findFirst.mockResolvedValue({ id: 's1' });
+    update.mockResolvedValue({ id: 's1', employees: [] });
+
+    await service.setEmployees('user-1', 's1', []);
+
+    expect(employeeCount).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0].data).toEqual({ employees: { set: [] } });
   });
 });
