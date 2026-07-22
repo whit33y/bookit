@@ -46,8 +46,8 @@ describe('ServicesService', () => {
     service = new ServicesService(prisma as unknown as PrismaService);
   });
 
-  it('findAll zwraca wszystkie usługi firmy (także nieaktywne) scope po businessId', async () => {
-    findMany.mockResolvedValue([{ id: 's1' }]);
+  it('findAll zwraca wszystkie usługi firmy (także nieaktywne) z pracownikami, scope po businessId', async () => {
+    findMany.mockResolvedValue([{ id: 's1', employees: [{ id: 'e1', name: 'Ala' }] }]);
 
     const result = await service.findAll('user-1');
 
@@ -55,7 +55,9 @@ describe('ServicesService', () => {
     expect(arg.where).toEqual({ businessId: 'b1' });
     // brak filtra isActive — widok właściciela pokazuje też dezaktywowane
     expect(arg.where.isActive).toBeUndefined();
-    expect(result).toEqual([{ id: 's1' }]);
+    // select niesie przypisanych pracowników (panel #21 wypełnia multi-select)
+    expect(arg.select.employees).toBeDefined();
+    expect(result).toEqual([{ id: 's1', employees: [{ id: 'e1', name: 'Ala' }] }]);
   });
 
   it('create dokłada businessId z tokena, nie z body', async () => {

@@ -42,10 +42,14 @@ export class ServicesService {
 
   async findAll(userId: string) {
     const businessId = await this.resolveBusinessId(userId);
-    // widok właściciela: wszystkie usługi, także nieaktywne
+    // widok właściciela: wszystkie usługi, także nieaktywne; z przypisanymi
+    // pracownikami, żeby panel (#21) mógł wypełnić multi-select bez osobnego GET
     return this.prisma.service.findMany({
       where: { businessId },
-      select: serviceSelect,
+      select: {
+        ...serviceSelect,
+        employees: { select: { id: true, name: true }, orderBy: { name: 'asc' } },
+      },
       orderBy: { name: 'asc' },
     });
   }
