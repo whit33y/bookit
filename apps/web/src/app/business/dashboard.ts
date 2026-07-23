@@ -11,6 +11,9 @@ import { RouterLink } from '@angular/router';
       <a routerLink="/business/services" class="text-brand-600 underline"
         >Usługi</a
       >
+      <a routerLink="/business/employees" class="text-brand-600 underline"
+        >Pracownicy</a
+      >
       <a routerLink="/business/settings" class="text-brand-600 underline"
         >Ustawienia firmy</a
       >
