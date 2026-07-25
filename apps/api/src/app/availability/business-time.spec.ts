@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   ceilToSlotGrid,
+  isOnSlotGrid,
   localDayRangeUtc,
   localWeekday,
   parseLocalDate,
+  utcToLocalDate,
   zonedWallClockToUtc,
 } from './business-time';
 
@@ -101,6 +103,50 @@ describe('business-time', () => {
       expect(ceilToSlotGrid(new Date('2026-07-15T09:30:00.000Z')).toISOString()).toBe(
         '2026-07-15T09:30:00.000Z',
       );
+    });
+  });
+
+  describe('isOnSlotGrid', () => {
+    it.each(['09:00', '09:15', '09:30', '09:45'])('%s jest na siatce', (time) => {
+      expect(isOnSlotGrid(new Date(`2026-07-15T${time}:00.000Z`))).toBe(true);
+    });
+
+    it('minuty poza kwadransem → false', () => {
+      expect(isOnSlotGrid(new Date('2026-07-15T09:07:00.000Z'))).toBe(false);
+    });
+
+    it('niezerowe sekundy i milisekundy → false', () => {
+      expect(isOnSlotGrid(new Date('2026-07-15T09:15:30.000Z'))).toBe(false);
+      expect(isOnSlotGrid(new Date('2026-07-15T09:15:00.001Z'))).toBe(false);
+    });
+  });
+
+  describe('utcToLocalDate', () => {
+    it('instant w środku doby lokalnej → jej data', () => {
+      expect(utcToLocalDate(new Date('2026-07-15T07:00:00.000Z'))).toEqual({
+        year: 2026,
+        month: 7,
+        day: 15,
+      });
+    });
+
+    it('późny wieczór UTC to już kolejny dzień lokalnie (CEST, +2)', () => {
+      expect(utcToLocalDate(new Date('2026-07-15T22:30:00.000Z'))).toEqual({
+        year: 2026,
+        month: 7,
+        day: 16,
+      });
+    });
+
+    it('doba zmiany czasu: instanty po obu stronach dają ten sam dzień lokalny', () => {
+      // 2026-10-25 00:30Z to 02:30 CEST, 02:30Z to 03:30 CET — oba wciąż 25 października
+      expect(utcToLocalDate(new Date('2026-10-25T00:30:00.000Z')).day).toBe(25);
+      expect(utcToLocalDate(new Date('2026-10-25T02:30:00.000Z')).day).toBe(25);
+    });
+
+    it('jest odwrotnością zonedWallClockToUtc na poziomie daty', () => {
+      const date = parseLocalDate('2026-01-31');
+      expect(utcToLocalDate(zonedWallClockToUtc(date, '23:45'))).toEqual(date);
     });
   });
 });

@@ -1,3 +1,4 @@
+import { BookingStatus } from '@prisma/client';
 import { SLOT_STEP_MIN, addMinutes, ceilToSlotGrid } from './business-time';
 
 // przedział pracy dnia, już przeliczony na instanty UTC
@@ -12,6 +13,11 @@ export interface BusyInterval {
   endsAt: Date;
 }
 
+// PENDING blokuje slot tak samo jak CONFIRMED (SDD §7) — inaczej firma mogłaby
+// dostać dwie kolizyjne rezerwacje na ten sam termin. Definicja „co zajmuje czas
+// pracownika” siedzi tu obok BusyInterval, bo reużywa jej też re-walidacja w bookings.
+export const BLOCKING_STATUSES = [BookingStatus.PENDING, BookingStatus.CONFIRMED];
+
 export interface GenerateSlotsParams {
   intervals: WorkInterval[];
   busy: BusyInterval[];
@@ -23,6 +29,19 @@ export interface GenerateSlotsParams {
 // więc rezerwacja 10:00–10:30 nie blokuje slotu startującego 10:30
 const overlaps = (aStart: Date, aEnd: Date, b: BusyInterval) =>
   aStart < b.endsAt && aEnd > b.startsAt;
+
+// Czy [start, end) koliduje z czymkolwiek zajętym. Wspólne z re-walidacją w BookingsService,
+// żeby „co jest kolizją” było zdefiniowane w jednym miejscu.
+export const overlapsAny = (start: Date, end: Date, busy: BusyInterval[]): boolean =>
+  busy.some((b) => overlaps(start, end, b));
+
+// Czy [start, end) mieści się w całości w którymś przedziale pracy. generateSlots dostaje to
+// z warunku pętli; pojedynczy slot w BookingsService musi sprawdzić to wprost.
+export const fitsAnyInterval = (
+  start: Date,
+  end: Date,
+  intervals: WorkInterval[],
+): boolean => intervals.some((i) => start >= i.startUtc && end <= i.endUtc);
 
 /**
  * Kroki 5–6 algorytmu z SDD §7: siatka co 15 min w obrębie przedziałów pracy,
@@ -57,7 +76,7 @@ export const generateSlots = ({
       if (start < notBefore) {
         continue;
       }
-      if (busy.some((b) => overlaps(start, end, b))) {
+      if (overlapsAny(start, end, busy)) {
         continue;
       }
       slots.push(start);
