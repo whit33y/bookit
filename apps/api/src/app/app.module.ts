@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { AvailabilityModule } from './availability/availability.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { CategoriesModule } from './categories/categories.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -24,6 +25,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     EmployeesModule,
     WorkingHoursModule,
     TimeOffsModule,
+    AvailabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService],
