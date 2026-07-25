@@ -1,6 +1,7 @@
 import { BookingStatus, Prisma } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
+import { BookingEventsService } from './booking-events.service';
 import { BookingsService } from './bookings.service';
 
 // zimowa środa 2026-01-14 (weekday 2), CET → 09:00 lokalnie = 08:00Z.
@@ -10,8 +11,13 @@ const SERVICE_ID = '11111111-1111-4111-8111-111111111111';
 const EMPLOYEE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BUSINESS_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const CLIENT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const OWNER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const BOOKING_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
 type BusyRow = { startsAt: Date; endsAt: Date };
+
+// hook powiadomień z M7 — serwis ma go wołać, ale nic z niego nie odczytuje
+const eventsMock = () => ({ statusChanged: vi.fn() }) as unknown as BookingEventsService;
 
 // odwzorowanie warunku nachodzenia z WHERE (startsAt: { lt }, endsAt: { gt })
 const overlappingRows = (rows: BusyRow[], where: Prisma.BookingWhereInput) => {
@@ -65,10 +71,13 @@ describe('BookingsService', () => {
       booking: { findMany: bookingFindMany, create: bookingCreate },
     };
 
-    service = new BookingsService({
-      service: { findFirst: serviceFindFirst },
-      $transaction: (cb: (client: typeof tx) => unknown) => cb(tx),
-    } as unknown as PrismaService);
+    service = new BookingsService(
+      {
+        service: { findFirst: serviceFindFirst },
+        $transaction: (cb: (client: typeof tx) => unknown) => cb(tx),
+      } as unknown as PrismaService,
+      eventsMock(),
+    );
   });
 
   afterEach(() => {
@@ -318,7 +327,7 @@ describe('BookingsService', () => {
       };
 
       return {
-        service: new BookingsService(prisma as unknown as PrismaService),
+        service: new BookingsService(prisma as unknown as PrismaService, eventsMock()),
         stored,
       };
     };
@@ -358,6 +367,197 @@ describe('BookingsService', () => {
 
       expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
       expect(stored).toHaveLength(2);
+    });
+  });
+});
+
+describe('BookingsService — decyzje firmy', () => {
+  let bookingFindUnique: ReturnType<typeof vi.fn>;
+  let bookingUpdate: ReturnType<typeof vi.fn>;
+  let statusChanged: ReturnType<typeof vi.fn>;
+  let service: BookingsService;
+
+  // rezerwacja właściciela OWNER_ID w podanym statusie
+  const existing = (status: BookingStatus) => ({
+    status,
+    business: { ownerId: OWNER_ID },
+  });
+
+  beforeEach(() => {
+    bookingFindUnique = vi.fn().mockResolvedValue(existing(BookingStatus.PENDING));
+    bookingUpdate = vi
+      .fn()
+      .mockImplementation(({ data }) =>
+        Promise.resolve({ id: BOOKING_ID, businessId: BUSINESS_ID, ...data }),
+      );
+    statusChanged = vi.fn();
+
+    service = new BookingsService(
+      {
+        booking: { findUnique: bookingFindUnique, update: bookingUpdate },
+      } as unknown as PrismaService,
+      { statusChanged } as unknown as BookingEventsService,
+    );
+  });
+
+  describe('happy path', () => {
+    it('confirm: PENDING → CONFIRMED', async () => {
+      const booking = await service.confirm(OWNER_ID, BOOKING_ID);
+
+      expect(bookingUpdate).toHaveBeenCalledTimes(1);
+      expect(bookingUpdate.mock.calls[0][0].data).toEqual({
+        status: BookingStatus.CONFIRMED,
+      });
+      expect(booking).toHaveProperty('status', BookingStatus.CONFIRMED);
+    });
+
+    it('decline: PENDING → DECLINED', async () => {
+      const booking = await service.decline(OWNER_ID, BOOKING_ID);
+
+      expect(bookingUpdate.mock.calls[0][0].data).toEqual({
+        status: BookingStatus.DECLINED,
+      });
+      expect(booking).toHaveProperty('status', BookingStatus.DECLINED);
+    });
+
+    it('zapis zawężony statusem odczytanym wcześniej (ochrona przed wyścigiem)', async () => {
+      await service.confirm(OWNER_ID, BOOKING_ID);
+
+      expect(bookingUpdate.mock.calls[0][0].where).toEqual({
+        id: BOOKING_ID,
+        status: BookingStatus.PENDING,
+      });
+    });
+
+    it('odpowiedź nie zawiera pól spoza bookingSelect', async () => {
+      await service.confirm(OWNER_ID, BOOKING_ID);
+
+      // clientNote jest w select, ownerId firmy — nie
+      expect(bookingUpdate.mock.calls[0][0].select).toHaveProperty('clientNote', true);
+      expect(bookingUpdate.mock.calls[0][0].select).not.toHaveProperty('business');
+    });
+  });
+
+  describe('uprawnienia', () => {
+    it('nieistniejąca rezerwacja → 404, bez zapisu', async () => {
+      bookingFindUnique.mockResolvedValue(null);
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it('właściciel innej firmy → 403, bez zapisu', async () => {
+      await expect(service.confirm(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it('decline cudzej rezerwacji też → 403', async () => {
+      await expect(service.decline(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('maszyna stanów', () => {
+    const NON_PENDING = [
+      BookingStatus.CONFIRMED,
+      BookingStatus.DECLINED,
+      BookingStatus.CANCELLED_BY_CLIENT,
+      BookingStatus.CANCELLED_BY_BUSINESS,
+      BookingStatus.COMPLETED,
+    ];
+
+    it.each(NON_PENDING)('confirm rezerwacji w statusie %s → 409, bez zapisu', async (status) => {
+      bookingFindUnique.mockResolvedValue(existing(status));
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it.each(NON_PENDING)('decline rezerwacji w statusie %s → 409, bez zapisu', async (status) => {
+      bookingFindUnique.mockResolvedValue(existing(status));
+
+      await expect(service.decline(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    it('komunikat 409 mówi po polsku, w jakim stanie jest rezerwacja', async () => {
+      bookingFindUnique.mockResolvedValue(existing(BookingStatus.CONFIRMED));
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('potwierdzona'),
+      });
+    });
+
+    it('wyścig: status zmieniony między odczytem a zapisem → 409, nie 500', async () => {
+      bookingUpdate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it('inny błąd bazy leci dalej (nie jest przebierany na 409)', async () => {
+      bookingUpdate.mockRejectedValue(new Error('połączenie zerwane'));
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toThrow(
+        'połączenie zerwane',
+      );
+    });
+  });
+
+  describe('punkt zaczepienia dla maili z M7', () => {
+    it('statusChanged wołany raz po udanym przejściu, z from i to', async () => {
+      const booking = await service.confirm(OWNER_ID, BOOKING_ID);
+
+      expect(statusChanged).toHaveBeenCalledTimes(1);
+      expect(statusChanged).toHaveBeenCalledWith(
+        booking,
+        BookingStatus.PENDING,
+        BookingStatus.CONFIRMED,
+      );
+    });
+
+    it('decline zgłasza przejście do DECLINED', async () => {
+      await service.decline(OWNER_ID, BOOKING_ID);
+
+      expect(statusChanged).toHaveBeenCalledWith(
+        expect.anything(),
+        BookingStatus.PENDING,
+        BookingStatus.DECLINED,
+      );
+    });
+
+    // AC #37: „błąd wysyłki nie wywala operacji na rezerwacji (log + kontynuacja)".
+    // Zdarzenie leci po zatwierdzonym zapisie, więc jego padnięcie nie może zamienić
+    // udanego potwierdzenia w 500 — status w bazie i tak jest już zmieniony.
+    it('wyjątek z hooka nie wywala operacji — rezerwacja wraca potwierdzona', async () => {
+      statusChanged.mockImplementation(() => {
+        throw new Error('SMTP niedostępny');
+      });
+
+      const booking = await service.confirm(OWNER_ID, BOOKING_ID);
+
+      expect(booking).toHaveProperty('status', BookingStatus.CONFIRMED);
+      expect(bookingUpdate).toHaveBeenCalledTimes(1);
     });
   });
 });
