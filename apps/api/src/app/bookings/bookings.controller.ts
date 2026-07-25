@@ -1,4 +1,12 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,5 +28,24 @@ export class BookingsController {
   @Roles(UserRole.CLIENT, UserRole.OWNER, UserRole.EMPLOYEE)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookingDto) {
     return this.bookingsService.create(user.sub, dto);
+  }
+
+  // Decyzje firmy. Guardy per-handler, bo POST /bookings wyżej ma inny zestaw ról.
+  // Rolę odsiewa RolesGuard (403), przynależność rezerwacji do firmy — serwis (też 403).
+  // Nic nie powstaje, więc 200 zamiast domyślnego dla POST 201. Brak body → brak DTO.
+  @Post(':id/confirm')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  confirm(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.bookingsService.confirm(user.sub, id);
+  }
+
+  @Post(':id/decline')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  decline(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.bookingsService.decline(user.sub, id);
   }
 }

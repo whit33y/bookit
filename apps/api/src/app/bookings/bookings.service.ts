@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 import {
   addMinutes,
   isOnSlotGrid,
@@ -19,13 +21,15 @@ import {
   overlapsAny,
 } from '../availability/slots.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { BookingEventsService } from './booking-events.service';
+import { STATUS_LABELS, canTransition } from './booking-status';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 // Namespace advisory locków tego modułu — pierwszy argument pg_advisory_xact_lock(int, int).
 // Stała, żeby klucz z hashtext(employeeId) nie zderzył się z blokadami innego kawałka systemu.
 const BOOKING_LOCK_NAMESPACE = 1;
 
-// kształt rezerwacji zwracany z POST /bookings
+// kształt rezerwacji zwracany z POST /bookings i z decyzji firmy (confirm/decline)
 const bookingSelect = {
   id: true,
   businessId: true,
@@ -39,7 +43,81 @@ const bookingSelect = {
 
 @Injectable()
 export class BookingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(BookingsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: BookingEventsService,
+  ) {}
+
+  // decyzje firmy — dwa wejścia do tej samej maszyny stanów (SDD §7)
+  confirm(userId: string, bookingId: string) {
+    return this.transition(userId, bookingId, BookingStatus.CONFIRMED);
+  }
+
+  decline(userId: string, bookingId: string) {
+    return this.transition(userId, bookingId, BookingStatus.DECLINED);
+  }
+
+  /**
+   * Przejście statusu pojedynczej rezerwacji na żądanie użytkownika — tędy wejdzie #27
+   * (odwołania klienta i firmy). Cron auto-COMPLETED z #39 potrzebuje operacji masowej
+   * („jeden update, nie pętla per rekord"), więc nie użyje tej metody — reguły przejść
+   * bierze wprost z ALLOWED_TRANSITIONS w booking-status.ts.
+   *
+   * Kolejność jest istotna: cokolwiek odpadnie na walidacji, odpada przed jedynym zapisem,
+   * więc nieprawidłowe przejście nie zostawia po sobie żadnej zmiany (AC #26).
+   */
+  private async transition(userId: string, bookingId: string, to: BookingStatus) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { status: true, business: { select: { ownerId: true } } },
+    });
+    if (!booking) {
+      throw new NotFoundException('Nie znaleziono rezerwacji');
+    }
+    // Cudza rezerwacja to 403, nie 404 — AC wprost tego wymaga, więc świadomie
+    // odchodzimy od „cudze = 404" z ServicesService.
+    if (booking.business.ownerId !== userId) {
+      throw new ForbiddenException('Brak uprawnień');
+    }
+    const from = booking.status;
+    if (!canTransition(from, to)) {
+      throw new ConflictException(
+        `Rezerwacja jest ${STATUS_LABELS[from]} — nie można zmienić jej statusu`,
+      );
+    }
+
+    // status w WHERE zamyka wyścig między odczytem a zapisem: gdy ktoś w międzyczasie
+    // ruszył rezerwację, warunek nie trafia i Prisma rzuca P2025 zamiast nadpisać cudzą
+    // decyzję (where w update przyjmuje też pola nieunikalne obok klucza).
+    const updated = await this.prisma.booking
+      .update({
+        where: { id: bookingId, status: from },
+        data: { status: to },
+        select: bookingSelect,
+      })
+      .catch((e: unknown) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+          throw new ConflictException('Status rezerwacji zmienił się w międzyczasie');
+        }
+        throw e;
+      });
+
+    // Dopiero po zatwierdzonym zapisie — punkt zaczepienia dla maili z M7 (#37).
+    // Powiadomienie jest efektem ubocznym, nie częścią operacji: rezerwacja jest już
+    // zmieniona, więc padnięta wysyłka ma trafić do logu, a nie zamienić 200 w 500
+    // (AC #37: „błąd wysyłki nie wywala operacji na rezerwacji").
+    try {
+      this.events.statusChanged(updated, from, to);
+    } catch (e) {
+      this.logger.error(
+        `Nie udało się obsłużyć zdarzenia dla rezerwacji ${updated.id}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+    return updated;
+  }
 
   async create(userId: string, dto: CreateBookingDto) {
     const startsAt = new Date(dto.startsAt);
