@@ -72,6 +72,19 @@ export const parseLocalDate = (date: string): LocalDate => {
   return { year, month, day };
 };
 
+// Odwrotność zonedWallClockToUtc w zakresie samej daty: która doba lokalna obowiązuje
+// w tym instancie. Potrzebne przy rezerwacji — z `startsAt` (instant) trzeba wyliczyć
+// dzień tygodnia grafiku, a ten jest pojęciem lokalnym firmy.
+export const utcToLocalDate = (
+  instant: Date,
+  timeZone: string = BUSINESS_TIMEZONE,
+): LocalDate => {
+  const parts = formatterFor(timeZone).formatToParts(instant);
+  const at = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value);
+  return { year: at('year'), month: at('month'), day: at('day') };
+};
+
 // Instant UTC dla ściany zegara (data lokalna + "HH:mm") w podanej strefie.
 // Dwuprzebiegowo, bo offset zależy od wyniku, którego jeszcze nie znamy: pierwszy strzał
 // używa offsetu sprzed zmiany czasu, drugi — offsetu obowiązującego w wyliczonym instancie.
@@ -125,3 +138,8 @@ export const ceilToSlotGrid = (instant: Date): Date => {
   const step = SLOT_STEP_MIN * MS_PER_MIN;
   return new Date(Math.ceil(instant.getTime() / step) * step);
 };
+
+// Czy instant leży dokładnie na siatce slotów. Odsiewa też niezerowe sekundy i milisekundy,
+// bo te przesuwają czas względem pełnego kwadransa.
+export const isOnSlotGrid = (instant: Date): boolean =>
+  instant.getTime() % (SLOT_STEP_MIN * MS_PER_MIN) === 0;

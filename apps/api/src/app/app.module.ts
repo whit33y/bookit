@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { BookingsModule } from './bookings/bookings.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { CategoriesModule } from './categories/categories.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -26,6 +27,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     WorkingHoursModule,
     TimeOffsModule,
     AvailabilityModule,
+    BookingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

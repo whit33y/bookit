@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseLocalDate, zonedWallClockToUtc } from './business-time';
-import { BusyInterval, generateSlots } from './slots.util';
+import {
+  BusyInterval,
+  fitsAnyInterval,
+  generateSlots,
+  overlapsAny,
+} from './slots.util';
 
 const at = (iso: string) => new Date(iso);
 const iso = (dates: Date[]) => dates.map((d) => d.toISOString());
@@ -227,5 +232,81 @@ describe('generateSlots', () => {
       expect(winter[0]).toBe('2026-01-15T08:00:00.000Z'); // 09:00 CET
       expect(summer[0]).toBe('2026-07-15T07:00:00.000Z'); // 09:00 CEST
     });
+  });
+});
+
+// wspólne z re-walidacją slotu w BookingsService, więc testowane osobno od generateSlots
+describe('overlapsAny', () => {
+  const slot = [at('2026-01-15T10:00:00.000Z'), at('2026-01-15T11:00:00.000Z')] as const;
+  const check = (busyList: BusyInterval[]) => overlapsAny(slot[0], slot[1], busyList);
+
+  it('brak zajętych przedziałów → false', () => {
+    expect(check([])).toBe(false);
+  });
+
+  it('styk na granicy nie jest kolizją', () => {
+    expect(check([busy('2026-01-15T09:00:00.000Z', '2026-01-15T10:00:00.000Z')])).toBe(false);
+    expect(check([busy('2026-01-15T11:00:00.000Z', '2026-01-15T12:00:00.000Z')])).toBe(false);
+  });
+
+  it.each([
+    ['nachodzi początkiem', '2026-01-15T09:30:00.000Z', '2026-01-15T10:30:00.000Z'],
+    ['nachodzi końcem', '2026-01-15T10:30:00.000Z', '2026-01-15T11:30:00.000Z'],
+    ['zawiera slot', '2026-01-15T08:00:00.000Z', '2026-01-15T20:00:00.000Z'],
+    ['zawarty w slocie', '2026-01-15T10:15:00.000Z', '2026-01-15T10:30:00.000Z'],
+  ])('%s → true', (_label, startsAt, endsAt) => {
+    expect(check([busy(startsAt, endsAt)])).toBe(true);
+  });
+
+  it('wystarczy jedna kolizja z wielu przedziałów', () => {
+    expect(
+      check([
+        busy('2026-01-15T08:00:00.000Z', '2026-01-15T09:00:00.000Z'),
+        busy('2026-01-15T10:45:00.000Z', '2026-01-15T11:15:00.000Z'),
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe('fitsAnyInterval', () => {
+  const work = [interval('2026-01-15', '09:00', '13:00')];
+  // 09:00–13:00 CET = 08:00–12:00Z
+  const fits = (startIso: string, endIso: string) =>
+    fitsAnyInterval(at(startIso), at(endIso), work);
+
+  it('slot w środku przedziału → true', () => {
+    expect(fits('2026-01-15T09:00:00.000Z', '2026-01-15T10:00:00.000Z')).toBe(true);
+  });
+
+  it('slot dokładnie na granicach przedziału → true', () => {
+    expect(fits('2026-01-15T08:00:00.000Z', '2026-01-15T12:00:00.000Z')).toBe(true);
+  });
+
+  it('koniec za końcem przedziału → false', () => {
+    expect(fits('2026-01-15T11:30:00.000Z', '2026-01-15T12:30:00.000Z')).toBe(false);
+  });
+
+  it('początek przed początkiem przedziału → false', () => {
+    expect(fits('2026-01-15T07:30:00.000Z', '2026-01-15T08:30:00.000Z')).toBe(false);
+  });
+
+  it('brak przedziałów pracy → false', () => {
+    expect(
+      fitsAnyInterval(
+        at('2026-01-15T09:00:00.000Z'),
+        at('2026-01-15T10:00:00.000Z'),
+        [],
+      ),
+    ).toBe(false);
+  });
+
+  it('slot w przerwie między dwoma przedziałami → false', () => {
+    expect(
+      fitsAnyInterval(
+        at('2026-01-15T12:30:00.000Z'), // 13:30 lokalnie
+        at('2026-01-15T13:30:00.000Z'),
+        [interval('2026-01-15', '09:00', '13:00'), interval('2026-01-15', '15:00', '19:00')],
+      ),
+    ).toBe(false);
   });
 });

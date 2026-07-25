@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   localDayRangeUtc,
@@ -8,11 +7,12 @@ import {
   zonedWallClockToUtc,
 } from './business-time';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
-import { BusyInterval, WorkInterval, generateSlots } from './slots.util';
-
-// PENDING blokuje slot tak samo jak CONFIRMED (SDD §7) — inaczej firma mogłaby
-// dostać dwie kolizyjne rezerwacje na ten sam termin
-const BLOCKING_STATUSES = [BookingStatus.PENDING, BookingStatus.CONFIRMED];
+import {
+  BLOCKING_STATUSES,
+  BusyInterval,
+  WorkInterval,
+  generateSlots,
+} from './slots.util';
 
 export interface AvailableSlot {
   employeeId: string;

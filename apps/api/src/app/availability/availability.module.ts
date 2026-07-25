@@ -4,7 +4,8 @@ import { AvailabilityService } from './availability.service';
 
 @Module({
   controllers: [AvailabilityController],
-  // bez exports — dodamy je w #25, gdy BookingsModule będzie re-walidować slot w transakcji
+  // bez exports: BookingsModule (#25) re-waliduje slot na czystych funkcjach z business-time.ts
+  // i slots.util.ts, bo musi liczyć na kliencie transakcji, nie na PrismaService
   providers: [AvailabilityService],
 })
 export class AvailabilityModule {}
