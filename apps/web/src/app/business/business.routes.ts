@@ -21,4 +21,10 @@ export default [
     canActivate: [roleGuard('OWNER')],
     loadComponent: () => import('./employees/employees'),
   },
+  {
+    // edytor grafiku + urlopów pracownika, tylko OWNER (backend @Roles(OWNER))
+    path: 'employees/:id/schedule',
+    canActivate: [roleGuard('OWNER')],
+    loadComponent: () => import('./employees/schedule/schedule'),
+  },
 ] satisfies Route[];
