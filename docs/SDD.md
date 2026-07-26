@@ -398,6 +398,7 @@ stateDiagram-v2
     PENDING --> CONFIRMED : firma akceptuje (email do klienta)
     PENDING --> DECLINED : firma odrzuca (email do klienta)
     PENDING --> CANCELLED_BY_CLIENT : klient odwołuje
+    PENDING --> CANCELLED_BY_BUSINESS : firma odwołuje (email do klienta)
     CONFIRMED --> CANCELLED_BY_CLIENT : klient odwołuje\n(jeśli > cancellationHours przed startem)
     CONFIRMED --> CANCELLED_BY_BUSINESS : firma odwołuje (email do klienta)
     CONFIRMED --> COMPLETED : cron po endsAt
@@ -409,8 +410,8 @@ stateDiagram-v2
 
 ### Polityka odwołań
 
-- Klient może odwołać `PENDING` zawsze, a `CONFIRMED` tylko gdy `now < startsAt − business.cancellationHours`.
-- Firma może odwołać zawsze (klient dostaje email).
+- Klient może odwołać `PENDING` zawsze, a `CONFIRMED` tylko gdy `now < startsAt − business.cancellationHours`. Nierówność jest ostra: dokładnie `cancellationHours` przed startem odwołanie już nie przechodzi.
+- Firma może odwołać zawsze (klient dostaje email) — `cancel-by-business` działa zarówno dla `PENDING`, jak i `CONFIRMED`. Dla `PENDING` firma ma więc dwa wyjścia: `decline` („nie przyjmujemy tej rezerwacji") i `cancel-by-business` („przyjęliśmy, ale odwołujemy"); różni je komunikat do klienta, nie skutek dla slotu.
 - Zmiana terminu w MVP = odwołanie + nowa rezerwacja (bez osobnego flow „przełóż").
 
 ### Powiadomienia (cron)

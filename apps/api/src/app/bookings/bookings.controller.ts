@@ -48,4 +48,24 @@ export class BookingsController {
   decline(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.bookingsService.decline(user.sub, id);
   }
+
+  // Odwołanie przez klienta. Role te same co przy POST /bookings — kto może zarezerwować,
+  // ten musi móc odwołać własną wizytę; że rezerwacja jest jego, sprawdza serwis po
+  // clientId (403). Polityka godzinowa firmy → 409.
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.OWNER, UserRole.EMPLOYEE)
+  cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.bookingsService.cancel(user.sub, id);
+  }
+
+  // Odwołanie przez firmę — osobna ścieżka, bo ustawia inny status i nie podlega polityce.
+  @Post(':id/cancel-by-business')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER)
+  cancelByBusiness(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.bookingsService.cancelByBusiness(user.sub, id);
+  }
 }
