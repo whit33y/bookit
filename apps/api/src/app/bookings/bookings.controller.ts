@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -19,6 +20,15 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 @Controller('bookings')
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
+
+  // Moje wizyty. Role jak przy POST /bookings — kto może zarezerwować, ten ma co oglądać
+  // na tej liście; „moje" bierze się z tokena, więc nie ma tu czego autoryzować w serwisie.
+  @Get('mine')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.OWNER, UserRole.EMPLOYEE)
+  findMine(@CurrentUser() user: AuthUser) {
+    return this.bookingsService.findMine(user.sub);
+  }
 
   // Rezerwuje każdy zalogowany człowiek: właściciel i pracownik też bywają czyimś klientem,
   // a schemat ma jedno pole role, więc nie mają „drugiej" roli CLIENT. ADMIN odpada

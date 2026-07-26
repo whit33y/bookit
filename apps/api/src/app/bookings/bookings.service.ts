@@ -21,6 +21,7 @@ import {
   overlapsAny,
 } from '../availability/slots.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { serviceClientFields } from '../services/services.service';
 import { BookingEventsService } from './booking-events.service';
 import { STATUS_LABELS, canTransition } from './booking-status';
 import { canClientCancel, cancellationWindowMessage } from './cancellation-policy';
@@ -42,6 +43,51 @@ const bookingSelect = {
   clientNote: true,
 } satisfies Prisma.BookingSelect;
 
+// Karta wizyty na liście klienta (#28) — komplet danych do wyświetlenia bez dopytywania
+// o firmę/usługę/pracownika. Firma bez ownerId i isBlocked, tak jak w businessSelect;
+// cancellationHours zostaje, bo z niej liczy się canCancel i UI ma czym uzasadnić brak
+// przycisku „odwołaj". clientId pomijamy — to zawsze pytający.
+const clientBookingSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+  clientNote: true,
+  createdAt: true,
+  business: {
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      phone: true,
+      street: true,
+      city: true,
+      postalCode: true,
+      cancellationHours: true,
+    },
+  },
+  service: { select: serviceClientFields },
+  employee: { select: { id: true, name: true } },
+} satisfies Prisma.BookingSelect;
+
+type ClientBooking = Prisma.BookingGetPayload<{ select: typeof clientBookingSelect }>;
+
+/**
+ * AC #28: „flaga per rezerwacja, czy odwołanie jest jeszcze możliwe wg polityki (front nie
+ * liczy tego sam)". Ta sama funkcja, której używa transition(), więc flaga mówi dokładnie
+ * to, co zrobi POST /bookings/:id/cancel — łącznie z przypadkami, które wyglądają na
+ * wyjątki (zaległy PENDING nadal da się odwołać, bo maszyna stanów na to pozwala).
+ */
+const withCancelFlag = (booking: ClientBooking, now: Date) => ({
+  ...booking,
+  canCancel: canClientCancel(
+    booking.status,
+    booking.startsAt,
+    booking.business.cancellationHours,
+    now,
+  ),
+});
+
 // Kto żąda przejścia — decyduje, czym jest „własna rezerwacja" (403) i czy obowiązuje
 // polityka czasowa. Firma odwołuje zawsze, klient tylko w oknie (SDD §7).
 type Actor = 'CLIENT' | 'BUSINESS';
@@ -54,6 +100,44 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly events: BookingEventsService,
   ) {}
+
+  /**
+   * Moje wizyty (#28) — lista rezerwacji zalogowanego klienta w dwóch grupach, bo AC wymaga
+   * przeciwnych sortowań: nadchodzące rosnąco (najbliższa u góry), minione malejąco
+   * (ostatnia u góry). Dwa zapytania zamiast sortowania w pamięci — porządek ustala baza.
+   *
+   * Podział jest wyłącznie czasowy, po endsAt: wizyta trwająca właśnie teraz jest jeszcze
+   * nadchodząca, a odwołana wizyta z jutra zostaje wśród nadchodzących ze swoim statusem
+   * (front pokazuje badge per status — SDD §6). Status nie przenosi rezerwacji do historii.
+   *
+   * Dzielimy po endsAt, ale sortujemy po startsAt — celowo. Karta wizyty pokazuje godzinę
+   * rozpoczęcia, więc porządek ma się zgadzać z tym, co klient widzi; sortowanie po polu
+   * niewidocznym na liście wyglądałoby na błąd, gdyby oba czasy się rozjechały (możliwe
+   * tylko przy nachodzących na siebie wizytach w dwóch różnych firmach).
+   */
+  async findMine(userId: string) {
+    // Jeden znacznik czasu na całe wywołanie: ten sam dzieli listy i liczy canCancel, więc
+    // rezerwacja nie może wpaść do „nadchodzących" z flagą policzoną na inną chwilę.
+    const now = new Date();
+
+    const [upcoming, past] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { clientId: userId, endsAt: { gt: now } },
+        orderBy: { startsAt: 'asc' },
+        select: clientBookingSelect,
+      }),
+      this.prisma.booking.findMany({
+        where: { clientId: userId, endsAt: { lte: now } },
+        orderBy: { startsAt: 'desc' },
+        select: clientBookingSelect,
+      }),
+    ]);
+
+    return {
+      upcoming: upcoming.map((booking) => withCancelFlag(booking, now)),
+      past: past.map((booking) => withCancelFlag(booking, now)),
+    };
+  }
 
   // decyzje firmy — dwa wejścia do tej samej maszyny stanów (SDD §7)
   confirm(userId: string, bookingId: string) {
