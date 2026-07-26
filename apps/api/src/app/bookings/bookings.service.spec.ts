@@ -561,3 +561,246 @@ describe('BookingsService — decyzje firmy', () => {
     });
   });
 });
+
+describe('BookingsService — odwołania', () => {
+  // wizyta 2026-01-14 13:00 lokalnie, polityka 24 h → granica 2026-01-13T12:00:00Z
+  const VISIT_STARTS_AT = new Date('2026-01-14T12:00:00.000Z');
+  const CANCELLATION_HOURS = 24;
+  const DEADLINE = new Date('2026-01-13T12:00:00.000Z');
+
+  let bookingFindUnique: ReturnType<typeof vi.fn>;
+  let bookingUpdate: ReturnType<typeof vi.fn>;
+  let statusChanged: ReturnType<typeof vi.fn>;
+  let service: BookingsService;
+
+  // rezerwacja klienta CLIENT_ID w firmie właściciela OWNER_ID
+  const existing = (status: BookingStatus) => ({
+    status,
+    clientId: CLIENT_ID,
+    startsAt: VISIT_STARTS_AT,
+    business: { ownerId: OWNER_ID, cancellationHours: CANCELLATION_HOURS },
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // domyślnie długo przed granicą polityki
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    bookingFindUnique = vi.fn().mockResolvedValue(existing(BookingStatus.CONFIRMED));
+    bookingUpdate = vi
+      .fn()
+      .mockImplementation(({ data }) =>
+        Promise.resolve({ id: BOOKING_ID, businessId: BUSINESS_ID, ...data }),
+      );
+    statusChanged = vi.fn();
+
+    service = new BookingsService(
+      {
+        booking: { findUnique: bookingFindUnique, update: bookingUpdate },
+      } as unknown as PrismaService,
+      { statusChanged } as unknown as BookingEventsService,
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe('klient odwołuje własną rezerwację', () => {
+    it('PENDING → CANCELLED_BY_CLIENT', async () => {
+      bookingFindUnique.mockResolvedValue(existing(BookingStatus.PENDING));
+
+      const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(bookingUpdate.mock.calls[0][0].data).toEqual({
+        status: BookingStatus.CANCELLED_BY_CLIENT,
+      });
+      expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_CLIENT);
+    });
+
+    it('CONFIRMED przed granicą polityki → CANCELLED_BY_CLIENT', async () => {
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_CLIENT);
+    });
+
+    it('zapis zawężony statusem odczytanym wcześniej (ochrona przed wyścigiem)', async () => {
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(bookingUpdate.mock.calls[0][0].where).toEqual({
+        id: BOOKING_ID,
+        status: BookingStatus.CONFIRMED,
+      });
+    });
+
+    it('statusChanged wołany raz, z from i to', async () => {
+      const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(statusChanged).toHaveBeenCalledTimes(1);
+      expect(statusChanged).toHaveBeenCalledWith(
+        booking,
+        BookingStatus.CONFIRMED,
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
+    });
+  });
+
+  describe('polityka godzinowa (tylko klient, tylko CONFIRMED)', () => {
+    // AC #27: „naruszenie polityki → 409 z komunikatem o limicie godzin"
+    it('dokładnie X godzin przed startem → 409, bez zapisu', async () => {
+      vi.setSystemTime(DEADLINE);
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it('po granicy → 409 z komunikatem o limicie godzin', async () => {
+      vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+        message: expect.stringContaining('24'),
+      });
+    });
+
+    it('PENDING po granicy i tak przechodzi — okno dotyczy tylko CONFIRMED', async () => {
+      bookingFindUnique.mockResolvedValue(existing(BookingStatus.PENDING));
+      vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).resolves.toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
+    });
+
+    it('firma odwołuje po granicy klienta bez przeszkód', async () => {
+      vi.setSystemTime(new Date('2026-01-14T11:00:00.000Z')); // godzina przed wizytą
+
+      await expect(service.cancelByBusiness(OWNER_ID, BOOKING_ID)).resolves.toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_BUSINESS,
+      );
+    });
+  });
+
+  describe('firma odwołuje', () => {
+    // AC #27: „cancel-by-business działa dla PENDING i CONFIRMED"
+    it.each([BookingStatus.PENDING, BookingStatus.CONFIRMED])(
+      '%s → CANCELLED_BY_BUSINESS',
+      async (status) => {
+        bookingFindUnique.mockResolvedValue(existing(status));
+
+        const booking = await service.cancelByBusiness(OWNER_ID, BOOKING_ID);
+
+        expect(bookingUpdate.mock.calls[0][0].data).toEqual({
+          status: BookingStatus.CANCELLED_BY_BUSINESS,
+        });
+        expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_BUSINESS);
+      },
+    );
+
+    it('statusChanged zgłasza przejście do CANCELLED_BY_BUSINESS', async () => {
+      await service.cancelByBusiness(OWNER_ID, BOOKING_ID);
+
+      expect(statusChanged).toHaveBeenCalledWith(
+        expect.anything(),
+        BookingStatus.CONFIRMED,
+        BookingStatus.CANCELLED_BY_BUSINESS,
+      );
+    });
+  });
+
+  describe('uprawnienia', () => {
+    it('nieistniejąca rezerwacja → 404, bez zapisu', async () => {
+      bookingFindUnique.mockResolvedValue(null);
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    // AC #27: „klient odwołuje wyłącznie własne rezerwacje"
+    it('cudza rezerwacja → 403, bez zapisu', async () => {
+      await expect(
+        service.cancel('99999999-9999-4999-8999-999999999999', BOOKING_ID),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it('właściciel firmy nie odwoła cudzej wizyty przez /cancel — tam liczy się clientId', async () => {
+      await expect(service.cancel(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    it('klient nie odwoła wizyty przez cancel-by-business — tam liczy się właściciel', async () => {
+      await expect(service.cancelByBusiness(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('stany terminalne', () => {
+    // AC #27: „DECLINED, CANCELLED_*, COMPLETED nieodwoływalne → 409"
+    const TERMINAL = [
+      BookingStatus.DECLINED,
+      BookingStatus.CANCELLED_BY_CLIENT,
+      BookingStatus.CANCELLED_BY_BUSINESS,
+      BookingStatus.COMPLETED,
+    ];
+
+    it.each(TERMINAL)('klient: %s → 409, bez zapisu', async (status) => {
+      bookingFindUnique.mockResolvedValue(existing(status));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+
+    it.each(TERMINAL)('firma: %s → 409, bez zapisu', async (status) => {
+      bookingFindUnique.mockResolvedValue(existing(status));
+
+      await expect(service.cancelByBusiness(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    // komunikat ma mówić o stanie rezerwacji, nie o limicie godzin — inaczej klient
+    // odwołujący zakończoną wizytę dostałby mylącą podpowiedź „zdążysz następnym razem"
+    it('komunikat 409 dla stanu terminalnego mówi o stanie, nie o godzinach', async () => {
+      bookingFindUnique.mockResolvedValue(existing(BookingStatus.COMPLETED));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('zakończona'),
+      });
+    });
+  });
+
+  describe('wyścigi', () => {
+    it('status zmieniony między odczytem a zapisem → 409, nie 500', async () => {
+      bookingUpdate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(statusChanged).not.toHaveBeenCalled();
+    });
+  });
+});

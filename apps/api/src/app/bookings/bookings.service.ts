@@ -23,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingEventsService } from './booking-events.service';
 import { STATUS_LABELS, canTransition } from './booking-status';
+import { canClientCancel, cancellationWindowMessage } from './cancellation-policy';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 // Namespace advisory locków tego modułu — pierwszy argument pg_advisory_xact_lock(int, int).
@@ -41,6 +42,10 @@ const bookingSelect = {
   clientNote: true,
 } satisfies Prisma.BookingSelect;
 
+// Kto żąda przejścia — decyduje, czym jest „własna rezerwacja" (403) i czy obowiązuje
+// polityka czasowa. Firma odwołuje zawsze, klient tylko w oknie (SDD §7).
+type Actor = 'CLIENT' | 'BUSINESS';
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -52,39 +57,83 @@ export class BookingsService {
 
   // decyzje firmy — dwa wejścia do tej samej maszyny stanów (SDD §7)
   confirm(userId: string, bookingId: string) {
-    return this.transition(userId, bookingId, BookingStatus.CONFIRMED);
+    return this.transition(userId, bookingId, BookingStatus.CONFIRMED, 'BUSINESS');
   }
 
   decline(userId: string, bookingId: string) {
-    return this.transition(userId, bookingId, BookingStatus.DECLINED);
+    return this.transition(userId, bookingId, BookingStatus.DECLINED, 'BUSINESS');
+  }
+
+  // Odwołania (#27). Ta sama maszyna stanów, inny aktor: klient odpowiada za własną
+  // rezerwację i obowiązuje go okno z polityki firmy, firma odwołuje swoje bez ograniczeń.
+  cancel(userId: string, bookingId: string) {
+    return this.transition(userId, bookingId, BookingStatus.CANCELLED_BY_CLIENT, 'CLIENT');
+  }
+
+  cancelByBusiness(userId: string, bookingId: string) {
+    return this.transition(
+      userId,
+      bookingId,
+      BookingStatus.CANCELLED_BY_BUSINESS,
+      'BUSINESS',
+    );
   }
 
   /**
-   * Przejście statusu pojedynczej rezerwacji na żądanie użytkownika — tędy wejdzie #27
-   * (odwołania klienta i firmy). Cron auto-COMPLETED z #39 potrzebuje operacji masowej
-   * („jeden update, nie pętla per rekord"), więc nie użyje tej metody — reguły przejść
-   * bierze wprost z ALLOWED_TRANSITIONS w booking-status.ts.
+   * Przejście statusu pojedynczej rezerwacji na żądanie użytkownika — decyzje firmy (#26)
+   * i odwołania (#27). Cron auto-COMPLETED z #39 potrzebuje operacji masowej („jeden
+   * update, nie pętla per rekord"), więc nie użyje tej metody — reguły przejść bierze
+   * wprost z ALLOWED_TRANSITIONS w booking-status.ts.
    *
    * Kolejność jest istotna: cokolwiek odpadnie na walidacji, odpada przed jedynym zapisem,
-   * więc nieprawidłowe przejście nie zostawia po sobie żadnej zmiany (AC #26).
+   * więc nieprawidłowe przejście nie zostawia po sobie żadnej zmiany (AC #26). Polityka
+   * czasowa idzie po canTransition, żeby rezerwacja w stanie terminalnym dostała komunikat
+   * o swoim stanie, a nie mylący komunikat o limicie godzin.
    */
-  private async transition(userId: string, bookingId: string, to: BookingStatus) {
+  private async transition(
+    userId: string,
+    bookingId: string,
+    to: BookingStatus,
+    actor: Actor,
+  ) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { status: true, business: { select: { ownerId: true } } },
+      select: {
+        status: true,
+        clientId: true,
+        startsAt: true,
+        business: { select: { ownerId: true, cancellationHours: true } },
+      },
     });
     if (!booking) {
       throw new NotFoundException('Nie znaleziono rezerwacji');
     }
     // Cudza rezerwacja to 403, nie 404 — AC wprost tego wymaga, więc świadomie
-    // odchodzimy od „cudze = 404" z ServicesService.
-    if (booking.business.ownerId !== userId) {
+    // odchodzimy od „cudze = 404" z ServicesService. „Cudza" znaczy co innego dla
+    // każdego aktora: klienta wiąże clientId, firmę — właściciel firmy z rezerwacji.
+    const isOwn =
+      actor === 'CLIENT' ? booking.clientId === userId : booking.business.ownerId === userId;
+    if (!isOwn) {
       throw new ForbiddenException('Brak uprawnień');
     }
     const from = booking.status;
     if (!canTransition(from, to)) {
       throw new ConflictException(
         `Rezerwacja jest ${STATUS_LABELS[from]} — nie można zmienić jej statusu`,
+      );
+    }
+    // Okno odwołania dotyczy wyłącznie klienta — firma odwołuje zawsze (SDD §7).
+    if (
+      actor === 'CLIENT' &&
+      !canClientCancel(
+        from,
+        booking.startsAt,
+        booking.business.cancellationHours,
+        new Date(),
+      )
+    ) {
+      throw new ConflictException(
+        cancellationWindowMessage(booking.business.cancellationHours),
       );
     }
 

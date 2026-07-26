@@ -10,6 +10,10 @@ export const ALLOWED_TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]
     BookingStatus.CONFIRMED,
     BookingStatus.DECLINED,
     BookingStatus.CANCELLED_BY_CLIENT,
+    // Firma odwołuje zawsze, więc również rezerwację oczekującą (SDD §7). Dla PENDING ma
+    // dwa wyjścia: DECLINED („nie przyjmujemy") i CANCELLED_BY_BUSINESS („przyjęliśmy,
+    // ale odwołujemy") — różni je komunikat do klienta w M7, nie skutek dla slotu.
+    BookingStatus.CANCELLED_BY_BUSINESS,
   ],
   [BookingStatus.CONFIRMED]: [
     BookingStatus.CANCELLED_BY_CLIENT,

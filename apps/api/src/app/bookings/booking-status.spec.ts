@@ -10,6 +10,7 @@ const EDGES: [BookingStatus, BookingStatus][] = [
   [BookingStatus.PENDING, BookingStatus.CONFIRMED],
   [BookingStatus.PENDING, BookingStatus.DECLINED],
   [BookingStatus.PENDING, BookingStatus.CANCELLED_BY_CLIENT],
+  [BookingStatus.PENDING, BookingStatus.CANCELLED_BY_BUSINESS],
   [BookingStatus.CONFIRMED, BookingStatus.CANCELLED_BY_CLIENT],
   [BookingStatus.CONFIRMED, BookingStatus.CANCELLED_BY_BUSINESS],
   [BookingStatus.CONFIRMED, BookingStatus.COMPLETED],
