@@ -1,5 +1,6 @@
 import { BookingStatus, Prisma } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { addMinutes } from '../availability/business-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingEventsService } from './booking-events.service';
 import { BookingsService } from './bookings.service';
@@ -801,6 +802,205 @@ describe('BookingsService — odwołania', () => {
         status: 409,
       });
       expect(statusChanged).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('BookingsService — moje wizyty', () => {
+  // czas zamrożony w środku historii: część wizyt jest przed nim, część po
+  const NOW = new Date('2026-01-10T10:00:00.000Z');
+  const CANCELLATION_HOURS = 24;
+
+  const business = {
+    id: BUSINESS_ID,
+    slug: 'salon-alexa',
+    name: 'Salon Alexa',
+    phone: '600100200',
+    street: 'Kwiatowa 1',
+    city: 'Wrocław',
+    postalCode: '50-001',
+    cancellationHours: CANCELLATION_HOURS,
+  };
+  const serviceData = {
+    id: SERVICE_ID,
+    name: 'Strzyżenie',
+    description: null,
+    durationMin: 60,
+    priceCents: 8000,
+  };
+  const employee = { id: EMPLOYEE_ID, name: 'Ala' };
+
+  const booking = (startsAt: string, status: BookingStatus, id = BOOKING_ID) => ({
+    id,
+    startsAt: new Date(startsAt),
+    endsAt: addMinutes(new Date(startsAt), serviceData.durationMin),
+    status,
+    clientNote: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    business,
+    service: serviceData,
+    employee,
+  });
+
+  type BookingRow = ReturnType<typeof booking>;
+  type FindManyArgs = { where: { endsAt: { gt?: Date; lte?: Date } } };
+
+  let findMany: ReturnType<typeof vi.fn>;
+  let service: BookingsService;
+
+  // jeden mock na oba zapytania — rozdziela je warunek na endsAt (gt = nadchodzące)
+  const respond = (upcoming: BookingRow[], past: BookingRow[]) =>
+    findMany.mockImplementation(({ where }: FindManyArgs) =>
+      Promise.resolve(where.endsAt.gt ? upcoming : past),
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    findMany = vi.fn().mockResolvedValue([]);
+    service = new BookingsService(
+      { booking: { findMany } } as unknown as PrismaService,
+      eventsMock(),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // pomocniczo: argumenty zapytania o daną grupę, niezależnie od kolejności wywołań
+  const argsFor = (group: 'upcoming' | 'past') =>
+    findMany.mock.calls
+      .map((call) => call[0] as FindManyArgs)
+      .find((args) => (group === 'upcoming' ? args.where.endsAt.gt : args.where.endsAt.lte));
+
+  describe('zakres i sortowanie', () => {
+    // AC: „sortowanie: nadchodzące rosnąco, minione malejąco"
+    it('nadchodzące: endsAt > now, rosnąco po startsAt, tylko własne', async () => {
+      await service.findMine(CLIENT_ID);
+
+      expect(argsFor('upcoming')).toMatchObject({
+        where: { clientId: CLIENT_ID, endsAt: { gt: NOW } },
+        orderBy: { startsAt: 'asc' },
+      });
+    });
+
+    it('minione: endsAt <= now, malejąco po startsAt, tylko własne', async () => {
+      await service.findMine(CLIENT_ID);
+
+      expect(argsFor('past')).toMatchObject({
+        where: { clientId: CLIENT_ID, endsAt: { lte: NOW } },
+        orderBy: { startsAt: 'desc' },
+      });
+    });
+
+    it('obie grupy pytane jednym znacznikiem czasu — bez dziury między zapytaniami', async () => {
+      await service.findMine(CLIENT_ID);
+
+      expect(findMany).toHaveBeenCalledTimes(2);
+      expect(argsFor('past')?.where.endsAt.lte).toEqual(argsFor('upcoming')?.where.endsAt.gt);
+    });
+
+    it('kolejność z bazy zostaje zachowana w odpowiedzi', async () => {
+      respond(
+        [
+          booking('2026-01-11T09:00:00.000Z', BookingStatus.CONFIRMED, 'b-1'),
+          booking('2026-01-20T09:00:00.000Z', BookingStatus.PENDING, 'b-2'),
+        ],
+        [booking('2026-01-05T09:00:00.000Z', BookingStatus.COMPLETED, 'b-3')],
+      );
+
+      const result = await service.findMine(CLIENT_ID);
+
+      expect(result.upcoming.map((b) => b.id)).toEqual(['b-1', 'b-2']);
+      expect(result.past.map((b) => b.id)).toEqual(['b-3']);
+    });
+  });
+
+  describe('dane karty wizyty', () => {
+    // AC: „komplet danych do wyświetlenia karty wizyty (firma, usługa, pracownik, status, czasy)"
+    it('zwraca firmę, usługę, pracownika, status i czasy', async () => {
+      const row = booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED);
+      respond([row], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit).toMatchObject({
+        id: row.id,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        status: BookingStatus.CONFIRMED,
+        business,
+        service: serviceData,
+        employee,
+      });
+    });
+
+    it('select nie sięga po pola prywatne firmy ani po clientId', async () => {
+      await service.findMine(CLIENT_ID);
+
+      const { select } = findMany.mock.calls[0][0];
+      expect(select).not.toHaveProperty('clientId');
+      expect(select.business.select).not.toHaveProperty('ownerId');
+      expect(select.business.select).not.toHaveProperty('isBlocked');
+    });
+  });
+
+  describe('flaga canCancel', () => {
+    // AC: „flaga per rezerwacja, czy odwołanie jest jeszcze możliwe wg polityki”.
+    // Musi zgadzać się z tym, co zrobi POST /bookings/:id/cancel (#27).
+    it('CONFIRMED przed granicą polityki → true', async () => {
+      // start 2026-01-20 09:00Z, polityka 24 h → granica 2026-01-19 09:00Z, czyli po NOW
+      respond([booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED)], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(true);
+    });
+
+    it('CONFIRMED dokładnie X godzin przed startem → false', async () => {
+      // granica należy do firmy: o tej samej sekundzie /cancel zwraca 409
+      respond([booking('2026-01-11T10:00:00.000Z', BookingStatus.CONFIRMED)], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(false);
+    });
+
+    it('PENDING po granicy polityki → true, okno dotyczy tylko CONFIRMED', async () => {
+      respond([booking('2026-01-10T18:00:00.000Z', BookingStatus.PENDING)], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(true);
+    });
+
+    it.each([
+      BookingStatus.COMPLETED,
+      BookingStatus.DECLINED,
+      BookingStatus.CANCELLED_BY_CLIENT,
+      BookingStatus.CANCELLED_BY_BUSINESS,
+    ])('stan terminalny %s → false', async (status) => {
+      respond([], [booking('2026-01-05T09:00:00.000Z', status)]);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).past;
+
+      expect(visit.canCancel).toBe(false);
+    });
+
+    it('flaga liczona per rezerwacja, nie raz na listę', async () => {
+      respond(
+        [
+          booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED, 'b-1'),
+          booking('2026-01-11T10:00:00.000Z', BookingStatus.CONFIRMED, 'b-2'),
+        ],
+        [],
+      );
+
+      const { upcoming } = await service.findMine(CLIENT_ID);
+
+      expect(upcoming.map((b) => b.canCancel)).toEqual([true, false]);
     });
   });
 });
