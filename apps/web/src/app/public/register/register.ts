@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { apply, form, required } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, {
@@ -72,6 +72,7 @@ import AppFormField, {
           Masz już konto?
           <a
             routerLink="/login"
+            [queryParams]="returnUrl ? { returnUrl } : {}"
             class="font-medium text-brand-700 hover:text-brand-800"
             >Zaloguj się</a
           >
@@ -82,6 +83,12 @@ import AppFormField, {
 })
 export default class Register {
   private readonly auth = inject(AuthStore);
+
+  /** Cel powrotu po rejestracji — przeniesiony z /login, żeby przełączenie formularza
+   *  nie gubiło kontekstu (np. niedokończonej rezerwacji). */
+  protected readonly returnUrl = inject(ActivatedRoute).snapshot.queryParamMap.get(
+    'returnUrl',
+  );
 
   protected readonly model = signal({
     firstName: '',
@@ -101,7 +108,7 @@ export default class Register {
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
     await submitAuthForm(this.registerForm, this.serverError, () =>
-      this.auth.register(this.model()),
+      this.auth.register(this.model(), this.returnUrl),
     );
   }
 }

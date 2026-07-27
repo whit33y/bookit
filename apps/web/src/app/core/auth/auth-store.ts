@@ -33,6 +33,16 @@ export function homeFor(role: UserRole): string {
   }
 }
 
+/** Sanityzacja celu powrotu po zalogowaniu (?returnUrl=). Przepuszczamy wyłącznie ścieżki
+ *  wewnątrz aplikacji — „//evil.com" i „/\evil.com" przeglądarka potraktowałaby jako adres
+ *  absolutny (protocol-relative), więc byłby to open redirect. */
+export function safeReturnUrl(url: string | null | undefined): string | null {
+  if (!url || !url.startsWith('/') || url.startsWith('//') || url.startsWith('/\\')) {
+    return null;
+  }
+  return url;
+}
+
 const ACCESS_KEY = 'bookit.accessToken';
 const REFRESH_KEY = 'bookit.refreshToken';
 
@@ -72,30 +82,42 @@ export class AuthStore {
 
   private refreshPromise: Promise<void> | null = null;
 
-  /** Po sukcesie przekierowuje na stronę domową roli (symetria z logout → /login). */
-  async login(dto: { email: string; password: string }): Promise<void> {
+  /** Po sukcesie przekierowuje na returnUrl (jeśli podany i bezpieczny), inaczej
+   *  na stronę domową roli (symetria z logout → /login). */
+  async login(
+    dto: { email: string; password: string },
+    returnUrl?: string | null,
+  ): Promise<void> {
     const pair = await firstValueFrom(
       this.api.post<TokenPair>('/auth/login', dto),
     );
     this.setTokens(pair);
-    await this.goHome();
+    await this.goHome(returnUrl);
   }
 
   /** Backend zwraca od razu TokenPair → rejestracja = auto-login + redirect. */
-  async register(dto: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-  }): Promise<void> {
+  async register(
+    dto: {
+      email: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+    },
+    returnUrl?: string | null,
+  ): Promise<void> {
     const pair = await firstValueFrom(
       this.api.post<TokenPair>('/auth/register', dto),
     );
     this.setTokens(pair);
-    await this.goHome();
+    await this.goHome(returnUrl);
   }
 
-  private async goHome(): Promise<void> {
+  private async goHome(returnUrl?: string | null): Promise<void> {
+    const target = safeReturnUrl(returnUrl);
+    if (target) {
+      await this.router.navigateByUrl(target);
+      return;
+    }
     const role = this.user()?.role;
     await this.router.navigateByUrl(role ? homeFor(role) : '/');
   }
@@ -108,11 +130,26 @@ export class AuthStore {
   }
 
   logout(): void {
+    this.clearTokens();
+    this.router.navigate(['/login']);
+  }
+
+  /** Sesja padła w tle (refresh odrzucony), a nie na życzenie użytkownika — zapamiętujemy
+   *  bieżący adres, żeby po ponownym zalogowaniu wrócił tam, gdzie przerwał (np. do
+   *  wypełnionego wizarda rezerwacji), zamiast lądować na stronie domowej roli. */
+  private expireSession(): void {
+    const returnUrl = safeReturnUrl(this.router.url);
+    this.clearTokens();
+    this.router.navigate(['/login'], {
+      queryParams: returnUrl ? { returnUrl } : {},
+    });
+  }
+
+  private clearTokens(): void {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     this.accessTokenSignal.set(null);
     this.refreshTokenSignal.set(null);
-    this.router.navigate(['/login']);
   }
 
   /** Single-flight: równoległe 401 współdzielą jeden refresh. */
@@ -135,7 +172,7 @@ export class AuthStore {
       this.setTokens(pair);
     } catch (err) {
       // sesja nie do uratowania — wylogowanie raz, niezależnie od liczby czekających 401
-      this.logout();
+      this.expireSession();
       throw err;
     }
   }

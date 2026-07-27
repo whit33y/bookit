@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppMap from '../../shared/map/map';
@@ -44,7 +44,7 @@ function initials(name: string): string {
 
 @Component({
   selector: 'app-business-profile',
-  imports: [AppMap, PricePlnPipe, NotFound],
+  imports: [AppMap, PricePlnPipe, NotFound, RouterLink],
   template: `
     @if (loading()) {
       <div class="flex flex-1 items-center justify-center px-4 py-16">
@@ -114,15 +114,27 @@ function initials(name: string): string {
                     }
                     <div class="mt-4 flex items-center justify-between">
                       <p class="text-sm font-bold">{{ s.priceCents | pricePln }}</p>
-                      <!-- ponytail: CTA-placeholder pod M4 — handler rezerwacji dojdzie z wizardem #30 -->
-                      <button
-                        type="button"
-                        disabled
-                        title="Rezerwacje online już wkrótce"
-                        class="rounded-md bg-brand-700 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-brand-700"
-                      >
-                        Zarezerwuj
-                      </button>
+                      @if (s.employees.length) {
+                        <a
+                          routerLink="rezerwacja"
+                          [queryParams]="{ serviceId: s.id }"
+                          [attr.aria-label]="'Zarezerwuj: ' + s.name"
+                          class="inline-block rounded-md bg-brand-700 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        >
+                          Zarezerwuj
+                        </a>
+                      } @else {
+                        <!-- bez pracownika nie ma czego rezerwować — wizard skończyłby się
+                             ślepą uliczką na kroku 2 -->
+                        <button
+                          type="button"
+                          disabled
+                          title="Ta usługa nie ma jeszcze przypisanych pracowników"
+                          class="rounded-md bg-brand-700 px-3 py-1.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Zarezerwuj
+                        </button>
+                      }
                     </div>
                   </article>
                 }

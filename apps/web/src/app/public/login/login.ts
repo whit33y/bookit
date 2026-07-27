@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { apply, form, required } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, {
@@ -62,6 +62,7 @@ import AppFormField, {
           Nie masz konta?
           <a
             routerLink="/register"
+            [queryParams]="returnUrl ? { returnUrl } : {}"
             class="font-medium text-brand-700 hover:text-brand-800"
             >Zarejestruj się</a
           >
@@ -72,6 +73,12 @@ import AppFormField, {
 })
 export default class Login {
   private readonly auth = inject(AuthStore);
+
+  /** Cel powrotu po zalogowaniu — snapshot wystarczy, bo /login nie zmienia query paramów
+   *  w trakcie życia komponentu. Walidację adresu robi AuthStore (safeReturnUrl). */
+  protected readonly returnUrl = inject(ActivatedRoute).snapshot.queryParamMap.get(
+    'returnUrl',
+  );
 
   protected readonly model = signal({ email: '', password: '' });
   protected readonly serverError = signal<string | null>(null);
@@ -84,7 +91,7 @@ export default class Login {
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
     await submitAuthForm(this.loginForm, this.serverError, () =>
-      this.auth.login(this.model()),
+      this.auth.login(this.model(), this.returnUrl),
     );
   }
 }

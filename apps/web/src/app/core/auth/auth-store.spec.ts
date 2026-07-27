@@ -92,6 +92,71 @@ describe('AuthStore', () => {
     expect(navigate).toHaveBeenCalledWith('/client');
   });
 
+  it('login z returnUrl wraca na wskazany adres zamiast na stronę roli', async () => {
+    const store = TestBed.inject(AuthStore);
+    const http = TestBed.inject(HttpTestingController);
+    const navigate = vi
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
+
+    const pending = store.login(
+      { email: 'a@b.pl', password: 'tajnehaslo' },
+      '/studio/rezerwacja?serviceId=s1',
+    );
+    http.expectOne('/api/auth/login').flush({
+      accessToken: fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
+      refreshToken: 'refresh',
+    });
+    await pending;
+
+    expect(navigate).toHaveBeenCalledWith('/studio/rezerwacja?serviceId=s1');
+  });
+
+  it.each(['//evil.com', 'https://evil.com', '/\\evil.com', ''])(
+    'odrzuca returnUrl prowadzący poza aplikację: %s',
+    async (returnUrl) => {
+      const store = TestBed.inject(AuthStore);
+      const http = TestBed.inject(HttpTestingController);
+      const navigate = vi
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      const pending = store.login(
+        { email: 'a@b.pl', password: 'tajnehaslo' },
+        returnUrl,
+      );
+      http.expectOne('/api/auth/login').flush({
+        accessToken: fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
+        refreshToken: 'refresh',
+      });
+      await pending;
+
+      expect(navigate).toHaveBeenCalledWith('/client');
+    },
+  );
+
+  it('padnięta sesja (nieudany refresh) zachowuje bieżący adres jako returnUrl', async () => {
+    localStorage.setItem('bookit.refreshToken', 'r');
+    const store = TestBed.inject(AuthStore);
+    const http = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue(
+      '/studio/rezerwacja?serviceId=s1',
+    );
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const pending = store.refresh().catch(() => undefined);
+    http
+      .expectOne('/api/auth/refresh')
+      .flush(null, { status: 401, statusText: 'Unauthorized' });
+    await pending;
+
+    expect(store.isLoggedIn()).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { returnUrl: '/studio/rezerwacja?serviceId=s1' },
+    });
+  });
+
   it('logout czyści tokeny i przekierowuje na /login', () => {
     localStorage.setItem(
       'bookit.accessToken',
