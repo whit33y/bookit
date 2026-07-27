@@ -6,7 +6,9 @@ import {
 import { Component, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { of } from 'rxjs';
+import { settle } from '../testing-helpers';
 import AppMap from '../../shared/map/map';
 import BusinessProfile from './business-profile';
 
@@ -37,6 +39,14 @@ const MOCK = {
       description: 'Klasyczne',
       durationMin: 30,
       priceCents: 7000,
+      employees: [{ id: 'e1', name: 'Anna Kowalska' }],
+    },
+    {
+      id: 's2',
+      name: 'Broda',
+      description: null,
+      durationMin: 20,
+      priceCents: 4000,
       employees: [],
     },
   ],
@@ -76,6 +86,49 @@ describe('BusinessProfile', () => {
     expect(text).toContain('Studio Fryzur');
     expect(text.replace(/\s/g, ' ')).toContain('70 zł');
     expect(text).toContain('Anna Kowalska');
+  });
+
+  it('CTA usługi prowadzi do wizarda rezerwacji z wybraną usługą', async () => {
+    // prawdziwy router (nie stub trasy), bo sprawdzamy rozwiązanie linku względnego
+    // — profil jest dzieckiem trasy ':slug', a wizard jego rodzeństwem
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            path: ':slug',
+            children: [
+              { path: '', component: BusinessProfile },
+              { path: 'rezerwacja', component: BusinessProfile },
+            ],
+          },
+        ]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    })
+      .overrideComponent(BusinessProfile, {
+        remove: { imports: [AppMap] },
+        add: { imports: [MapStub] },
+      })
+      .compileComponents();
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/test-slug', BusinessProfile);
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/businesses/test-slug')
+      .flush(MOCK);
+    await settle(harness.fixture);
+    harness.detectChanges();
+
+    const root = harness.fixture.nativeElement as HTMLElement;
+    const links = [...root.querySelectorAll('a[href*="rezerwacja"]')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/test-slug/rezerwacja?serviceId=s1',
+    ]);
+    // usługa bez przypisanych pracowników nie prowadzi do wizarda — byłaby ślepa uliczka
+    expect(root.querySelector('button[disabled]')?.textContent?.trim()).toBe(
+      'Zarezerwuj',
+    );
   });
 
   it('404: pokazuje stronę „nie znaleziono", nie profil', async () => {

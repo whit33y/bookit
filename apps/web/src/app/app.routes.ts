@@ -47,7 +47,19 @@ export const appRoutes: Route[] = [
   {
     // po wszystkich literalnych ścieżkach, żeby nie przesłaniać login/register/itd.
     path: ':slug',
-    loadComponent: () => import('./public/business-profile/business-profile'),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./public/business-profile/business-profile'),
+      },
+      {
+        // bez authGuard: niezalogowany przechodzi wizard i dopiero przy finalizacji
+        // trafia na /login?returnUrl=… (#29)
+        path: 'rezerwacja',
+        loadComponent: () => import('./public/booking-wizard/booking-wizard'),
+      },
+    ],
   },
   { path: '**', loadComponent: () => import('./public/not-found/not-found') },
 ];
