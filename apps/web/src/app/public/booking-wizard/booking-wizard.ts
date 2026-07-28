@@ -13,6 +13,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
+import {
+  formatDateTime,
+  formatTime,
+  todayInBusinessTz,
+} from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import NotFound from '../not-found/not-found';
 
@@ -48,38 +53,6 @@ interface Booking {
 
 /** Wartość kroku 2 oznaczająca „bez preferencji" — do availability leci wtedy bez employeeId. */
 const ANY_EMPLOYEE = 'any';
-
-/** Lustro BUSINESS_TIMEZONE z apps/api/src/app/availability/business-time.ts. Sloty przychodzą
- *  jako instanty UTC, a użytkownik myśli godzinami firmy — formatujemy jawnie w jej strefie,
- *  żeby przeglądarka spoza PL nie pokazała innej godziny niż grafik. */
-const BUSINESS_TIMEZONE = 'Europe/Warsaw';
-
-const timeFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: BUSINESS_TIMEZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: BUSINESS_TIMEZONE,
-  dateStyle: 'full',
-  timeStyle: 'short',
-});
-
-/** Godzina slotu w strefie firmy, np. „09:30". */
-function formatSlotTime(iso: string): string {
-  return timeFormat.format(new Date(iso));
-}
-
-/** Pełna data i godzina w strefie firmy — ekran potwierdzenia. */
-function formatSlotDateTime(iso: string): string {
-  return dateTimeFormat.format(new Date(iso));
-}
-
-/** Dzisiejsza data w strefie firmy jako YYYY-MM-DD (en-CA daje dokładnie ten format). */
-function todayInBusinessTz(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIMEZONE }).format(now);
-}
 
 /** Sloty „dowolnego" pracownika to ta sama godzina powtórzona per pracownik — użytkownik ma
  *  zobaczyć jedną pozycję na godzinę. Backend sortuje po startsAt, potem po employeeId, więc
@@ -378,8 +351,8 @@ export default class BookingWizard {
 
   protected readonly anyEmployee = ANY_EMPLOYEE;
   protected readonly minDate = todayInBusinessTz();
-  protected readonly time = formatSlotTime;
-  protected readonly dateTime = formatSlotDateTime;
+  protected readonly time = formatTime;
+  protected readonly dateTime = formatDateTime;
   protected readonly isLoggedIn = this.auth.isLoggedIn;
 
   private readonly slug = signal('');
