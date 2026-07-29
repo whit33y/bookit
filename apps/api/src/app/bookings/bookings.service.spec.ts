@@ -1,6 +1,7 @@
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, Prisma, UserRole } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addMinutes } from '../availability/business-time';
+import { addMinutes, localDayRangeUtc, parseLocalDate } from '../availability/business-time';
+import { AuthUser } from '../common/types/auth-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingEventsService } from './booking-events.service';
 import { BookingsService } from './bookings.service';
@@ -14,6 +15,8 @@ const BUSINESS_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const CLIENT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const OWNER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const BOOKING_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const EMPLOYEE_USER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const OTHER_EMPLOYEE_ID = '99999999-9999-4999-8999-999999999999';
 
 type BusyRow = { startsAt: Date; endsAt: Date };
 
@@ -1001,6 +1004,116 @@ describe('BookingsService — moje wizyty', () => {
       const { upcoming } = await service.findMine(CLIENT_ID);
 
       expect(upcoming.map((b) => b.canCancel)).toEqual([true, false]);
+    });
+  });
+});
+
+describe('BookingsService — kalendarz firmy (#31)', () => {
+  const ownerUser: AuthUser = { sub: OWNER_ID, email: 'owner@example.com', role: UserRole.OWNER };
+  const employeeUser: AuthUser = {
+    sub: EMPLOYEE_USER_ID,
+    email: 'pracownik@example.com',
+    role: UserRole.EMPLOYEE,
+  };
+
+  // zimowa środa — spójna ze strefą Europe/Warsaw użytą w innych testach tego pliku
+  const query = (overrides: Partial<{ from: string; to: string; employeeId: string }> = {}) => ({
+    from: '2026-01-14',
+    to: '2026-01-14',
+    ...overrides,
+  });
+
+  let businessFindUnique: ReturnType<typeof vi.fn>;
+  let employeeFindUnique: ReturnType<typeof vi.fn>;
+  let bookingFindMany: ReturnType<typeof vi.fn>;
+  let service: BookingsService;
+
+  beforeEach(() => {
+    businessFindUnique = vi.fn().mockResolvedValue({ id: BUSINESS_ID });
+    employeeFindUnique = vi
+      .fn()
+      .mockResolvedValue({ id: EMPLOYEE_ID, businessId: BUSINESS_ID });
+    bookingFindMany = vi.fn().mockResolvedValue([]);
+
+    service = new BookingsService(
+      {
+        business: { findUnique: businessFindUnique },
+        employee: { findUnique: employeeFindUnique },
+        booking: { findMany: bookingFindMany },
+      } as unknown as PrismaService,
+      eventsMock(),
+    );
+  });
+
+  it('OWNER: zwraca rezerwacje całej firmy w zakresie, posortowane po startsAt', async () => {
+    await service.findForBusiness(ownerUser, query());
+
+    expect(businessFindUnique).toHaveBeenCalledWith({
+      where: { ownerId: OWNER_ID },
+      select: { id: true },
+    });
+    const { startUtc } = localDayRangeUtc(parseLocalDate('2026-01-14'));
+    const { endUtc } = localDayRangeUtc(parseLocalDate('2026-01-14'));
+    expect(bookingFindMany).toHaveBeenCalledWith({
+      where: {
+        startsAt: { lt: endUtc },
+        endsAt: { gt: startUtc },
+        businessId: BUSINESS_ID,
+      },
+      orderBy: { startsAt: 'asc' },
+      select: expect.any(Object),
+    });
+  });
+
+  it('OWNER + employeeId: zawęża where do wskazanego pracownika', async () => {
+    await service.findForBusiness(ownerUser, query({ employeeId: OTHER_EMPLOYEE_ID }));
+
+    expect(bookingFindMany.mock.calls[0][0].where).toMatchObject({
+      businessId: BUSINESS_ID,
+      employeeId: OTHER_EMPLOYEE_ID,
+    });
+  });
+
+  it('OWNER bez employeeId: where nie zawiera filtra pracownika', async () => {
+    await service.findForBusiness(ownerUser, query());
+
+    expect(bookingFindMany.mock.calls[0][0].where).not.toHaveProperty('employeeId');
+  });
+
+  it('EMPLOYEE: filtr employeeId wymuszony serwerowo na własnym pracowniku, query ignorowane', async () => {
+    await service.findForBusiness(employeeUser, query({ employeeId: OTHER_EMPLOYEE_ID }));
+
+    expect(employeeFindUnique).toHaveBeenCalledWith({
+      where: { userId: EMPLOYEE_USER_ID },
+      select: { id: true, businessId: true },
+    });
+    expect(bookingFindMany.mock.calls[0][0].where).toMatchObject({
+      businessId: BUSINESS_ID,
+      employeeId: EMPLOYEE_ID,
+    });
+    expect(businessFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('to przed from → 400, bez zapytań do bazy', async () => {
+    await expect(
+      service.findForBusiness(ownerUser, query({ from: '2026-01-15', to: '2026-01-14' })),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(bookingFindMany).not.toHaveBeenCalled();
+  });
+
+  it('OWNER bez firmy → 404', async () => {
+    businessFindUnique.mockResolvedValue(null);
+
+    await expect(service.findForBusiness(ownerUser, query())).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('EMPLOYEE bez powiązanego rekordu pracownika → 404', async () => {
+    employeeFindUnique.mockResolvedValue(null);
+
+    await expect(service.findForBusiness(employeeUser, query())).rejects.toMatchObject({
+      status: 404,
     });
   });
 });

@@ -6,11 +6,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, Prisma, UserRole } from '@prisma/client';
 import {
   addMinutes,
   isOnSlotGrid,
   localWeekday,
+  localDayRangeUtc,
+  parseLocalDate,
   utcToLocalDate,
   zonedWallClockToUtc,
 } from '../availability/business-time';
@@ -20,11 +22,13 @@ import {
   fitsAnyInterval,
   overlapsAny,
 } from '../availability/slots.util';
+import { AuthUser } from '../common/types/auth-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { serviceClientFields } from '../services/services.service';
 import { BookingEventsService } from './booking-events.service';
 import { STATUS_LABELS, canTransition } from './booking-status';
 import { canClientCancel, cancellationWindowMessage } from './cancellation-policy';
+import { BusinessBookingsQueryDto } from './dto/business-bookings-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 // Namespace advisory locków tego modułu — pierwszy argument pg_advisory_xact_lock(int, int).
@@ -71,6 +75,20 @@ const clientBookingSelect = {
 } satisfies Prisma.BookingSelect;
 
 type ClientBooking = Prisma.BookingGetPayload<{ select: typeof clientBookingSelect }>;
+
+// Kafelek kalendarza firmy (#31) — dane klienta (imię, telefon) i pracownika zamiast firmy,
+// bo to widok firmy patrzącej na własne rezerwacje, nie klienta. Bez business/canCancel —
+// to nie jest karta klienta.
+const businessBookingSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+  clientNote: true,
+  client: { select: { firstName: true, lastName: true, phone: true } },
+  service: { select: serviceClientFields },
+  employee: { select: { id: true, name: true } },
+} satisfies Prisma.BookingSelect;
 
 /**
  * AC #28: „flaga per rezerwacja, czy odwołanie jest jeszcze możliwe wg polityki (front nie
@@ -137,6 +155,59 @@ export class BookingsService {
       upcoming: upcoming.map((booking) => withCancelFlag(booking, now)),
       past: past.map((booking) => withCancelFlag(booking, now)),
     };
+  }
+
+  /**
+   * Kalendarz firmy (#31) — rezerwacje w zakresie dat, dla właściciela (wszyscy pracownicy)
+   * i pracownika z kontem (wyłącznie własne). from/to to lokalne daty firmy, nie instanty —
+   * jak date w /availability; localDayRangeUtc daje granice doby odporne na zmianę czasu.
+   * to liczymy z końca doby `to`, więc zapytanie jednodniowe (from === to) obejmuje całą dobę.
+   *
+   * Filtr employeeId jest wymuszony serwerowo dla pracownika — cokolwiek przyjdzie w query,
+   * ignorujemy, bo AC #31 wprost tego wymaga (frontend nie ma się czym bronić przed
+   * spreparowanym requestem).
+   */
+  async findForBusiness(user: AuthUser, query: BusinessBookingsQueryDto) {
+    const from = localDayRangeUtc(parseLocalDate(query.from)).startUtc;
+    const to = localDayRangeUtc(parseLocalDate(query.to)).endUtc;
+    if (to <= from) {
+      throw new BadRequestException('to musi być późniejsze niż from');
+    }
+
+    const where: Prisma.BookingWhereInput = {
+      startsAt: { lt: to },
+      endsAt: { gt: from },
+    };
+
+    if (user.role === UserRole.EMPLOYEE) {
+      const employee = await this.prisma.employee.findUnique({
+        where: { userId: user.sub },
+        select: { id: true, businessId: true },
+      });
+      if (!employee) {
+        throw new NotFoundException('Nie znaleziono pracownika');
+      }
+      where.businessId = employee.businessId;
+      where.employeeId = employee.id;
+    } else {
+      const business = await this.prisma.business.findUnique({
+        where: { ownerId: user.sub },
+        select: { id: true },
+      });
+      if (!business) {
+        throw new NotFoundException('Nie znaleziono firmy');
+      }
+      where.businessId = business.id;
+      if (query.employeeId) {
+        where.employeeId = query.employeeId;
+      }
+    }
+
+    return this.prisma.booking.findMany({
+      where,
+      orderBy: { startsAt: 'asc' },
+      select: businessBookingSelect,
+    });
   }
 
   // decyzje firmy — dwa wejścia do tej samej maszyny stanów (SDD §7)
