@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessesService } from './businesses.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
+import { SearchBusinessesQueryDto } from './dto/search-businesses-query.dto';
 
 const dto: CreateBusinessDto = {
   name: 'Salon Piękności Łucja',
@@ -28,6 +29,9 @@ describe('BusinessesService', () => {
   let findFirst: ReturnType<typeof vi.fn>;
   let findUnique: ReturnType<typeof vi.fn>;
   let update: ReturnType<typeof vi.fn>;
+  let findMany: ReturnType<typeof vi.fn>;
+  let count: ReturnType<typeof vi.fn>;
+  let queryRaw: ReturnType<typeof vi.fn>;
   let service: BusinessesService;
 
   beforeEach(() => {
@@ -38,9 +42,13 @@ describe('BusinessesService', () => {
     findFirst = vi.fn();
     findUnique = vi.fn();
     update = vi.fn();
+    findMany = vi.fn().mockResolvedValue([]);
+    count = vi.fn().mockResolvedValue(0);
+    queryRaw = vi.fn();
     const prisma = {
       $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-      business: { findFirst, findUnique, update },
+      $queryRaw: queryRaw,
+      business: { findFirst, findUnique, update, findMany, count },
     };
     service = new BusinessesService(prisma as unknown as PrismaService);
   });
@@ -157,6 +165,120 @@ describe('BusinessesService', () => {
 
     await expect(service.updateMine('user-1', {})).rejects.toMatchObject({
       status: 404,
+    });
+  });
+
+  describe('search', () => {
+    it('bez filtrów i bez geo: isBlocked wykluczone, sortowanie alfabetyczne, domyślna paginacja', async () => {
+      await service.search({});
+
+      expect(findMany.mock.calls[0][0]).toMatchObject({
+        where: { isBlocked: false },
+        orderBy: { name: 'asc' },
+        skip: 0,
+        take: 20,
+      });
+      expect(count.mock.calls[0][0]).toEqual({ where: { isBlocked: false } });
+    });
+
+    it('łączy category/city/q w jeden where (AND); city case-insensitive', async () => {
+      const query: SearchBusinessesQueryDto = { category: 'fryzjer', city: 'Warszawa', q: 'strzyżenie' };
+
+      await service.search(query);
+
+      const where = findMany.mock.calls[0][0].where;
+      expect(where).toEqual({
+        isBlocked: false,
+        category: { slug: 'fryzjer' },
+        city: { equals: 'Warszawa', mode: 'insensitive' },
+        OR: [
+          { name: { contains: 'strzyżenie', mode: 'insensitive' } },
+          {
+            services: {
+              some: { isActive: true, name: { contains: 'strzyżenie', mode: 'insensitive' } },
+            },
+          },
+        ],
+      });
+    });
+
+    it('własna paginacja: page/limit przeliczają się na skip/take', async () => {
+      await service.search({ page: '3', limit: '5' });
+
+      expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 10, take: 5 });
+    });
+
+    it('zwraca total z count i przekazane page/limit', async () => {
+      findMany.mockResolvedValue([{ id: 'b1' }]);
+      count.mockResolvedValue(42);
+
+      const result = await service.search({ page: '2', limit: '10' });
+
+      expect(result).toEqual({ items: [{ id: 'b1' }], total: 42, page: 2, limit: 10 });
+    });
+
+    it('tylko lat bez lng → 400', async () => {
+      await expect(service.search({ lat: '52.23' })).rejects.toMatchObject({ status: 400 });
+      expect(findMany).not.toHaveBeenCalled();
+      expect(queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('tylko lng bez lat → 400', async () => {
+      await expect(service.search({ lng: '21.01' })).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('lat poza zakresem -90..90 → 400', async () => {
+      await expect(service.search({ lat: '120', lng: '21.01' })).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('page poza dozwolonym zakresem (nawet po przepełnieniu Number() do Infinity) → 400', async () => {
+      await expect(service.search({ page: '9'.repeat(400) })).rejects.toMatchObject({ status: 400 });
+      expect(findMany).not.toHaveBeenCalled();
+    });
+
+    it('radiusKm poza dozwolonym zakresem → 400', async () => {
+      await expect(
+        service.search({ lat: '52.23', lng: '21.01', radiusKm: '1000' }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('z lat/lng: woła $queryRaw (nie findMany), domyślny radiusKm i mapuje distanceKm', async () => {
+      queryRaw
+        .mockResolvedValueOnce([
+          {
+            id: 'b1',
+            slug: 'salon',
+            name: 'Salon',
+            city: 'Warszawa',
+            street: 'Kwiatowa 1',
+            categoryId: 'cat-1',
+            categoryName: 'Fryzjer',
+            categorySlug: 'fryzjer',
+            distanceKm: 3.14159,
+          },
+        ])
+        .mockResolvedValueOnce([{ count: 1 }]);
+
+      const result = await service.search({ lat: '52.23', lng: '21.01' });
+
+      expect(findMany).not.toHaveBeenCalled();
+      expect(queryRaw).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        items: [
+          {
+            id: 'b1',
+            slug: 'salon',
+            name: 'Salon',
+            city: 'Warszawa',
+            street: 'Kwiatowa 1',
+            category: { id: 'cat-1', name: 'Fryzjer', slug: 'fryzjer' },
+            distanceKm: 3.1,
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+      });
     });
   });
 });

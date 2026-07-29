@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
@@ -15,11 +16,19 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthUser } from '../common/types/auth-user';
 import { BusinessesService } from './businesses.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
+import { SearchBusinessesQueryDto } from './dto/search-businesses-query.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 
 @Controller('businesses')
 export class BusinessesController {
   constructor(private readonly businessesService: BusinessesService) {}
+
+  // publiczna wyszukiwarka — bez guardów (jak :slug); ścieżka bez parametru,
+  // więc nie koliduje z 'mine' ani ':slug' niezależnie od kolejności
+  @Get()
+  search(@Query() query: SearchBusinessesQueryDto) {
+    return this.businessesService.search(query);
+  }
 
   // przed @Get(':slug') — inaczej trasa parametryczna złapie „mine"
   @Get('mine')
