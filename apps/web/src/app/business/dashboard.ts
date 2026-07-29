@@ -1,13 +1,16 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-// ponytail: placeholder — kalendarz/usługi/pracownicy to osobne issue
+// ponytail: placeholder — usługi/pracownicy/ustawienia to osobne issue
 @Component({
   selector: 'app-business-dashboard',
   imports: [RouterLink],
   template: `
     <h1>Panel firmy</h1>
     <nav class="flex gap-4">
+      <a routerLink="/business/calendar" class="text-brand-600 underline"
+        >Kalendarz</a
+      >
       <a routerLink="/business/services" class="text-brand-600 underline"
         >Usługi</a
       >
