@@ -4,6 +4,12 @@ import { roleGuard } from '../core/auth/auth.guard';
 export default [
   { path: '', loadComponent: () => import('./dashboard') },
   {
+    // kalendarz wspólny dla OWNER i EMPLOYEE — kto widzi kolumny/wybór pracownika,
+    // rozstrzyga rola wewnątrz komponentu (#32)
+    path: 'calendar',
+    loadComponent: () => import('./calendar/calendar'),
+  },
+  {
     // rodzic „business" wpuszcza też EMPLOYEE — ustawienia firmy tylko dla OWNER
     path: 'settings',
     canActivate: [roleGuard('OWNER')],
