@@ -128,6 +128,7 @@ function businessCountLabel(n: number): string {
           ariaLabel="Wyniki wyszukiwania na mapie"
           [pins]="mapPins()"
           [activeId]="activeId()"
+          [userLocation]="userLocation()"
           (pinClick)="onPinClick($event)"
         />
       </section>
@@ -146,6 +147,7 @@ export default class Search {
   protected readonly page = signal(1);
   protected readonly limit = signal(20);
   protected readonly activeId = signal<string | null>(null);
+  protected readonly userLocation = signal<{ lat: number; lng: number } | null>(null);
 
   protected readonly mapPins = computed<MapPin[]>(() =>
     this.items().map((i) => ({ id: i.id, lat: i.lat, lng: i.lng })),
@@ -177,6 +179,7 @@ export default class Search {
     // zapytania, dopóki nowe się nie skończy (niespójne z "Szukam…" na liście)
     this.items.set([]);
     this.total.set(0);
+    this.userLocation.set(this.parseUserLocation(params));
 
     const qp = new URLSearchParams();
     for (const key of PASSTHROUGH_PARAMS) {
@@ -212,6 +215,30 @@ export default class Search {
           this.loading.set(false);
         }
       });
+  }
+
+  private parseUserLocation(
+    params: ParamMap,
+  ): { lat: number; lng: number } | null {
+    const latParam = params.get('lat');
+    const lngParam = params.get('lng');
+    // puste stringi traktujemy jak brak parametru — spójnie z load(), które
+    // przez `if (value)` i tak nie wyśle pustego lat/lng do API
+    if (!latParam || !lngParam) {
+      return null;
+    }
+    const lat = Number(latParam);
+    const lng = Number(lngParam);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return null;
+    }
+    // ten sam zakres co walidacja lat/lng w apps/api businesses.service.ts —
+    // spoza zakresu backend i tak odrzuci zapytaniem 400, mapa nie powinna
+    // wcześniej wyrenderować markera w bezsensownym miejscu
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return null;
+    }
+    return { lat, lng };
   }
 
   protected onPinClick(id: string): void {
