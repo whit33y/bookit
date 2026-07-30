@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -28,6 +29,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     TimeOffsModule,
     AvailabilityModule,
     BookingsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
