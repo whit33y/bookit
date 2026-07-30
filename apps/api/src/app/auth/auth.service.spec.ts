@@ -4,7 +4,7 @@ import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 
@@ -46,7 +46,7 @@ describe('AuthService', () => {
     };
     $transaction: ReturnType<typeof vi.fn>;
   };
-  let mail: { send: ReturnType<typeof vi.fn> };
+  let notifications: { sendPasswordReset: ReturnType<typeof vi.fn> };
   let service: AuthService;
 
   beforeEach(() => {
@@ -63,7 +63,7 @@ describe('AuthService', () => {
       },
       $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
-    mail = { send: vi.fn().mockResolvedValue(undefined) };
+    notifications = { sendPasswordReset: vi.fn().mockResolvedValue(undefined) };
     service = new AuthService(
       prisma as unknown as PrismaService,
       new JwtService({}),
@@ -72,7 +72,7 @@ describe('AuthService', () => {
         JWT_REFRESH_SECRET: 'test-refresh',
         APP_URL: 'http://localhost:4200',
       }),
-      mail as unknown as MailService,
+      notifications as unknown as NotificationsService,
     );
   });
 
@@ -247,20 +247,21 @@ describe('AuthService', () => {
       await flush();
 
       expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
-      expect(mail.send).not.toHaveBeenCalled();
+      expect(notifications.sendPasswordReset).not.toHaveBeenCalled();
     });
 
-    it('istniejący email → zapisuje hash tokenu (TTL ~1 h) i wysyła link z tokenem', async () => {
+    it('istniejący email → zapisuje hash tokenu (TTL ~1 h) i oddaje surowy token do wysyłki', async () => {
       prisma.user.findUnique.mockResolvedValue(user());
 
       await service.forgotPassword({ email: '  JAN@Example.COM ' });
       await flush();
 
       const created = prisma.passwordResetToken.create.mock.calls[0][0].data;
-      const [to, , text] = mail.send.mock.calls[0];
-      const token = /token=([0-9a-f]+)/.exec(text)?.[1] ?? '';
+      // treść maila buduje NotificationsService (#37) — auth przekazuje mu surowy token
+      const [to, firstName, token] = notifications.sendPasswordReset.mock.calls[0];
 
       expect(to).toBe('jan@example.com');
+      expect(firstName).toBe('Jan');
       // w mailu jest surowy token, w bazie tylko jego sha256
       expect(created.tokenHash).toBe(
         createHash('sha256').update(token).digest('hex'),

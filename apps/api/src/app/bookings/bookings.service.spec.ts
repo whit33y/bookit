@@ -20,8 +20,9 @@ const OTHER_EMPLOYEE_ID = '99999999-9999-4999-8999-999999999999';
 
 type BusyRow = { startsAt: Date; endsAt: Date };
 
-// hook powiadomień z M7 — serwis ma go wołać, ale nic z niego nie odczytuje
-const eventsMock = () => ({ statusChanged: vi.fn() }) as unknown as BookingEventsService;
+// hook powiadomień (#37) — serwis ma go wołać, ale nic z niego nie odczytuje
+const eventsMock = () =>
+  ({ statusChanged: vi.fn(), created: vi.fn() }) as unknown as BookingEventsService;
 
 // odwzorowanie warunku nachodzenia z WHERE (startsAt: { lt }, endsAt: { gt })
 const overlappingRows = (rows: BusyRow[], where: Prisma.BookingWhereInput) => {
@@ -38,6 +39,7 @@ describe('BookingsService', () => {
   let bookingCreate: ReturnType<typeof vi.fn>;
   let executeRaw: ReturnType<typeof vi.fn>;
   let calls: string[];
+  let bookingCreated: ReturnType<typeof vi.fn>;
   let service: BookingsService;
 
   beforeEach(() => {
@@ -67,6 +69,7 @@ describe('BookingsService', () => {
     bookingCreate = vi
       .fn()
       .mockImplementation(({ data }) => Promise.resolve({ id: 'booking-1', ...data }));
+    bookingCreated = vi.fn();
 
     const tx = {
       $executeRaw: executeRaw,
@@ -80,7 +83,7 @@ describe('BookingsService', () => {
         service: { findFirst: serviceFindFirst },
         $transaction: (cb: (client: typeof tx) => unknown) => cb(tx),
       } as unknown as PrismaService,
-      eventsMock(),
+      { statusChanged: vi.fn(), created: bookingCreated } as unknown as BookingEventsService,
     );
   });
 
@@ -134,6 +137,13 @@ describe('BookingsService', () => {
       await create();
 
       expect(bookingCreate.mock.calls[0][0].data.clientNote).toBeNull();
+    });
+
+    it('zgłasza zdarzenie created z zapisaną rezerwacją (mail do firmy — #37)', async () => {
+      const booking = await create();
+
+      expect(bookingCreated).toHaveBeenCalledTimes(1);
+      expect(bookingCreated).toHaveBeenCalledWith(booking);
     });
 
     it('rezerwacja stykająca się końcem z cudzą przechodzi', async () => {
@@ -400,7 +410,7 @@ describe('BookingsService — decyzje firmy', () => {
       {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
       } as unknown as PrismaService,
-      { statusChanged } as unknown as BookingEventsService,
+      { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
     );
   });
 
@@ -602,7 +612,7 @@ describe('BookingsService — odwołania', () => {
       {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
       } as unknown as PrismaService,
-      { statusChanged } as unknown as BookingEventsService,
+      { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
     );
   });
 

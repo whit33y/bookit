@@ -11,7 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes, randomUUID } from 'crypto';
-import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ForgotPasswordDto,
@@ -48,7 +48,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly mail: MailService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<TokenPair> {
@@ -147,15 +147,8 @@ export class AuthService {
       },
     });
 
-    const appUrl = this.config.getOrThrow<string>('APP_URL');
-    await this.mail.send(
-      user.email,
-      'Reset hasła w BookIt',
-      `Cześć ${user.firstName},\n\n` +
-        `Aby ustawić nowe hasło, otwórz poniższy link (ważny przez godzinę):\n` +
-        `${appUrl}/reset-password?token=${token}\n\n` +
-        `Jeśli to nie Ty prosiłeś o reset hasła, zignoruj tę wiadomość.`,
-    );
+    // Treść i link żyją w module notifications (#37) — auth odpowiada tylko za token.
+    await this.notifications.sendPasswordReset(user.email, user.firstName, token);
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
