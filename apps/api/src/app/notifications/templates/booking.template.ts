@@ -39,6 +39,8 @@ export interface BookingEmailData {
   client: { firstName: string; lastName: string; phone: string | null };
   business: {
     name: string;
+    // slug publicznego profilu — tam prowadzi CTA po odrzuconej wizycie (wybór nowego terminu)
+    slug: string;
     street: string;
     city: string;
     postalCode: string | null;
@@ -172,8 +174,10 @@ export const renderBookingEmail = (
         `Cześć ${data.client.firstName}, firma ${data.business.name} nie może przyjąć ` +
           `tej rezerwacji. Możesz wybrać inny termin.`,
         clientRows(data),
+        // profil firmy, a nie „moje wizyty" — z listy własnych rezerwacji nie da się
+        // wybrać nowego terminu, a etykieta CTA to obiecuje
         'Wybierz inny termin',
-        '/client',
+        `/${data.business.slug}`,
       );
 
     case BookingStatus.CANCELLED_BY_BUSINESS:

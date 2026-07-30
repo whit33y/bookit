@@ -2,13 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 
-// Minimalny kształt rezerwacji potrzebny zdarzeniu — podzbiór bookingSelect
-// z BookingsService (strukturalnie, bez importu w drugą stronę). Reszta danych do maila
-// (email klienta, dane firmy, usługa) dobierana jest po id w NotificationsService.
+// Zdarzeniu wystarczy identyfikator — komplet danych do maila (klient, firma, usługa)
+// dobiera po nim NotificationsService, więc payload nie powiela bookingSelect.
+// Strukturalnie zgodny z tym, co zwracają metody BookingsService, bez importu w drugą stronę.
 export interface BookingEventPayload {
   id: string;
-  businessId: string;
-  startsAt: Date;
 }
 
 /**

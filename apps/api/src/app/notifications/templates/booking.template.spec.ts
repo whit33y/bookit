@@ -19,6 +19,7 @@ const data = (overrides: Partial<BookingEmailData> = {}): BookingEmailData => ({
   client: { firstName: 'Jan', lastName: 'Kowalski', phone: '500100200' },
   business: {
     name: 'Salon Ola',
+    slug: 'salon-ola',
     street: 'ul. Kwiatowa 1',
     city: 'Warszawa',
     postalCode: '00-001',
@@ -115,6 +116,10 @@ describe('renderBookingEmail', () => {
     expect(declined?.text).toContain('nie może przyjąć');
     expect(cancelled?.text).toContain('odwołała Twoją wizytę');
     expect(declined?.subject).not.toBe(cancelled?.subject);
+    // „Wybierz inny termin" musi prowadzić tam, gdzie termin da się wybrać — na profil
+    // firmy, nie na listę własnych wizyt
+    expect(declined?.text).toContain(`${APP_URL}/salon-ola`);
+    expect(cancelled?.text).toContain(`${APP_URL}/client`);
   });
 
   it('braki opcjonalnych danych nie zostawiają pustych wierszy', () => {
@@ -123,6 +128,7 @@ describe('renderBookingEmail', () => {
       data({
         business: {
           name: 'Salon Ola',
+          slug: 'salon-ola',
           street: 'ul. Kwiatowa 1',
           city: 'Warszawa',
           postalCode: null,

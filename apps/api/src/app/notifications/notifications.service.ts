@@ -21,6 +21,7 @@ const bookingEmailSelect = {
   business: {
     select: {
       name: true,
+      slug: true,
       street: true,
       city: true,
       postalCode: true,

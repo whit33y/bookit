@@ -24,7 +24,7 @@ export const renderPasswordResetEmail = (
       `<p style="margin:0 0 16px;">Cześć ${escapeHtml(firstName)},</p>` +
       '<p style="margin:0 0 16px;">Aby ustawić nowe hasło, otwórz poniższy link ' +
       '(ważny przez godzinę):</p>' +
-      `<p style="margin:0 0 16px;"><a href="${link}">Ustaw nowe hasło</a></p>` +
+      `<p style="margin:0 0 16px;"><a href="${escapeHtml(link)}">Ustaw nowe hasło</a></p>` +
       '<p style="margin:0 0 16px;color:#616e7c;">Jeśli to nie Ty prosiłeś o reset hasła, ' +
       'zignoruj tę wiadomość.</p>' +
       '<p style="margin:0;color:#616e7c;">— BookIt</p>' +

@@ -19,6 +19,7 @@ const booking = () => ({
   },
   business: {
     name: 'Salon Ola',
+    slug: 'salon-ola',
     street: 'ul. Kwiatowa 1',
     city: 'Warszawa',
     postalCode: '00-001',
