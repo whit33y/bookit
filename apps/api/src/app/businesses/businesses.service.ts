@@ -59,13 +59,16 @@ const publicProfileSelect = {
   },
 } satisfies Prisma.BusinessSelect;
 
-// wyniki wyszukiwarki (#34) — bez opisu/telefonu, karta na liście wyników nie ich nie pokazuje
+// wyniki wyszukiwarki (#34) — bez opisu/telefonu, karta na liście wyników nie ich nie pokazuje;
+// lat/lng potrzebne dla pinezek na mapie wyników (#35)
 const searchResultSelect = {
   id: true,
   slug: true,
   name: true,
   city: true,
   street: true,
+  lat: true,
+  lng: true,
   category: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.BusinessSelect;
 
@@ -75,6 +78,8 @@ interface SearchByDistanceRow {
   name: string;
   city: string;
   street: string;
+  lat: number;
+  lng: number;
   categoryId: string;
   categoryName: string;
   categorySlug: string;
@@ -240,7 +245,7 @@ export class BusinessesService {
 
     const [rows, [{ count }]] = await Promise.all([
       this.prisma.$queryRaw<SearchByDistanceRow[]>`
-        SELECT b.id, b.slug, b.name, b.city, b.street,
+        SELECT b.id, b.slug, b.name, b.city, b.street, b.lat, b.lng,
           c.id as "categoryId", c.name as "categoryName", c.slug as "categorySlug",
           ${distanceExpr} as "distanceKm"
         FROM "Business" b
@@ -264,6 +269,8 @@ export class BusinessesService {
         name: r.name,
         city: r.city,
         street: r.street,
+        lat: r.lat,
+        lng: r.lng,
         category: { id: r.categoryId, name: r.categoryName, slug: r.categorySlug },
         distanceKm: Math.round(r.distanceKm * 10) / 10,
       })),

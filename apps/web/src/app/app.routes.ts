@@ -4,6 +4,12 @@ import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
 export const appRoutes: Route[] = [
   { path: '', loadComponent: () => import('./public/landing/landing') },
   {
+    // literalna ścieżka — musi być przed ':slug', inaczej trasa parametryczna
+    // przechwyci /search jako slug firmy
+    path: 'search',
+    loadComponent: () => import('./public/search/search'),
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./public/login/login'),
