@@ -37,12 +37,13 @@ const bookingEmailSelect = {
  * Powiadomienia mailowe (#37). Jedyny konsument MailService — reszta aplikacji zna wyłącznie
  * ten serwis, więc szablony i adresaci mają jedno miejsce.
  *
- * Kontrakt metod od rezerwacji (bookingCreated / bookingStatusChanged): **nigdy nie odrzucają**.
- * Powiadomienie jest efektem ubocznym zapisanej już operacji, a AC #37 wymaga, żeby błąd
- * wysyłki nie wywalał operacji na rezerwacji — dlatego cała praca (lookup + SMTP) siedzi
- * w try/catch, a wołający może bezpiecznie zrobić `void`. sendPasswordReset zachowuje się
- * odwrotnie i rzuca, bo AuthService.forgotPassword ma własny catch i tam błąd jest jedynym
- * sygnałem (odpowiedź jest zawsze 204, żeby nie zdradzać istnienia konta).
+ * Kontrakt metod od rezerwacji (bookingCreated / bookingStatusChanged / bookingReminder):
+ * **nigdy nie odrzucają**. Powiadomienie jest efektem ubocznym zapisanej już operacji,
+ * a AC #37 wymaga, żeby błąd wysyłki nie wywalał operacji na rezerwacji — dlatego cała praca
+ * (lookup + SMTP) siedzi w try/catch, a wołający może bezpiecznie zrobić `void`.
+ * sendPasswordReset zachowuje się odwrotnie i rzuca, bo AuthService.forgotPassword ma własny
+ * catch i tam błąd jest jedynym sygnałem (odpowiedź jest zawsze 204, żeby nie zdradzać
+ * istnienia konta).
  */
 @Injectable()
 export class NotificationsService {
@@ -55,24 +56,34 @@ export class NotificationsService {
   ) {}
 
   /** Nowa rezerwacja (PENDING) — informacja dla firmy, że czeka decyzja. */
-  bookingCreated(bookingId: string): Promise<void> {
-    return this.sendBookingEmail(bookingId, 'CREATED');
+  async bookingCreated(bookingId: string): Promise<void> {
+    await this.sendBookingEmail(bookingId, 'CREATED');
   }
 
   /** Zmiana statusu rezerwacji — mail do klienta albo firmy, zależnie od zdarzenia. */
-  bookingStatusChanged(bookingId: string, to: BookingStatus): Promise<void> {
-    return this.sendBookingEmail(bookingId, to);
+  async bookingStatusChanged(bookingId: string, to: BookingStatus): Promise<void> {
+    await this.sendBookingEmail(bookingId, to);
   }
 
+  /**
+   * Przypomnienie ~24 h przed wizytą (#38). Jedyna metoda od rezerwacji, która oddaje wynik:
+   * cron zaznacza `reminderSentAt` *przed* wysyłką (żeby dwa ticki nie wysłały duplikatu),
+   * więc musi wiedzieć, czy cofnąć znacznik. Nadal nie odrzuca — `false` zamiast wyjątku.
+   */
+  bookingReminder(bookingId: string): Promise<boolean> {
+    return this.sendBookingEmail(bookingId, 'REMINDER');
+  }
+
+  /** `true` = mail poszedł do SMTP; `false` = zdarzenie bez adresata albo błąd (zalogowany). */
   private async sendBookingEmail(
     bookingId: string,
     event: BookingEmailEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Odbiorcę rozstrzygamy przed zapytaniem do bazy — zdarzenia bez maila (np. COMPLETED
     // z crona #39) nie mają kosztować dodatkowego SELECT-a.
     const recipient = BOOKING_EMAIL_RECIPIENT[event];
     if (!recipient) {
-      return;
+      return false;
     }
 
     try {
@@ -82,7 +93,7 @@ export class NotificationsService {
       });
       if (!booking) {
         this.logger.warn(`Rezerwacja ${bookingId} zniknęła przed wysłaniem powiadomienia`);
-        return;
+        return false;
       }
 
       const message = renderBookingEmail(
@@ -91,13 +102,14 @@ export class NotificationsService {
         this.config.getOrThrow<string>('APP_URL'),
       );
       if (!message) {
-        return;
+        return false;
       }
 
       const to =
         recipient === 'CLIENT' ? booking.client.email : booking.business.owner.email;
       await this.mail.send({ to, ...message });
       this.logger.log(`Powiadomienie ${event} dla rezerwacji ${bookingId} wysłane`);
+      return true;
     } catch (e) {
       // Bez rzucania dalej: rezerwacja jest już zapisana, a nieudany mail nie może
       // zamienić jej sukcesu w błąd (AC #37).
@@ -105,6 +117,7 @@ export class NotificationsService {
         `Nie udało się wysłać powiadomienia ${event} dla rezerwacji ${bookingId}`,
         e instanceof Error ? e.stack : String(e),
       );
+      return false;
     }
   }
 

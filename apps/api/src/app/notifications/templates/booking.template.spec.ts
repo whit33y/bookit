@@ -37,6 +37,8 @@ describe('routing odbiorców', () => {
     expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.CANCELLED_BY_BUSINESS]).toBe('CLIENT');
     expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.CANCELLED_BY_CLIENT]).toBe('BUSINESS');
     expect(BOOKING_EMAIL_RECIPIENT.CREATED).toBe('BUSINESS');
+    // przypomnienie z crona (#38) — firma ma wizytę w kalendarzu, przypomina się klientowi
+    expect(BOOKING_EMAIL_RECIPIENT.REMINDER).toBe('CLIENT');
   });
 
   it('COMPLETED i PENDING nie mają maila — routing i render zgodne', () => {
@@ -103,6 +105,27 @@ describe('renderBookingEmail', () => {
     expect(mail?.subject).toContain('Nowa rezerwacja');
     expect(mail?.text).toContain('Klient Jan Kowalski');
     expect(mail?.text).toContain(`${APP_URL}/business/pending`);
+  });
+
+  it('REMINDER: przypomnienie dla klienta z pełnymi danymi wizyty', () => {
+    const mail = renderBookingEmail('REMINDER', data(), APP_URL);
+
+    expect(normalize(mail?.subject ?? '')).toBe(
+      'Przypomnienie o wizycie: Salon Ola — środa, 14 stycznia 2026, 09:00–10:00',
+    );
+    const text = normalize(mail?.text ?? '');
+    expect(text).toContain('Przypomnienie o wizycie');
+    expect(text).toContain('Cześć Jan');
+    expect(text).toContain('Adres: ul. Kwiatowa 1, 00-001 Warszawa');
+    expect(text).toContain(`${APP_URL}/client`);
+    // Termin wprost w treści, nie „jutro": okno crona nadgania rezerwacje potwierdzone późno,
+    // więc mail może wyjść tego samego dnia.
+    expect(text).toContain('środa, 14 stycznia 2026, 09:00–10:00');
+    expect(text).not.toContain('jutr');
+    // CTA nie obiecuje odwołania — przy cancellationHours = 24 okno mija w momencie wysyłki
+    expect(text).not.toContain('odwołaj');
+    // obie wersje treści, tak jak pozostałe zdarzenia
+    expect(mail?.html).toContain('<h2');
   });
 
   it('DECLINED i CANCELLED_BY_BUSINESS mają rozróżnialne treści dla klienta', () => {
