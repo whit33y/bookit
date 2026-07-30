@@ -1,13 +1,21 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   ElementRef,
+  computed,
   effect,
+  inject,
   input,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { AuthStore } from '../../core/auth/auth-store';
 import { formatDateTime, formatTime } from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import { PendingCountStore } from '../pending-count-store';
 
 // lustrzane typy backendu — businessBookingSelect w bookings.service.ts
 // (GET /businesses/mine/bookings, #31)
@@ -36,6 +44,11 @@ export interface CalendarBooking {
   employee: { id: string; name: string };
 }
 
+export interface BookingChangedEvent {
+  id: string;
+  status: BookingStatus;
+}
+
 // mirror STATUS_LABELS/STATUS_CLASSES z client/my-bookings.ts — te same 6 statusów, ten sam
 // schemat kolorów sprawdzony pod kątem kontrastu AA (odcienie 700 na tle 50/100)
 export const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -56,8 +69,9 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
   COMPLETED: 'bg-stone-100 text-stone-600',
 };
 
-/** Podgląd szczegółów rezerwacji z kalendarza firmy — tylko odczyt. Akcje (akceptuj/odrzuć/
- *  odwołaj) to zakres #33; ten komponent zostanie wtedy rozszerzony bez zmian w siatce kalendarza. */
+/** Szczegóły rezerwacji z kalendarza firmy — podgląd danych i, dla OWNER, decyzje z #33
+ *  (akceptuj/odrzuć PENDING, odwołaj PENDING/CONFIRMED). EMPLOYEE widzi te same dane bez
+ *  przycisków akcji — rola weryfikowana lokalnie tylko dla UX, backend i tak wymusza @Roles(OWNER). */
 @Component({
   selector: 'app-booking-details-dialog',
   imports: [PricePlnPipe],
@@ -103,6 +117,66 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
             }
           </dl>
 
+          @if (actionError(); as msg) {
+            <p role="alert" class="alert-danger mt-4">{{ msg }}</p>
+          }
+
+          @if (canAct() && confirmingCancel()) {
+            <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
+              <p class="text-sm font-medium text-rose-800">
+                Na pewno odwołać wizytę „{{ b.service.name }}" —
+                {{ formatDateTime(b.startsAt) }}? Klient zostanie o tym poinformowany.
+              </p>
+              <div class="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="onConfirmCancel()"
+                  class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-rose-800 disabled:opacity-60"
+                >
+                  {{ busy() ? 'Odwoływanie…' : 'Tak, odwołaj' }}
+                </button>
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="onCancelCancel()"
+                  class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
+                >
+                  Anuluj
+                </button>
+              </div>
+            </div>
+          } @else if (canAct() && (b.status === 'PENDING' || b.status === 'CONFIRMED')) {
+            <div class="mt-4 flex flex-wrap gap-2">
+              @if (b.status === 'PENDING') {
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="onAccept()"
+                  class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-emerald-800 disabled:opacity-60"
+                >
+                  Zaakceptuj
+                </button>
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="onReject()"
+                  class="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                >
+                  Odrzuć
+                </button>
+              }
+              <button
+                type="button"
+                [disabled]="busy()"
+                (click)="onRequestCancel()"
+                class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
+              >
+                Odwołaj
+              </button>
+            </div>
+          }
+
           <button
             type="button"
             class="mt-6 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50"
@@ -116,8 +190,16 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
   `,
 })
 export default class BookingDetailsDialog {
+  private readonly api = inject(ApiClient);
+  private readonly authStore = inject(AuthStore);
+  private readonly pendingCountStore = inject(PendingCountStore);
+
   readonly booking = input<CalendarBooking | null>(null);
   readonly closed = output<void>();
+  readonly changed = output<BookingChangedEvent>();
+  // niesie id, żeby rodzic mógł sprawdzić, czy dialog wciąż pokazuje TĘ rezerwację, zanim
+  // zamknie widok — użytkownik mógł w międzyczasie zamknąć i otworzyć inną (patrz runAction)
+  readonly conflict = output<{ id: string }>();
 
   protected readonly dialogEl =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
@@ -125,6 +207,11 @@ export default class BookingDetailsDialog {
   protected readonly statusClasses = STATUS_CLASSES;
   protected readonly formatDateTime = formatDateTime;
   protected readonly formatTime = formatTime;
+
+  protected readonly canAct = computed(() => this.authStore.user()?.role === 'OWNER');
+  protected readonly busy = signal(false);
+  protected readonly actionError = signal<string | null>(null);
+  protected readonly confirmingCancel = signal(false);
 
   constructor() {
     // synchronizacja z imperatywnym API <dialog> — showModal()/close() dają trap fokusu
@@ -138,11 +225,66 @@ export default class BookingDetailsDialog {
         dialog.close();
       }
     });
+
+    // nowa rezerwacja (albo zamknięcie) czyści stan poprzedniej akcji — inaczej błąd albo krok
+    // potwierdzenia odwołania z poprzednio otwartej wizyty zostawałby widoczny w kolejnej
+    effect(() => {
+      this.booking();
+      this.busy.set(false);
+      this.actionError.set(null);
+      this.confirmingCancel.set(false);
+    });
   }
 
   protected onBackdropClick(event: MouseEvent): void {
     if (event.target === this.dialogEl().nativeElement) {
       this.dialogEl().nativeElement.close();
+    }
+  }
+
+  protected onAccept(): void {
+    void this.runAction('/confirm', 'CONFIRMED');
+  }
+
+  protected onReject(): void {
+    void this.runAction('/decline', 'DECLINED');
+  }
+
+  protected onRequestCancel(): void {
+    this.confirmingCancel.set(true);
+  }
+
+  protected onCancelCancel(): void {
+    this.confirmingCancel.set(false);
+  }
+
+  protected onConfirmCancel(): void {
+    void this.runAction('/cancel-by-business', 'CANCELLED_BY_BUSINESS');
+  }
+
+  private async runAction(path: string, resultingStatus: BookingStatus): Promise<void> {
+    const current = this.booking();
+    if (!current || this.busy()) return;
+
+    this.busy.set(true);
+    this.actionError.set(null);
+    try {
+      await firstValueFrom(this.api.post(`/bookings/${current.id}${path}`, {}));
+      if (current.status === 'PENDING') {
+        this.pendingCountStore.decrement();
+      }
+      this.changed.emit({ id: current.id, status: resultingStatus });
+    } catch (err) {
+      if (err instanceof HttpErrorResponse && err.status === 409) {
+        // status zmienił się poza tym dialogiem — rodzic powinien odświeżyć dane zamiast
+        // pokazywać wynik akcji, który już nie jest prawdziwy
+        this.conflict.emit({ id: current.id });
+        return;
+      }
+      this.actionError.set(apiErrorMessage(err));
+    } finally {
+      this.busy.set(false);
+      this.confirmingCancel.set(false);
     }
   }
 }

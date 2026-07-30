@@ -5,6 +5,7 @@ import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatTime, todayInBusinessTz } from '../../shared/business-time';
 import BookingDetailsDialog, {
+  BookingChangedEvent,
   CalendarBooking,
   STATUS_CLASSES,
 } from './booking-details-dialog';
@@ -197,6 +198,8 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
     <app-booking-details-dialog
       [booking]="selectedBooking()"
       (closed)="closeDetails()"
+      (changed)="onBookingChanged($event)"
+      (conflict)="onBookingConflict($event)"
     />
   `,
 })
@@ -340,6 +343,28 @@ export default class BusinessCalendar {
 
   protected closeDetails(): void {
     this.selectedBooking.set(null);
+  }
+
+  // AC #33: akceptacja/odrzucenie/odwołanie aktualizuje kalendarz bez przeładowania — podmieniamy
+  // status w sygnale zamiast refetchować całą siatkę. Dialog zamykamy tylko, gdy wciąż pokazuje
+  // TĘ rezerwację — użytkownik mógł go w międzyczasie zamknąć i otworzyć inną, zanim spóźniona
+  // odpowiedź na starą akcję wróciła (patrz code review #33)
+  protected onBookingChanged({ id, status }: BookingChangedEvent): void {
+    this.bookings.update((list) =>
+      list.map((b) => (b.id === id ? { ...b, status } : b)),
+    );
+    if (this.selectedBooking()?.id === id) {
+      this.closeDetails();
+    }
+  }
+
+  // 409 — dane w dialogu były już nieaktualne (ktoś inny zdążył zdecydować), więc bierzemy
+  // świeżą listę zamiast zgadywać nowy stan (wzorem my-bookings.ts)
+  protected onBookingConflict({ id }: { id: string }): void {
+    if (this.selectedBooking()?.id === id) {
+      this.closeDetails();
+    }
+    void this.loadBookings();
   }
 
   protected hourRowStart(hour: number): number {

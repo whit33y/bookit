@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { PendingCountStore } from './pending-count-store';
 
 // ponytail: placeholder — usługi/pracownicy/ustawienia to osobne issue
 @Component({
@@ -11,6 +12,12 @@ import { RouterLink } from '@angular/router';
       <a routerLink="/business/calendar" class="text-brand-600 underline"
         >Kalendarz</a
       >
+      <a routerLink="/business/pending" class="text-brand-600 underline"
+        >Oczekujące rezerwacje
+        @if (pendingCount() > 0) {
+          ({{ pendingCount() }})
+        }
+      </a>
       <a routerLink="/business/services" class="text-brand-600 underline"
         >Usługi</a
       >
@@ -23,4 +30,6 @@ import { RouterLink } from '@angular/router';
     </nav>
   `,
 })
-export default class BusinessDashboard {}
+export default class BusinessDashboard {
+  protected readonly pendingCount = inject(PendingCountStore).count;
+}

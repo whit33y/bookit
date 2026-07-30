@@ -4,7 +4,15 @@
     @if (auth.isLoggedIn()) {
       <a routerLink="/client">Moje wizyty</a>
       @if (role() === 'OWNER' || role() === 'EMPLOYEE') {
-        <a routerLink="/business">Panel firmy</a>
+        <a routerLink="/business"
+          >Panel firmy
+          @if (pendingCount() > 0) {
+            <span
+              class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-bold text-white"
+              >{{ pendingCount() }}</span
+            >
+          }
+        </a>
       }
       @if (role() === 'ADMIN') {
         <a routerLink="/admin">Admin</a>

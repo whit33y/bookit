@@ -39,6 +39,8 @@ interface TestAccess {
   navigate(delta: 1 | -1 | 'today'): void;
   onEmployeeChange(event: Event): void;
   openDetails(b: CalendarBooking): void;
+  onBookingChanged(event: { id: string; status: CalendarBooking['status'] }): void;
+  onBookingConflict(event: { id: string }): void;
 }
 
 const TODAY = todayInBusinessTz();
@@ -297,5 +299,56 @@ describe('BusinessCalendar', () => {
     expect(cols.map((c) => c.key)).toEqual(['e1', 'e9']);
     expect(cols[1].title).toBe('Była Basia');
     expect(cols[1].bookings).toHaveLength(1);
+  });
+
+  it('onBookingChanged podmienia status rezerwacji i zamyka dialog (#33)', async () => {
+    const { http, comp } = setup('OWNER');
+    http.expectOne('/api/businesses/mine/employees').flush([ACTIVE_1]);
+    const b = mkBooking({ id: 'b1', status: 'PENDING' });
+    bookingsReq(http).flush([b]);
+    await tick();
+
+    comp.openDetails(b);
+    expect(comp.selectedBooking()).not.toBeNull();
+
+    comp.onBookingChanged({ id: 'b1', status: 'CONFIRMED' });
+
+    expect(comp.bookings().find((x) => x.id === 'b1')?.status).toBe('CONFIRMED');
+    expect(comp.selectedBooking()).toBeNull();
+  });
+
+  it('onBookingConflict zamyka dialog i odświeża rezerwacje (#33)', () => {
+    const { http, comp } = setup('EMPLOYEE');
+    const b = mkBooking({ id: 'b1' });
+    bookingsReq(http).flush([b]);
+    comp.openDetails(b);
+
+    comp.onBookingConflict({ id: 'b1' });
+    expect(comp.selectedBooking()).toBeNull();
+
+    bookingsReq(http).flush([]);
+  });
+
+  // regresja code-review #33: spóźniona odpowiedź na akcję dla A nie może zamknąć dialogu,
+  // jeśli użytkownik w międzyczasie zamknął A i otworzył inną rezerwację (B)
+  it('onBookingChanged/onBookingConflict dla nieaktualnego id nie zamyka dialogu innej rezerwacji', async () => {
+    const { http, comp } = setup('EMPLOYEE');
+    const a = mkBooking({ id: 'a1' });
+    const b = mkBooking({ id: 'b1' });
+    bookingsReq(http).flush([a, b]);
+    await tick();
+
+    comp.openDetails(b);
+    expect(comp.selectedBooking()).toEqual(b);
+
+    // spóźniona odpowiedź dotyczy 'a1', ale dialog pokazuje już 'b1'
+    comp.onBookingChanged({ id: 'a1', status: 'CONFIRMED' });
+    expect(comp.selectedBooking()).toEqual(b);
+    expect(comp.bookings().find((x) => x.id === 'a1')?.status).toBe('CONFIRMED');
+
+    comp.onBookingConflict({ id: 'a1' });
+    expect(comp.selectedBooking()).toEqual(b);
+
+    bookingsReq(http).flush([]);
   });
 });
