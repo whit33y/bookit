@@ -8,12 +8,14 @@ import AppMap, { MapPin } from './map';
   template: `<app-map
     [pins]="pins()"
     [activeId]="activeId()"
+    [userLocation]="userLocation()"
     (pinClick)="lastClicked = $event"
   />`,
 })
 class MapHost {
   readonly pins = signal<MapPin[]>([]);
   readonly activeId = signal<string | null>(null);
+  readonly userLocation = signal<{ lat: number; lng: number } | null>(null);
   lastClicked: string | null = null;
 }
 
@@ -82,5 +84,30 @@ describe('AppMap (tryb wielu pinów)', () => {
       '.leaflet-marker-icon',
     );
     expect(markers.length).toBe(2);
+  });
+
+  it('pokazuje marker lokalizacji użytkownika obok pinów wyników', async () => {
+    const fixture = await setup();
+    fixture.componentInstance.pins.set([{ id: 'b1', lat: 52.23, lng: 21.01 }]);
+    fixture.componentInstance.userLocation.set({ lat: 52.25, lng: 21.05 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const markers = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '.leaflet-marker-icon',
+    );
+    expect(markers.length).toBe(2);
+  });
+
+  it('centruje mapę na userze, gdy lista wyników jest pusta', async () => {
+    const fixture = await setup();
+    fixture.componentInstance.userLocation.set({ lat: 52.25, lng: 21.05 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const markers = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '.leaflet-marker-icon',
+    );
+    expect(markers.length).toBe(1);
   });
 });

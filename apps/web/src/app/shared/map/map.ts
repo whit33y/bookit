@@ -46,6 +46,15 @@ const ACTIVE_PIN_ICON = L.divIcon({
   iconAnchor: [17, 34],
 });
 
+// Pozycja użytkownika (geolokalizacja, #36) — niebieska kropka zamiast pinezki firmy,
+// żeby wizualnie nie mylić jej z wynikami wyszukiwania.
+const USER_LOCATION_ICON = L.divIcon({
+  className: '',
+  html: `<span style="display:block;width:16px;height:16px;border-radius:9999px;background:#2563eb;border:3px solid white;box-shadow:0 0 0 1px #2563eb;" aria-hidden="true"></span>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
 /** Mapa Leaflet: albo jeden punkt (`lat`/`lng` — profil firmy, formularz założenia firmy),
  *  albo wiele pinów (`pins` — lista wyników wyszukiwarki, #35). Gdy `pins` jest niepuste,
  *  ma pierwszeństwo nad `lat`/`lng`. */
@@ -64,6 +73,8 @@ export default class AppMap {
   readonly lng = input<number | null>(null);
   readonly pins = input<MapPin[]>([]);
   readonly activeId = input<string | null>(null);
+  // pozycja użytkownika (geolokalizacja, #36) — pokazana obok pinów, nie zastępuje ich
+  readonly userLocation = input<{ lat: number; lng: number } | null>(null);
   readonly ariaLabel = input('Lokalizacja firmy na mapie');
   // strona wyników (#35) potrzebuje wyższej mapy niż domyślna h-64 z profilu firmy
   readonly heightClass = input('h-64');
@@ -73,6 +84,7 @@ export default class AppMap {
     viewChild.required<ElementRef<HTMLElement>>('mapEl');
   private map?: L.Map;
   private marker?: L.Marker;
+  private userMarker?: L.Marker;
   private readonly pinMarkers = new Map<string, L.Marker>();
 
   constructor() {
@@ -94,6 +106,7 @@ export default class AppMap {
       this.lat();
       this.lng();
       this.pins();
+      this.userLocation();
       untracked(() => this.sync());
     });
     // samo podświetlenie aktywnego pina — bez przeliczania bounds/widoku
@@ -111,7 +124,9 @@ export default class AppMap {
       return;
     }
     const pins = this.pins();
-    if (pins.length) {
+    // pusta lista wyników + geolokalizacja usera (#36) też idzie trybem "pinów" —
+    // inaczej mapa zostałaby wyśrodkowana na Polsce zamiast na userze
+    if (pins.length || this.userLocation()) {
       this.syncPins(map, pins);
     } else {
       this.syncSinglePoint(map);
@@ -125,6 +140,8 @@ export default class AppMap {
       marker.remove();
     }
     this.pinMarkers.clear();
+    this.userMarker?.remove();
+    this.userMarker = undefined;
 
     const lat = this.lat();
     const lng = this.lng();
@@ -172,8 +189,26 @@ export default class AppMap {
       }
     }
 
-    const bounds = L.latLngBounds(pins.map((p): L.LatLngTuple => [p.lat, p.lng]));
-    map.fitBounds(bounds, { padding: [24, 24], maxZoom: PIN_ZOOM });
+    const userLocation = this.userLocation();
+    if (userLocation) {
+      const point: L.LatLngTuple = [userLocation.lat, userLocation.lng];
+      if (this.userMarker) {
+        this.userMarker.setLatLng(point);
+      } else {
+        this.userMarker = L.marker(point, { icon: USER_LOCATION_ICON }).addTo(map);
+      }
+    } else {
+      this.userMarker?.remove();
+      this.userMarker = undefined;
+    }
+
+    const points: L.LatLngTuple[] = pins.map((p): L.LatLngTuple => [p.lat, p.lng]);
+    if (userLocation) {
+      points.push([userLocation.lat, userLocation.lng]);
+    }
+    if (points.length) {
+      map.fitBounds(L.latLngBounds(points), { padding: [24, 24], maxZoom: PIN_ZOOM });
+    }
   }
 
   private updateActiveIcon(activeId: string | null): void {

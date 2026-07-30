@@ -22,6 +22,7 @@ class MapStub {
   readonly lng = input<number | null>(null);
   readonly pins = input<MapPin[]>([]);
   readonly activeId = input<string | null>(null);
+  readonly userLocation = input<{ lat: number; lng: number } | null>(null);
   readonly ariaLabel = input('');
   readonly heightClass = input('h-64');
   readonly pinClick = output<string>();
@@ -143,5 +144,57 @@ describe('Search', () => {
       '#card-b1',
     );
     expect(otherCard?.className).not.toContain('border-brand-600');
+  });
+
+  it('lat/lng z URL trafiają do mapy jako userLocation', async () => {
+    const { fixture, http } = await setup({ lat: '52.25', lng: '21.05' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const mapStub = fixture.debugElement.query(
+      By.directive(MapStub),
+    ).componentInstance as MapStub;
+    expect(mapStub.userLocation()).toEqual({ lat: 52.25, lng: 21.05 });
+  });
+
+  it('brak lat/lng w URL → userLocation na mapie jest null', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const mapStub = fixture.debugElement.query(
+      By.directive(MapStub),
+    ).componentInstance as MapStub;
+    expect(mapStub.userLocation()).toBeNull();
+  });
+
+  it('pusty lat w URL → userLocation na mapie jest null (nie {lat: 0})', async () => {
+    const { fixture, http } = await setup({ lat: '', lng: '21.05' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const mapStub = fixture.debugElement.query(
+      By.directive(MapStub),
+    ).componentInstance as MapStub;
+    expect(mapStub.userLocation()).toBeNull();
+  });
+
+  it('lat/lng spoza zakresu geograficznego → userLocation na mapie jest null', async () => {
+    const { fixture, http } = await setup({ lat: '999', lng: '21.05' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const mapStub = fixture.debugElement.query(
+      By.directive(MapStub),
+    ).componentInstance as MapStub;
+    expect(mapStub.userLocation()).toBeNull();
   });
 });
