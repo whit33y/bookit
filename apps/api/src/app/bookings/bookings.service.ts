@@ -308,19 +308,28 @@ export class BookingsService {
         throw e;
       });
 
-    // Dopiero po zatwierdzonym zapisie — punkt zaczepienia dla maili z M7 (#37).
-    // Powiadomienie jest efektem ubocznym, nie częścią operacji: rezerwacja jest już
-    // zmieniona, więc padnięta wysyłka ma trafić do logu, a nie zamienić 200 w 500
-    // (AC #37: „błąd wysyłki nie wywala operacji na rezerwacji").
+    // Dopiero po zatwierdzonym zapisie — stąd wychodzą maile z #37. Powiadomienie jest
+    // efektem ubocznym, nie częścią operacji: rezerwacja jest już zmieniona, więc padnięta
+    // wysyłka ma trafić do logu, a nie zamienić 200 w 500 (AC #37: „błąd wysyłki nie wywala
+    // operacji na rezerwacji").
+    this.notify(() => this.events.statusChanged(updated, from, to), updated.id);
+    return updated;
+  }
+
+  /**
+   * Zgłoszenie zdarzenia do powiadomień. Hook nigdy nie może przewrócić operacji, która
+   * jest już zapisana — sam BookingEventsService oddaje wysyłkę w tło, więc tutaj łapiemy
+   * wyłącznie błąd synchroniczny (np. gdyby hook rzucił przy budowaniu payloadu).
+   */
+  private notify(event: () => void, bookingId: string): void {
     try {
-      this.events.statusChanged(updated, from, to);
+      event();
     } catch (e) {
       this.logger.error(
-        `Nie udało się obsłużyć zdarzenia dla rezerwacji ${updated.id}`,
+        `Nie udało się obsłużyć zdarzenia dla rezerwacji ${bookingId}`,
         e instanceof Error ? e.stack : String(e),
       );
     }
-    return updated;
   }
 
   async create(userId: string, dto: CreateBookingDto) {
@@ -360,7 +369,7 @@ export class BookingsService {
     // długość wizyty zawsze z usługi — klient nie przysyła endsAt
     const endsAt = addMinutes(startsAt, service.durationMin);
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       // Advisory lock na pracownika: od tego momentu do końca transakcji nikt inny nie
       // zapisuje jego rezerwacji, więc sprawdzenie poniżej jest autorytatywne. Bez tego
       // dwa równoległe requesty odczytałyby „wolne" i oba zapisały ten sam slot.
@@ -424,5 +433,10 @@ export class BookingsService {
         select: bookingSelect,
       });
     });
+
+    // Poza transakcją: firma dowiaduje się o rezerwacji dopiero wtedy, gdy ta na pewno
+    // istnieje (rollback nie może wysłać maila o czymś, czego nie ma).
+    this.notify(() => this.events.created(created), created.id);
+    return created;
   }
 }
