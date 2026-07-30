@@ -10,6 +10,12 @@ export default [
     loadComponent: () => import('./calendar/calendar'),
   },
   {
+    // lista PENDING wspólna dla OWNER i EMPLOYEE — akcje (akceptuj/odrzuć/odwołaj) tylko
+    // dla OWNER, rozstrzyga rola wewnątrz komponentu, jak w kalendarzu (#33)
+    path: 'pending',
+    loadComponent: () => import('./pending/pending-bookings'),
+  },
+  {
     // rodzic „business" wpuszcza też EMPLOYEE — ustawienia firmy tylko dla OWNER
     path: 'settings',
     canActivate: [roleGuard('OWNER')],
