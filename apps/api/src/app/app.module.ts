@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -17,6 +18,8 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Jobs czasowe (#39 auto-COMPLETED); bez forRoot() dekoratory @Cron nie są skanowane.
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,

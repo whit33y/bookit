@@ -172,4 +172,7 @@ model Booking {
   @@index([employeeId, startsAt])
   @@index([clientId])
   @@index([businessId, startsAt])
+  // cron auto-COMPLETED (#39) filtruje po status + endsAt bez zawężenia do firmy ani pracownika,
+  // więc indeksy powyżej mu nie pomagają — bez tego skan całej tabeli 96 razy na dobę
+  @@index([status, endsAt])
 }
