@@ -64,7 +64,10 @@ export class AdminService {
       this.prisma.business.findMany({
         where,
         select: adminBusinessSelect,
-        orderBy: { createdAt: 'desc' }, // najnowsze zgłoszenia najpierw — one wymagają uwagi
+        // najnowsze zgłoszenia najpierw — one wymagają uwagi; id jako tiebreaker, bo createdAt
+        // to czas startu transakcji (seed wstawia paczkę rekordów z identycznym timestampem),
+        // a bez deterministycznej kolejności ten sam rekord potrafi wyjść na dwóch stronach
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip,
         take: limit,
       }),
@@ -93,7 +96,7 @@ export class AdminService {
       this.prisma.user.findMany({
         where,
         select: adminUserSelect,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], // tiebreaker jak w listBusinesses
         skip,
         take: limit,
       }),

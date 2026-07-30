@@ -25,10 +25,12 @@ export const parsePagination = (
 ): Pagination => {
   const page = query.page !== undefined ? Number(query.page) : 1;
   const limit = query.limit !== undefined ? Number(query.limit) : defaultLimit;
-  if (page < 1 || page > MAX_PAGE) {
+  // Number.isInteger odsiewa NaN — porównania z NaN są zawsze false, więc bez tego
+  // nienumeryczne page/limit (DTO bez @Matches) doleciałoby do Prismy jako skip: NaN → 500
+  if (!Number.isInteger(page) || page < 1 || page > MAX_PAGE) {
     throw new BadRequestException(`page poza zakresem 1..${MAX_PAGE}`);
   }
-  if (limit < 1 || limit > maxLimit) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > maxLimit) {
     throw new BadRequestException(`limit poza zakresem 1..${maxLimit}`);
   }
   return { page, limit, skip: (page - 1) * limit };

@@ -31,6 +31,15 @@ describe('parsePagination', () => {
     );
   });
 
+  // porównania z NaN są zawsze false — bez Number.isInteger takie query przeszłoby do Prismy jako skip: NaN
+  it('nieliczbowe page/limit → 400, nie NaN w zapytaniu', () => {
+    expect(() => parsePagination({ page: 'abc' })).toThrowError(`page poza zakresem 1..${MAX_PAGE}`);
+    expect(() => parsePagination({ limit: '' })).toThrowError(`limit poza zakresem 1..${MAX_LIMIT}`);
+    expect(() => parsePagination({ limit: '1.5' })).toThrowError(
+      `limit poza zakresem 1..${MAX_LIMIT}`,
+    );
+  });
+
   it('limit poza zakresem → 400', () => {
     expect(() => parsePagination({ limit: '0' })).toThrowError(`limit poza zakresem 1..${MAX_LIMIT}`);
     expect(() => parsePagination({ limit: String(MAX_LIMIT + 1) })).toThrowError(

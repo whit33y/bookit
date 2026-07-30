@@ -27,7 +27,9 @@ describe('AdminService', () => {
 
       const arg = businessFindMany.mock.calls[0][0];
       expect(arg.where).toEqual({});
-      expect(arg.orderBy).toEqual({ createdAt: 'desc' });
+      // id jako tiebreaker — seed wstawia paczkę firm z tym samym createdAt, a bez niego
+      // ta sama firma potrafiłaby wyjść na dwóch sąsiednich stronach
+      expect(arg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
       // ten sam where trafia do count, inaczej total nie zgadzałby się z listą
       expect(businessCount.mock.calls[0][0].where).toEqual(arg.where);
     });
@@ -115,7 +117,11 @@ describe('AdminService', () => {
       const result = await service.listUsers({});
 
       const arg = userFindMany.mock.calls[0][0];
-      expect(arg).toMatchObject({ skip: 0, take: 20, orderBy: { createdAt: 'desc' } });
+      expect(arg).toMatchObject({
+        skip: 0,
+        take: 20,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      });
       expect(result).toEqual({ items: [{ id: 'u1' }], total: 1, page: 1, limit: 20 });
     });
 
