@@ -5,6 +5,9 @@ import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatDateTime } from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 import { CalendarBooking } from '../calendar/booking-details-dialog';
 import { PendingCountStore, pendingRange } from '../pending-count-store';
 
@@ -13,18 +16,20 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
  *  (pendingRange()) i filtrujemy PENDING po stronie klienta — bez zmian backendu. */
 @Component({
   selector: 'app-pending-bookings',
-  imports: [PricePlnPipe],
+  imports: [PricePlnPipe, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Oczekujące rezerwacje</h1>
 
       @if (loading()) {
-        <p class="mt-6 text-sm text-stone-500" role="status">Ładowanie…</p>
+        <app-loading-state class="mt-6" />
       } @else if (serverError(); as msg) {
-        <p role="alert" class="alert-danger mt-6">{{ msg }}</p>
-        <button type="button" class="btn-primary mt-4 w-auto" (click)="onRetry()">
-          Spróbuj ponownie
-        </button>
+        <app-error-state
+          class="mt-6"
+          [message]="msg"
+          [retryable]="true"
+          (retry)="onRetry()"
+        />
       } @else if (bookings().length) {
         <ul class="mt-6 flex flex-col gap-4">
           @for (b of bookings(); track b.id) {
@@ -120,7 +125,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
           }
         </ul>
       } @else {
-        <p class="mt-6 text-sm text-stone-500">Brak oczekujących rezerwacji.</p>
+        <app-empty-state class="mt-6" title="Brak oczekujących rezerwacji." />
       }
     </div>
   `,

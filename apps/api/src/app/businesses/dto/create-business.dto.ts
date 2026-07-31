@@ -1,6 +1,5 @@
 import {
   IsInt,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,12 +9,16 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
+
+/** Limity adresu — kolumny w Prismie są bez granicy, więc DTO jest jedyną. */
+export const STREET_MAX_LENGTH = 120;
+export const CITY_MAX_LENGTH = 80;
 
 // slug, ownerId i isBlocked celowo poza DTO — ustala je serwer,
 // globalny forbidNonWhitelisted odrzuci je jako 400
 export class CreateBusinessDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
   @MaxLength(100)
   name!: string;
 
@@ -31,12 +34,12 @@ export class CreateBusinessDto {
   @Matches(/^\+?[0-9\s-]{7,20}$/, { message: 'Nieprawidłowy numer telefonu' })
   phone?: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(STREET_MAX_LENGTH)
   street!: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(CITY_MAX_LENGTH)
   city!: string;
 
   @IsOptional()

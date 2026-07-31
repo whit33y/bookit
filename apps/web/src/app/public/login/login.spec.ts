@@ -55,8 +55,8 @@ describe('Login', () => {
     req.flush(
       {
         statusCode: 401,
+        code: 'UNAUTHORIZED',
         message: 'Nieprawidłowy email lub hasło',
-        error: 'Unauthorized',
       },
       { status: 401, statusText: 'Unauthorized' },
     );

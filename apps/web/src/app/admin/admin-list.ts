@@ -28,6 +28,9 @@ export interface AdminList<T> {
   readonly params: Signal<AdminListParams>;
   /** True, gdy pusty wynik jest skutkiem filtrów, a nie pustej bazy. */
   readonly filtered: Signal<boolean>;
+  /** Powtarza zapytanie dla aktualnych parametrów — retry po nieudanym pobraniu. Nawigacja
+   *  na te same query params nie wywołałaby load(), więc ponawiamy wprost. */
+  reload(): void;
   /** Podmienia wiersz w miejscu, po odpowiedzi akcji zwracającej pełny obiekt. */
   replaceItem(item: T): void;
   /** Usuwa wiersz i koryguje licznik — gdy po akcji przestał pasować do aktywnego filtra. */
@@ -113,6 +116,10 @@ export function createAdminList<T extends { id: string }>(
     limit: limit.asReadonly(),
     params: params.asReadonly(),
     filtered: computed(() => params().q !== '' || params().blocked !== null),
+
+    reload(): void {
+      load(params());
+    },
 
     replaceItem(item: T): void {
       items.update((list) => list.map((row) => (row.id === item.id ? item : row)));

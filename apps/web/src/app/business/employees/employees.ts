@@ -13,6 +13,9 @@ import AppFormField, {
   EMAIL_WITH_TLD,
   submitAuthForm,
 } from '../../public/form-field/form-field';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 
 // lustrzane typy backendu (employeeSelect w findAll, #17)
 interface LinkedUser {
@@ -34,7 +37,7 @@ interface DeleteResult {
 
 @Component({
   selector: 'app-business-employees',
-  imports: [AppFormField, RouterLink],
+  imports: [AppFormField, RouterLink, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="flex flex-1 justify-center px-4 py-8">
       <section
@@ -107,11 +110,14 @@ interface DeleteResult {
 
         <div class="mt-6">
           @if (loading()) {
-            <p class="text-sm text-stone-500">Ładowanie pracowników…</p>
-          } @else if (!employees().length && !serverError()) {
-            <p class="text-sm text-stone-500">
-              Nie masz jeszcze żadnych pracowników. Dodaj pierwszego.
-            </p>
+            <app-loading-state message="Ładowanie pracowników…" />
+          } @else if (loadError(); as msg) {
+            <app-error-state [message]="msg" [retryable]="true" (retry)="load()" />
+          } @else if (!employees().length) {
+            <app-empty-state
+              title="Nie masz jeszcze żadnych pracowników."
+              description="Dodaj pierwszego."
+            />
           } @else {
             <ul class="flex flex-col gap-3">
               @for (e of employees(); track e.id) {
@@ -183,6 +189,8 @@ export default class BusinessEmployees {
   private readonly api = inject(ApiClient);
 
   protected readonly loading = signal(true);
+  /** Błąd pobrania listy (retry ma sens) — osobno od serverError akcji zapisu/usuwania. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly serverError = signal<string | null>(null);
   protected readonly employees = signal<Employee[]>([]);
 
@@ -207,10 +215,18 @@ export default class BusinessEmployees {
   });
 
   constructor() {
+    this.load();
+  }
+
+  /** Pobranie listy — osobny sygnał błędu niż akcje (serverError): tylko tu da się powtórzyć
+   *  żądanie i tylko tu błąd zastępuje listę, zamiast wisieć nad formularzem. */
+  protected load(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
     firstValueFrom(this.api.get<Employee[]>('/businesses/mine/employees'))
       .then((employees) => this.employees.set(employees))
-      .catch(() => {
-        this.serverError.set('Nie udało się wczytać pracowników.');
+      .catch((err: unknown) => {
+        this.loadError.set('Nie udało się wczytać pracowników. ' + apiErrorMessage(err));
       })
       .finally(() => this.loading.set(false));
   }

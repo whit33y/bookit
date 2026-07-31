@@ -267,7 +267,11 @@ describe('BookingDetailsDialog', () => {
     http
       .expectOne('/api/bookings/b1/confirm')
       .flush(
-        { message: 'Status rezerwacji zmienił się w międzyczasie' },
+        {
+          statusCode: 409,
+          code: 'CONFLICT',
+          message: 'Status rezerwacji zmienił się w międzyczasie',
+        },
         { status: 409, statusText: 'Conflict' },
       );
     await Promise.resolve();
@@ -288,11 +292,14 @@ describe('BookingDetailsDialog', () => {
     findButton(fixture, 'Odrzuć')?.click();
     http
       .expectOne('/api/bookings/b1/decline')
-      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      .flush(
+        { statusCode: 500, code: 'INTERNAL_ERROR', message: 'Serwer nie odpowiada' },
+        { status: 500, statusText: 'Server Error' },
+      );
     await Promise.resolve();
     fixture.detectChanges();
 
     expect(conflictEmitted).toBe(false);
-    expect(fixture.nativeElement.textContent).toContain('boom');
+    expect(fixture.nativeElement.textContent).toContain('Serwer nie odpowiada');
   });
 });

@@ -219,7 +219,7 @@ describe('AdminBusinesses', () => {
     http
       .expectOne('/api/admin/businesses/b1/block')
       .flush(
-        { statusCode: 404, message: 'Nie znaleziono firmy' },
+        { statusCode: 404, code: 'NOT_FOUND', message: 'Nie znaleziono firmy' },
         { status: 404, statusText: 'Not Found' },
       );
     await fixture.whenStable();
@@ -284,7 +284,7 @@ describe('AdminBusinesses', () => {
 
     expect(html(fixture).querySelector('table')).toBeNull();
     expect(html(fixture).querySelector('[role="alert"]')?.textContent).toContain(
-      'Coś poszło nie tak',
+      'Wystąpił nieoczekiwany błąd serwera',
     );
   });
 

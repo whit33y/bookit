@@ -13,6 +13,7 @@ import {
 } from '@angular/router';
 import { of } from 'rxjs';
 import AppMap, { MapPin } from '../../shared/map/map';
+import { settle } from '../testing-helpers';
 import Search from './search';
 
 // Podmiana mapy — Leaflet nie działa w jsdom (brak rozmiarów DOM).
@@ -120,7 +121,36 @@ describe('Search', () => {
     const alert = (fixture.nativeElement as HTMLElement).querySelector(
       '[role="alert"]',
     );
-    expect(alert?.textContent).toContain('Coś poszło nie tak');
+    expect(alert?.textContent).toContain('Wystąpił nieoczekiwany błąd serwera');
+  });
+
+  it('brak sieci → komunikat o połączeniu i retry powtarza to samo zapytanie', async () => {
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    // status 0 = żądanie nie doszło (offline, ubity serwer) — nie ma ciała odpowiedzi
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses'))
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'Brak połączenia z serwerem',
+    );
+
+    const retry = Array.from(el.querySelectorAll('button')).find(
+      (b) => (b.textContent ?? '').trim() === 'Spróbuj ponownie',
+    ) as HTMLButtonElement;
+    retry.click();
+    await fixture.whenStable();
+
+    // te same parametry co pierwotne zapytanie — retry nie gubi filtrów z adresu
+    const retried = http.expectOne((r) => r.url.startsWith('/api/businesses'));
+    expect(retried.request.url).toContain('city=Warszawa');
+    retried.flush(RESPONSE);
+    await settle(fixture);
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Salon X');
+    expect(el.querySelector('[role="alert"]')).toBeNull();
   });
 
   it('klik pinezki na mapie podświetla odpowiednią kartę na liście', async () => {

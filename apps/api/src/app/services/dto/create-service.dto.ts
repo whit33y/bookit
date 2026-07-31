@@ -1,19 +1,11 @@
-import {
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
 
 // businessId i isActive celowo poza DTO — ustala je serwer (businessId z tokena,
 // isActive domyślnie true / dezaktywacja przez DELETE),
 // globalny forbidNonWhitelisted odrzuci je jako 400
 export class CreateServiceDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
   @MaxLength(100)
   name!: string;
 

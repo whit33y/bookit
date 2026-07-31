@@ -154,7 +154,30 @@ describe('AdminUsers', () => {
 
     expect(html(fixture).querySelector('table')).toBeNull();
     expect(html(fixture).querySelector('[role="alert"]')?.textContent).toContain(
-      'Coś poszło nie tak',
+      'Wystąpił nieoczekiwany błąd serwera',
     );
+  });
+
+  it('retry po błędzie powtarza zapytanie z aktualnymi filtrami', async () => {
+    // filtr siedzi w URL, a nawigacja na te same query params nie wywołałaby load() —
+    // dlatego retry idzie przez reload(), nie przez router
+    const { fixture, http } = await setup({ q: 'kowal' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/admin/users'))
+      .flush('Błąd', { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+
+    const retry = [
+      ...html(fixture).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((b) => b.textContent?.includes('Spróbuj ponownie'));
+    retry?.click();
+    await fixture.whenStable();
+
+    const retried = http.expectOne((r) => r.url.startsWith('/api/admin/users'));
+    expect(retried.request.url).toContain('q=kowal');
+    retried.flush({ items: [], total: 0, page: 1, limit: 20 });
+    await fixture.whenStable();
+
+    expect(html(fixture).querySelector('[role="alert"]')).toBeNull();
   });
 });

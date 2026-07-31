@@ -3,6 +3,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../../core/api-client';
+import EmptyState from '../../../shared/ui/empty-state';
+import ErrorState from '../../../shared/ui/error-state';
+import LoadingState from '../../../shared/ui/loading-state';
 
 // lustrzane do backendu: DaySchedule (working-hours.service) i timeOffSelect (time-offs.service)
 interface Slot {
@@ -32,7 +35,7 @@ const DAY_NAMES = [
 
 @Component({
   selector: 'app-business-schedule',
-  imports: [RouterLink],
+  imports: [RouterLink, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="flex flex-1 justify-center px-4 py-8">
       <section
@@ -50,7 +53,14 @@ const DAY_NAMES = [
         </p>
 
         @if (loading()) {
-          <p class="mt-6 text-sm text-stone-500">Ładowanie grafiku…</p>
+          <app-loading-state class="mt-6" message="Ładowanie grafiku…" />
+        } @else if (loadError(); as msg) {
+          <app-error-state
+            class="mt-6"
+            [message]="msg"
+            [retryable]="true"
+            (retry)="load()"
+          />
         } @else {
           @if (serverError(); as msg) {
             <p role="alert" class="alert-danger mt-4">{{ msg }}</p>
@@ -217,7 +227,9 @@ const DAY_NAMES = [
                   </button>
                 </li>
               } @empty {
-                <li class="text-sm text-stone-500">Brak zaplanowanych urlopów.</li>
+                <li>
+                  <app-empty-state title="Brak zaplanowanych urlopów." />
+                </li>
               }
             </ul>
           </div>
@@ -236,6 +248,8 @@ export default class BusinessSchedule {
   }
 
   protected readonly loading = signal(true);
+  /** Błąd pobrania grafiku (retry ma sens) — osobno od serverError zapisu. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly serverError = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly saved = signal(false);
@@ -270,8 +284,10 @@ export default class BusinessSchedule {
     });
   }
 
-  private load(): void {
+  /** Wywoływane też z retry po nieudanym pobraniu — dlatego protected, nie private. */
+  protected load(): void {
     this.loading.set(true);
+    this.loadError.set(null);
     this.serverError.set(null);
     this.saved.set(false);
     this.days.set(Array.from({ length: 7 }, () => []));
@@ -285,7 +301,9 @@ export default class BusinessSchedule {
         (res) => this.timeOffs.set(res),
       ),
     ])
-      .catch(() => this.serverError.set('Nie udało się wczytać grafiku.'))
+      .catch((err: unknown) =>
+        this.loadError.set('Nie udało się wczytać grafiku. ' + apiErrorMessage(err)),
+      )
       .finally(() => this.loading.set(false));
   }
 

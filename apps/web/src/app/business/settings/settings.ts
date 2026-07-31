@@ -10,12 +10,14 @@ import {
   validate,
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api-client';
+import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppFormField, {
   submitAuthForm,
 } from '../../public/form-field/form-field';
 import AppMap from '../../shared/map/map';
 import { GeocodingService } from '../../shared/geocoding';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 
 // odpowiedź GET /businesses/mine (businessSelect) — tylko pola potrzebne formularzowi
 interface Business {
@@ -36,7 +38,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
 
 @Component({
   selector: 'app-business-settings',
-  imports: [AppFormField, AppMap, FormField],
+  imports: [AppFormField, AppMap, FormField, LoadingState, ErrorState],
   template: `
     <div class="flex flex-1 items-center justify-center px-4 py-8">
       <section
@@ -48,9 +50,14 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
         </p>
 
         @if (loading()) {
-          <p class="mt-6 text-sm text-stone-500">Ładowanie danych firmy…</p>
-        } @else if (!loaded()) {
-          <p role="alert" class="alert-danger mt-4">{{ serverError() }}</p>
+          <app-loading-state class="mt-6" message="Ładowanie danych firmy…" />
+        } @else if (loadError(); as msg) {
+          <app-error-state
+            class="mt-4"
+            [message]="msg"
+            [retryable]="true"
+            (retry)="load()"
+          />
         } @else {
           @if (serverError(); as msg) {
             <p role="alert" class="alert-danger mt-4">{{ msg }}</p>
@@ -178,8 +185,9 @@ export default class BusinessSettings {
   private readonly geocoder = inject(GeocodingService);
 
   protected readonly loading = signal(true);
-  // true dopiero po udanym wczytaniu firmy — formularza nie pokazujemy na pustych danych
-  protected readonly loaded = signal(false);
+  /** Błąd pobrania profilu (retry ma sens) — osobno od serverError zapisu; jego brak po
+   *  zakończonym ładowaniu znaczy, że formularz ma komplet danych. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly serverError = signal<string | null>(null);
   protected readonly geocodeError = signal<string | null>(null);
   protected readonly geocoding = signal(false);
@@ -235,6 +243,14 @@ export default class BusinessSettings {
   });
 
   constructor() {
+    this.load();
+  }
+
+  /** Pobranie profilu firmy — osobny sygnał błędu niż zapis (serverError), bo tylko tu
+   *  retry ma sens i tylko tu błąd zastępuje cały formularz. */
+  protected load(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
     firstValueFrom(this.api.get<Business>('/businesses/mine'))
       .then((b) => {
         this.model.set({
@@ -249,10 +265,9 @@ export default class BusinessSettings {
         this.coords.set({ lat: b.lat, lng: b.lng });
         // pinezka odpowiada wczytanemu adresowi — bez wymuszania geokodowania przy zapisie
         this.geocodedKey.set(this.addressKey());
-        this.loaded.set(true);
       })
-      .catch(() => {
-        this.serverError.set('Nie udało się wczytać danych firmy.');
+      .catch((err: unknown) => {
+        this.loadError.set('Nie udało się wczytać danych firmy. ' + apiErrorMessage(err));
       })
       .finally(() => this.loading.set(false));
   }

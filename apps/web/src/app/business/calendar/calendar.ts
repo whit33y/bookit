@@ -4,6 +4,9 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatTime, todayInBusinessTz } from '../../shared/business-time';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 import BookingDetailsDialog, {
   BookingChangedEvent,
   CalendarBooking,
@@ -42,7 +45,13 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
  *  EMPLOYEE, więc front tylko dostosowuje UI, nie duplikuje reguły bezpieczeństwa. */
 @Component({
   selector: 'app-business-calendar',
-  imports: [RouterLink, BookingDetailsDialog],
+  imports: [
+    RouterLink,
+    BookingDetailsDialog,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Kalendarz</h1>
@@ -128,18 +137,29 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
       </div>
 
       @if (initialLoading()) {
-        <p class="mt-6 text-sm text-stone-500" role="status">Ładowanie kalendarza…</p>
+        <app-loading-state class="mt-6" message="Ładowanie kalendarza…" />
       } @else if (employeesError(); as msg) {
-        <p role="alert" class="alert-danger mt-6">{{ msg }}</p>
+        <app-error-state
+          class="mt-6"
+          [message]="msg"
+          [retryable]="true"
+          (retry)="retry()"
+        />
       } @else if (serverError(); as msg) {
-        <p role="alert" class="alert-danger mt-6">{{ msg }}</p>
+        <app-error-state
+          class="mt-6"
+          [message]="msg"
+          [retryable]="true"
+          (retry)="retry()"
+        />
       } @else if (showEmptyEmployeesState()) {
-        <p class="mt-6 text-sm text-stone-500">
-          Nie masz aktywnych pracowników.
-          <a routerLink="/business/employees" class="text-brand-600 underline"
-            >Dodaj pracownika</a
-          >, żeby zobaczyć kalendarz.
-        </p>
+        <app-empty-state class="mt-6" title="Nie masz aktywnych pracowników.">
+          <p class="mt-1 text-sm text-stone-500">
+            <a routerLink="/business/employees" class="text-brand-600 underline"
+              >Dodaj pracownika</a
+            >, żeby zobaczyć kalendarz.
+          </p>
+        </app-empty-state>
       } @else {
         <div class="mt-6 overflow-x-auto">
           <div
@@ -306,6 +326,15 @@ export default class BusinessCalendar {
     void this.loadBookings();
   }
 
+  /** Ponowienie po nieudanym pobraniu — powtarza oba niezależne fetchy tego ekranu. */
+  protected retry(): void {
+    if (this.isOwner()) {
+      this.employeesLoading.set(true);
+      void this.loadEmployees();
+    }
+    void this.loadBookings();
+  }
+
   protected statusClass(status: CalendarBooking['status']): string {
     return STATUS_CLASSES[status];
   }
@@ -397,8 +426,8 @@ export default class BusinessCalendar {
           void this.loadBookings();
         }
       }
-    } catch {
-      this.employeesError.set('Nie udało się wczytać pracowników.');
+    } catch (err) {
+      this.employeesError.set('Nie udało się wczytać pracowników. ' + apiErrorMessage(err));
     } finally {
       this.employeesLoading.set(false);
     }

@@ -14,6 +14,9 @@ import AppFormField, {
   submitAuthForm,
 } from '../../public/form-field/form-field';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 
 // lustrzane typy backendu (serviceSelect + employees w findAll, #16/#18/#21)
 interface ServiceEmployee {
@@ -42,7 +45,14 @@ interface DeleteResult {
 
 @Component({
   selector: 'app-business-services',
-  imports: [AppFormField, FormField, PricePlnPipe],
+  imports: [
+    AppFormField,
+    FormField,
+    PricePlnPipe,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     <div class="flex flex-1 justify-center px-4 py-8">
       <section
@@ -189,11 +199,14 @@ interface DeleteResult {
 
         <div class="mt-6">
           @if (loading()) {
-            <p class="text-sm text-stone-500">Ładowanie usług…</p>
+            <app-loading-state message="Ładowanie usług…" />
+          } @else if (loadError(); as msg) {
+            <app-error-state [message]="msg" [retryable]="true" (retry)="load()" />
           } @else if (!services().length) {
-            <p class="text-sm text-stone-500">
-              Nie masz jeszcze żadnych usług. Dodaj pierwszą.
-            </p>
+            <app-empty-state
+              title="Nie masz jeszcze żadnych usług."
+              description="Dodaj pierwszą."
+            />
           } @else {
             <ul class="flex flex-col gap-3">
               @for (s of services(); track s.id) {
@@ -263,6 +276,8 @@ export default class BusinessServices {
   private readonly api = inject(ApiClient);
 
   protected readonly loading = signal(true);
+  /** Błąd pobrania listy (retry ma sens) — osobno od serverError akcji zapisu/usuwania. */
+  protected readonly loadError = signal<string | null>(null);
   protected readonly serverError = signal<string | null>(null);
   protected readonly services = signal<Service[]>([]);
   protected readonly employees = signal<Employee[]>([]);
@@ -325,6 +340,14 @@ export default class BusinessServices {
   );
 
   constructor() {
+    this.load();
+  }
+
+  /** Pobranie listy — osobny sygnał błędu niż akcje (serverError), bo tylko tu retry ma sens
+   *  i tylko tu błąd zastępuje całą listę zamiast wisieć nad formularzem. */
+  protected load(): void {
+    this.loading.set(true);
+    this.loadError.set(null);
     Promise.all([
       firstValueFrom(this.api.get<Service[]>('/businesses/mine/services')),
       firstValueFrom(this.api.get<Employee[]>('/businesses/mine/employees')),
@@ -333,8 +356,8 @@ export default class BusinessServices {
         this.services.set(services);
         this.employees.set(employees.map((e) => ({ id: e.id, name: e.name })));
       })
-      .catch(() => {
-        this.serverError.set('Nie udało się wczytać usług.');
+      .catch((err: unknown) => {
+        this.loadError.set('Nie udało się wczytać usług. ' + apiErrorMessage(err));
       })
       .finally(() => this.loading.set(false));
   }

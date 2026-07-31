@@ -15,7 +15,7 @@ import {
   required,
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api-client';
+import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, { submitAuthForm } from '../../public/form-field/form-field';
 import AppMap from '../../shared/map/map';
@@ -75,6 +75,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
             ) {
               <p class="mt-1.5 text-[13px] font-medium text-rose-600">
                 Wybierz kategorię
+              </p>
+            }
+            @if (categoriesError(); as msg) {
+              <p role="alert" class="mt-1.5 text-[13px] font-medium text-rose-600">
+                {{ msg }}
               </p>
             }
           </div>
@@ -157,6 +162,7 @@ export default class CreateBusiness {
 
   protected readonly categories = signal<Category[]>([]);
   protected readonly serverError = signal<string | null>(null);
+  protected readonly categoriesError = signal<string | null>(null);
   protected readonly geocodeError = signal<string | null>(null);
   protected readonly geocoding = signal(false);
   // współrzędne z geokodowania — bez nich formularz się nie wysyła
@@ -201,7 +207,14 @@ export default class CreateBusiness {
   constructor() {
     firstValueFrom(this.api.get<Category[]>('/categories'))
       .then((cats) => this.categories.set(cats))
-      .catch(() => this.categories.set([]));
+      .catch((err: unknown) => {
+        // kategoria jest wymagana, więc pusty select bez komunikatu byłby ślepym zaułkiem:
+        // formularz nie da się wysłać, a użytkownik nie wie dlaczego
+        this.categories.set([]);
+        this.categoriesError.set(
+          'Nie udało się wczytać listy kategorii. ' + apiErrorMessage(err),
+        );
+      });
 
     // zmiana adresu unieważnia zgeokodowaną pinezkę — inaczej wysłalibyśmy stare
     // współrzędne dla nowego adresu; użytkownik musi kliknąć „Znajdź na mapie" ponownie

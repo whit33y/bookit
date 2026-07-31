@@ -279,7 +279,7 @@ describe('BookingWizard', () => {
     await settle(ctx.harness.fixture);
 
     ctx.http.expectOne('/api/bookings').flush(
-      { message: 'Wybrany termin jest już zajęty' },
+      { statusCode: 409, code: 'CONFLICT', message: 'Wybrany termin jest już zajęty' },
       { status: 409, statusText: 'Conflict' },
     );
     await settle(ctx.harness.fixture);
@@ -336,7 +336,7 @@ describe('BookingWizard', () => {
     ctx.http
       .expectOne('/api/bookings')
       .flush(
-        { message: 'Wybrany termin jest już zajęty' },
+        { statusCode: 409, code: 'CONFLICT', message: 'Wybrany termin jest już zajęty' },
         { status: 409, statusText: 'Conflict' },
       );
     await settle(ctx.harness.fixture);

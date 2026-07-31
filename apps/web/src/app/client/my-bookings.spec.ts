@@ -222,7 +222,11 @@ describe('MyBookings', () => {
     await ctx.click(ctx.cancelButtons()[0]);
 
     ctx.http.expectOne('/api/bookings/b1/cancel').flush(
-      { message: 'Rezerwację można odwołać najpóźniej 24 godziny przed wizytą' },
+      {
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'Rezerwację można odwołać najpóźniej 24 godziny przed wizytą',
+      },
       { status: 409, statusText: 'Conflict' },
     );
     await settle(ctx.harness.fixture);
