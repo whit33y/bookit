@@ -236,9 +236,9 @@ export class BookingsService {
 
   /**
    * Przejście statusu pojedynczej rezerwacji na żądanie użytkownika — decyzje firmy (#26)
-   * i odwołania (#27). Cron auto-COMPLETED z #39 potrzebuje operacji masowej („jeden
-   * update, nie pętla per rekord"), więc nie użyje tej metody — reguły przejść bierze
-   * wprost z ALLOWED_TRANSITIONS w booking-status.ts.
+   * i odwołania (#27). Cron auto-COMPLETED (#39) potrzebuje operacji masowej („jeden
+   * update, nie pętla per rekord"), więc omija tę metodę — siedzi w BookingCompletionService,
+   * a zgodności z ALLOWED_TRANSITIONS pilnuje jego spec.
    *
    * Kolejność jest istotna: cokolwiek odpadnie na walidacji, odpada przed jedynym zapisem,
    * więc nieprawidłowe przejście nie zostawia po sobie żadnej zmiany (AC #26). Polityka

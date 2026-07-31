@@ -172,7 +172,8 @@ model Booking {
   @@index([employeeId, startsAt])
   @@index([clientId])
   @@index([businessId, startsAt])
-  // cron przypomnień (#38) filtruje po status + startsAt bez zawężenia do firmy ani pracownika,
-  // więc indeksy powyżej mu nie pomagają — bez tego skan całej tabeli 96 razy na dobę
-  @@index([status, startsAt])
+  // oba crony filtrują po status + dacie, bez zawężenia do firmy ani pracownika,
+  // więc indeksy powyżej im nie pomagają — bez tych dwóch skan całej tabeli 96 razy na dobę
+  @@index([status, startsAt]) // cron przypomnień (#38)
+  @@index([status, endsAt]) // cron auto-COMPLETED (#39)
 }

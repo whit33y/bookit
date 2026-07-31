@@ -20,6 +20,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     // Jobs czasowe (#38 przypomnienia); bez forRoot() dekoratory @Cron nie są skanowane.
+    // Jobs czasowe (#39 auto-COMPLETED); bez forRoot() dekoratory @Cron nie są skanowane.
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
