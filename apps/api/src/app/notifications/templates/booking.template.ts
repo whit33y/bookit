@@ -4,10 +4,11 @@ import { RenderedEmail, escapeHtml } from './email';
 
 /**
  * Zdarzenia rezerwacji, które mogą wygenerować maila. Poza statusami z maszyny stanów
- * (SDD §7) jest jedno własne — 'CREATED', czyli świeżo złożona rezerwacja: nie jest
- * przejściem (PENDING to stan początkowy, nie krawędź), a mail do firmy ma wysłać.
+ * (SDD §7) są dwa własne, bo żadne nie jest przejściem: 'CREATED' — świeżo złożona
+ * rezerwacja (PENDING to stan początkowy, nie krawędź), i 'REMINDER' — przypomnienie
+ * z crona ~24 h przed wizytą (#38), które statusu w ogóle nie zmienia.
  */
-export type BookingEmailEvent = 'CREATED' | BookingStatus;
+export type BookingEmailEvent = 'CREATED' | 'REMINDER' | BookingStatus;
 
 export type BookingEmailRecipient = 'CLIENT' | 'BUSINESS';
 
@@ -20,6 +21,8 @@ export type BookingEmailRecipient = 'CLIENT' | 'BUSINESS';
 export const BOOKING_EMAIL_RECIPIENT: Record<BookingEmailEvent, BookingEmailRecipient | null> =
   {
     CREATED: 'BUSINESS',
+    // przypomnienie o wizycie idzie do klienta — firma ma wizytę w kalendarzu
+    REMINDER: 'CLIENT',
     // Rezerwacja nie wraca do PENDING, a COMPLETED domyka ją cron (#39) — w obu
     // przypadkach mail o zmianie statusu nie ma adresata.
     [BookingStatus.PENDING]: null,
@@ -154,6 +157,24 @@ export const renderBookingEmail = (
         businessRows(data),
         'Przejdź do oczekujących rezerwacji',
         '/business/pending',
+      );
+
+    case 'REMINDER':
+      return build(
+        `Przypomnienie o wizycie: ${data.business.name} — ${when}`,
+        'Przypomnienie o wizycie',
+        // Konkretny termin, nie „jutrzejsza wizyta": okno crona nadgania rezerwacje
+        // potwierdzone późno, więc mail może wyjść i tego samego dnia.
+        //
+        // Bez „odwołaj wizytę w BookIt": przypomnienie wychodzi ~24 h przed startem, a przy
+        // domyślnym cancellationHours = 24 okno odwołania mija właśnie teraz (canClientCancel
+        // ma ostrą nierówność) — CTA obiecywałby coś, co skończy się 409. Kontakt do firmy
+        // klient ma w wierszach niżej.
+        `Cześć ${data.client.firstName}, przypominamy o wizycie w firmie ` +
+          `${data.business.name} — ${when}. Jeśli nie możesz przyjść, skontaktuj się z firmą.`,
+        clientRows(data),
+        'Zobacz swoje wizyty',
+        '/client',
       );
 
     case BookingStatus.CONFIRMED:
