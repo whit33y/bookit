@@ -915,6 +915,21 @@ describe('BookingsService — moje wizyty', () => {
       expect(argsFor('past')?.where.endsAt.lte).toEqual(argsFor('upcoming')?.where.endsAt.gt);
     });
 
+    // AC #41: „istniejące rezerwacje zablokowanej firmy pozostają widoczne dla klientów
+    // w moich wizytach". Blokada wycina firmę z wyszukiwarki i z POST /bookings, ale nie
+    // z historii klienta — dlatego w tym where celowo NIE ma warunku na isBlocked.
+    it('nie zawęża po statusie blokady firmy — wizyty zablokowanej firmy zostają na liście', async () => {
+      await service.findMine(CLIENT_ID);
+
+      for (const group of ['upcoming', 'past'] as const) {
+        const { where } = argsFor(group) as FindManyArgs;
+        expect(where).not.toHaveProperty('business');
+        expect(where).not.toHaveProperty('isBlocked');
+        // pełna lista warunków, żeby przyszły filtr nie wślizgnął się niezauważony
+        expect(Object.keys(where).sort()).toEqual(['clientId', 'endsAt']);
+      }
+    });
+
     it('kolejność z bazy zostaje zachowana w odpowiedzi', async () => {
       respond(
         [
