@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AdminModule } from './admin/admin.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -33,6 +34,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     TimeOffsModule,
     AvailabilityModule,
     BookingsModule,
+    AdminModule,
     // Wchodzi też tranzytywnie (BookingsModule, AuthModule), ale wprost, żeby cron przypomnień
     // (#38) nie zniknął z grafu przy zmianie importów tamtych modułów. Nest instancjonuje
     // moduł raz, więc job nie dubluje się.

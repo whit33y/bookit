@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { Pagination, parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { serviceClientFields } from '../services/services.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
@@ -89,9 +90,6 @@ interface SearchByDistanceRow {
 const DEFAULT_RADIUS_KM = 20; // sensowny promień dla usług lokalnych, gdy klient nie poda własnego
 const MIN_RADIUS_KM = 0.1;
 const MAX_RADIUS_KM = 300;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-const MAX_PAGE = 100_000; // DTO dopuszcza dowolnie długi ciąg cyfr — bez górnej granicy Number() przepełnia się do Infinity
 
 const SLUG_ATTEMPTS = 3;
 
@@ -120,11 +118,11 @@ export class BusinessesService {
   // promieniu i sortować po dystansie w bazie, nie w pamięci procesu
   async search(query: SearchBusinessesQueryDto) {
     const geo = this.parseGeoParams(query);
-    const { page, limit } = this.parsePagination(query);
+    const pagination = parsePagination(query);
 
     return geo
-      ? this.searchByDistance(query, geo, page, limit)
-      : this.searchAlphabetical(query, page, limit);
+      ? this.searchByDistance(query, geo, pagination)
+      : this.searchAlphabetical(query, pagination);
   }
 
   private parseGeoParams(
@@ -156,18 +154,6 @@ export class BusinessesService {
     return { lat, lng, radiusKm };
   }
 
-  private parsePagination(query: SearchBusinessesQueryDto): { page: number; limit: number } {
-    const page = query.page !== undefined ? Number(query.page) : 1;
-    const limit = query.limit !== undefined ? Number(query.limit) : DEFAULT_LIMIT;
-    if (page < 1 || page > MAX_PAGE) {
-      throw new BadRequestException(`page poza zakresem 1..${MAX_PAGE}`);
-    }
-    if (limit < 1 || limit > MAX_LIMIT) {
-      throw new BadRequestException(`limit poza zakresem 1..${MAX_LIMIT}`);
-    }
-    return { page, limit };
-  }
-
   // AND wszystkich opcjonalnych filtrów; isBlocked zawsze — zablokowane firmy nie istnieją
   // dla wyszukiwarki (jak w findBySlug)
   private buildWhere(query: SearchBusinessesQueryDto): Prisma.BusinessWhereInput {
@@ -190,14 +176,17 @@ export class BusinessesService {
     } satisfies Prisma.BusinessWhereInput;
   }
 
-  private async searchAlphabetical(query: SearchBusinessesQueryDto, page: number, limit: number) {
+  private async searchAlphabetical(
+    query: SearchBusinessesQueryDto,
+    { page, limit, skip }: Pagination,
+  ) {
     const where = this.buildWhere(query);
     const [items, total] = await Promise.all([
       this.prisma.business.findMany({
         where,
         select: searchResultSelect,
         orderBy: { name: 'asc' },
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
       this.prisma.business.count({ where }),
@@ -208,8 +197,7 @@ export class BusinessesService {
   private async searchByDistance(
     query: SearchBusinessesQueryDto,
     geo: { lat: number; lng: number; radiusKm: number },
-    page: number,
-    limit: number,
+    { page, limit, skip }: Pagination,
   ) {
     const conditions: Prisma.Sql[] = [Prisma.sql`b."isBlocked" = false`];
     if (query.category) {
@@ -241,8 +229,6 @@ export class BusinessesService {
       )
     )`;
 
-    const offset = (page - 1) * limit;
-
     const [rows, [{ count }]] = await Promise.all([
       this.prisma.$queryRaw<SearchByDistanceRow[]>`
         SELECT b.id, b.slug, b.name, b.city, b.street, b.lat, b.lng,
@@ -252,7 +238,7 @@ export class BusinessesService {
         JOIN "Category" c ON c.id = b."categoryId"
         WHERE ${whereSql} AND ${distanceExpr} <= ${geo.radiusKm}
         ORDER BY "distanceKm" ASC
-        LIMIT ${limit} OFFSET ${offset}
+        LIMIT ${limit} OFFSET ${skip}
       `,
       this.prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(*)::int as count
