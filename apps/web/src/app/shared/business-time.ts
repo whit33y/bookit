@@ -15,6 +15,11 @@ const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', {
   timeStyle: 'short',
 });
 
+const dateFormat = new Intl.DateTimeFormat('pl-PL', {
+  timeZone: BUSINESS_TIMEZONE,
+  dateStyle: 'short',
+});
+
 /** Sama godzina w strefie firmy, np. „09:30". */
 export function formatTime(iso: string): string {
   return timeFormat.format(new Date(iso));
@@ -23,6 +28,12 @@ export function formatTime(iso: string): string {
 /** Pełna data i godzina w strefie firmy, np. „poniedziałek, 3 sierpnia 2026, 09:30". */
 export function formatDateTime(iso: string): string {
   return dateTimeFormat.format(new Date(iso));
+}
+
+/** Sama data w strefie firmy, np. „3.08.2026" — do komórek tabel, gdzie formatDateTime
+ *  („poniedziałek, 3 sierpnia 2026, 09:30") rozpycha kolumnę. */
+export function formatDate(iso: string): string {
+  return dateFormat.format(new Date(iso));
 }
 
 /** Dzisiejsza data w strefie firmy jako YYYY-MM-DD (en-CA daje dokładnie ten format). */

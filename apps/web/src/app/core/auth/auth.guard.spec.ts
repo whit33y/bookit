@@ -8,7 +8,7 @@ import {
   provideRouter,
 } from '@angular/router';
 import { homeFor } from './auth-store';
-import { authGuard, guestGuard } from './auth.guard';
+import { authGuard, guestGuard, roleGuard } from './auth.guard';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -102,6 +102,44 @@ describe('authGuard', () => {
     expect(result).toBeInstanceOf(UrlTree);
     expect(result.toString()).toBe(
       '/login?returnUrl=%2Fstudio%2Frezerwacja%3FserviceId%3Ds1',
+    );
+  });
+});
+
+describe('roleGuard', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient()],
+    });
+  });
+
+  const runRoleGuard = (url: string) =>
+    TestBed.runInInjectionContext(() =>
+      roleGuard('ADMIN')(snapshotWith(), { url } as RouterStateSnapshot),
+    );
+
+  it('wpuszcza admina do panelu', () => {
+    localStorage.setItem(
+      'bookit.accessToken',
+      fakeJwt({ sub: '1', email: 'admin@bookit.pl', role: 'ADMIN' }),
+    );
+    expect(runRoleGuard('/admin/businesses')).toBe(true);
+  });
+
+  it('zalogowanego z inną rolą odsyła na /login z returnUrl', () => {
+    localStorage.setItem(
+      'bookit.accessToken',
+      fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
+    );
+    const result = runRoleGuard('/admin/businesses');
+    expect(result).toBeInstanceOf(UrlTree);
+    expect(result.toString()).toBe('/login?returnUrl=%2Fadmin%2Fbusinesses');
+  });
+
+  it('niezalogowanego odsyła na /login', () => {
+    expect(runRoleGuard('/admin/users').toString()).toBe(
+      '/login?returnUrl=%2Fadmin%2Fusers',
     );
   });
 });
