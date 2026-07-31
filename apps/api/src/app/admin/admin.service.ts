@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +41,8 @@ const blockedFilter = (blocked?: string) =>
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // W przeciwieństwie do publicznej wyszukiwarki (#34) listy admina nie wymuszają isBlocked:false —
@@ -104,5 +106,62 @@ export class AdminService {
     ]);
 
     return { items, total, page, limit };
+  }
+
+  /**
+   * Blokada firmy działa na ścieżkach publicznych: firma znika z wyszukiwarki i profilu
+   * (#11/#34 filtrują `isBlocked`), a `POST /bookings` odpada 404-ką
+   * (`business: { isBlocked: false }` w BookingsService.create).
+   *
+   * Zakres jest celowo wąski — flaga zatrzymuje *nowe* rezerwacje, a nie całą aktywność firmy.
+   * Nietknięte zostają w szczególności:
+   * - rezerwacje już złożone: klient widzi je dalej w „moich wizytach" (AC #41),
+   * - decyzje firmy o tych rezerwacjach (`BookingsService.transition` nie patrzy na `isBlocked`),
+   *   więc właściciel zablokowanej firmy nadal potwierdzi lub odrzuci zaległy PENDING,
+   * - przypomnienia (#38), które filtrują wyłącznie po statusie rezerwacji.
+   *
+   * Domknięcie tych ścieżek to zmiana kontraktu panelu firmy, poza AC #41 — jeśli moderacja
+   * ma odcinać także je, trzeba to zrobić osobnym issue razem z decyzją, co się dzieje
+   * z wiszącymi PENDING-ami (auto-odrzucenie? zamrożenie?).
+   */
+  block(id: string) {
+    return this.setBlocked(id, true);
+  }
+
+  unblock(id: string) {
+    return this.setBlocked(id, false);
+  }
+
+  /**
+   * Idempotencja wynika z zapisu wartości docelowej zamiast przełączania: n-te `block` zostawia
+   * ten sam stan i zwraca tę samą odpowiedź. `updateMany` z warunkiem na bieżący stan oszczędziłby
+   * bump `updatedAt`, ale przy `count: 0` nie dałoby się odróżnić „już zablokowana" od „nie ma
+   * takiej firmy" bez drugiego zapytania.
+   */
+  private async setBlocked(id: string, isBlocked: boolean) {
+    try {
+      const business = await this.prisma.business.update({
+        where: { id },
+        data: { isBlocked },
+        // ten sam kształt co listBusinesses → panel admina (#42) podmienia wiersz w tabeli
+        // bez ponownego pobierania całej listy
+        select: adminBusinessSelect,
+      });
+
+      // ślad audytowy akcji moderacyjnej; slug zamiast danych właściciela — nic wrażliwego w logach
+      this.logger.log(
+        `${isBlocked ? 'Zablokowano' : 'Odblokowano'} firmę ${business.slug} (${id})`,
+      );
+      return business;
+    } catch (e) {
+      // nieistniejące id → 404 zamiast 500 z P2025 (jak w BusinessesService.updateMine)
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
+        throw new NotFoundException('Nie znaleziono firmy');
+      }
+      throw e;
+    }
   }
 }

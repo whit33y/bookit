@@ -1,4 +1,13 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,5 +31,21 @@ export class AdminController {
   @Get('users')
   listUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminService.listUsers(query);
+  }
+
+  // Moderacja firmy. Nic nie powstaje, więc 200 zamiast domyślnego dla POST 201 (jak
+  // POST /bookings/:id/confirm). Brak body → brak DTO; nieistniejące id → 404 z serwisu.
+  // Osobne block/unblock zamiast toggle'a z ciałem — operacja jest wtedy idempotentna,
+  // a admin klikający dwa razy nie odblokowuje firmy przypadkiem.
+  @Post('businesses/:id/block')
+  @HttpCode(HttpStatus.OK)
+  blockBusiness(@Param('id') id: string) {
+    return this.adminService.block(id);
+  }
+
+  @Post('businesses/:id/unblock')
+  @HttpCode(HttpStatus.OK)
+  unblockBusiness(@Param('id') id: string) {
+    return this.adminService.unblock(id);
   }
 }

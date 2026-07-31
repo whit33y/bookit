@@ -1,10 +1,20 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminService } from './admin.service';
 
+const BUSINESS_ID = 'b1';
+
+const prismaError = (code: string) =>
+  new Prisma.PrismaClientKnownRequestError('błąd', {
+    code,
+    clientVersion: 'test',
+  });
+
 describe('AdminService', () => {
   let businessFindMany: ReturnType<typeof vi.fn>;
   let businessCount: ReturnType<typeof vi.fn>;
+  let businessUpdate: ReturnType<typeof vi.fn>;
   let userFindMany: ReturnType<typeof vi.fn>;
   let userCount: ReturnType<typeof vi.fn>;
   let service: AdminService;
@@ -12,10 +22,25 @@ describe('AdminService', () => {
   beforeEach(() => {
     businessFindMany = vi.fn().mockResolvedValue([]);
     businessCount = vi.fn().mockResolvedValue(0);
+    // mock odwzorowuje `updatedAt @updatedAt` ze schematu — kolumna zmienia się przy każdym
+    // zapisie, więc test idempotencji nie może zakładać identycznych odpowiedzi co do bajta
+    let writes = 0;
+    businessUpdate = vi.fn().mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: BUSINESS_ID,
+        slug: 'salon',
+        updatedAt: new Date(2026, 0, 1, 0, ++writes),
+        ...data,
+      }),
+    );
     userFindMany = vi.fn().mockResolvedValue([]);
     userCount = vi.fn().mockResolvedValue(0);
     const prisma = {
-      business: { findMany: businessFindMany, count: businessCount },
+      business: {
+        findMany: businessFindMany,
+        count: businessCount,
+        update: businessUpdate,
+      },
       user: { findMany: userFindMany, count: userCount },
     };
     service = new AdminService(prisma as unknown as PrismaService);
@@ -129,6 +154,58 @@ describe('AdminService', () => {
       await expect(service.listUsers({ page: '9'.repeat(400) })).rejects.toMatchObject({
         status: 400,
       });
+    });
+  });
+
+  describe('block/unblock', () => {
+    it('block ustawia isBlocked na true, unblock na false', async () => {
+      await service.block(BUSINESS_ID);
+      expect(businessUpdate.mock.calls[0][0]).toMatchObject({
+        where: { id: BUSINESS_ID },
+        data: { isBlocked: true },
+      });
+
+      await service.unblock(BUSINESS_ID);
+      expect(businessUpdate.mock.calls[1][0]).toMatchObject({
+        where: { id: BUSINESS_ID },
+        data: { isBlocked: false },
+      });
+    });
+
+    it('operacja jest idempotentna — powtórzony block zostawia ten sam stan', async () => {
+      const first = await service.block(BUSINESS_ID);
+      const second = await service.block(BUSINESS_ID);
+
+      // zapis wartości docelowej, nie toggle: drugie wywołanie nie odblokowuje firmy
+      expect(businessUpdate.mock.calls[1][0]).toEqual(businessUpdate.mock.calls[0][0]);
+      expect(second.isBlocked).toBe(first.isBlocked);
+      expect(second.isBlocked).toBe(true);
+      // celowo nie porównujemy całych odpowiedzi: `updatedAt` bumpuje przy każdym zapisie,
+      // więc idempotentny jest stan firmy, nie bajt w bajt identyczna odpowiedź
+    });
+
+    it('nieistniejąca firma (P2025) → 404', async () => {
+      businessUpdate.mockRejectedValue(prismaError('P2025'));
+
+      await expect(service.block(BUSINESS_ID)).rejects.toMatchObject({ status: 404 });
+      await expect(service.unblock(BUSINESS_ID)).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('inny błąd bazy leci dalej — nie udajemy 404', async () => {
+      businessUpdate.mockRejectedValue(prismaError('P1001'));
+
+      await expect(service.block(BUSINESS_ID)).rejects.toMatchObject({ code: 'P1001' });
+    });
+
+    it('zwraca wiersz w kształcie listy admina — panel podmienia go bez przeładowania', async () => {
+      await service.block(BUSINESS_ID);
+      await service.listBusinesses({});
+
+      const { select } = businessUpdate.mock.calls[0][0];
+      // dokładnie ten sam select co lista → front może wstawić odpowiedź w miejsce wiersza
+      expect(select).toEqual(businessFindMany.mock.calls[0][0].select);
+      expect(select.isBlocked).toBe(true);
+      expect(select.owner.select.email).toBe(true);
     });
   });
 });
