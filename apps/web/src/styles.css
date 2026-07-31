@@ -23,6 +23,8 @@
 
   /* inline wstawia var() do utility, więc wartość nadal pochodzi z tokens.css */
   --shadow-card: var(--shadow-card);
+  /* modale (design system §9) unoszą się wyżej niż karty */
+  --shadow-raised: var(--shadow-raised);
 }
 
 /* Wspólne klocki stron auth — jedna definicja zamiast kopii ściany utility w każdym szablonie. */
