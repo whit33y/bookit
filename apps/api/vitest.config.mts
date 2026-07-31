@@ -11,7 +11,8 @@ export default defineConfig({
     watch: false,
     globals: true,
     environment: 'node',
-    include: ['src/**/*.spec.ts'],
+    // prisma/ też, bo dane demo i planowanie terminów seeda mają własne testy
+    include: ['src/**/*.spec.ts', 'prisma/**/*.spec.ts'],
     reporters: ['default'],
     coverage: {
       reportsDirectory: '../../coverage/apps/api',
