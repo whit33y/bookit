@@ -5,6 +5,10 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
+
+/** Limit imienia i nazwiska — kolumny w Prismie są bez granicy, więc DTO jest jedyną. */
+export const NAME_MAX_LENGTH = 50;
 
 export class RegisterDto {
   @IsEmail()
@@ -16,12 +20,12 @@ export class RegisterDto {
   @MaxLength(72)
   password!: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(NAME_MAX_LENGTH)
   firstName!: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(NAME_MAX_LENGTH)
   lastName!: string;
 }
 

@@ -19,6 +19,9 @@ import {
   todayInBusinessTz,
 } from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 import NotFound from '../not-found/not-found';
 
 // lustrzane typy backendu — GET /businesses/:slug (#15), GET /businesses/:slug/availability (#24),
@@ -69,17 +72,24 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
 
 @Component({
   selector: 'app-booking-wizard',
-  imports: [PricePlnPipe, NotFound, RouterLink],
+  imports: [
+    PricePlnPipe,
+    NotFound,
+    RouterLink,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     @if (loading()) {
       <div class="flex flex-1 items-center justify-center px-4 py-16">
-        <p class="text-sm text-stone-500" role="status">Ładowanie…</p>
+        <app-loading-state />
       </div>
     } @else if (notFound()) {
       <app-not-found />
     } @else if (serverError(); as msg) {
       <div class="mx-auto w-full max-w-3xl px-4 py-8">
-        <p role="alert" class="alert-danger">{{ msg }}</p>
+        <app-error-state [message]="msg" [retryable]="true" (retry)="retry()" />
       </div>
     } @else if (business(); as b) {
       <div class="mx-auto w-full max-w-3xl px-4 py-8">
@@ -166,9 +176,10 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                 }
               </ul>
             } @else {
-              <p class="mt-4 text-sm text-stone-500">
-                Ta firma nie ma jeszcze aktywnych usług.
-              </p>
+              <app-empty-state
+                class="mt-4"
+                title="Ta firma nie ma jeszcze aktywnych usług."
+              />
             }
           </section>
 
@@ -211,9 +222,10 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                   </div>
                 </fieldset>
               } @else {
-                <p class="mt-4 text-sm text-stone-500">
-                  Ta usługa nie ma jeszcze przypisanych pracowników.
-                </p>
+                <app-empty-state
+                  class="mt-4"
+                  title="Ta usługa nie ma jeszcze przypisanych pracowników."
+                />
               }
             </section>
 
@@ -251,11 +263,14 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
 
                 @if (date()) {
                   @if (slotsLoading()) {
-                    <p class="mt-4 text-sm text-stone-500" role="status">
-                      Ładowanie terminów…
-                    </p>
+                    <app-loading-state class="mt-4" message="Ładowanie terminów…" />
                   } @else if (slotsError(); as msg) {
-                    <p role="alert" class="alert-danger mt-4">{{ msg }}</p>
+                    <app-error-state
+                      class="mt-4"
+                      [message]="msg"
+                      [retryable]="true"
+                      (retry)="retrySlots()"
+                    />
                   } @else if (groupedSlots().length) {
                     <ul class="mt-4 flex flex-wrap gap-2">
                       @for (slot of groupedSlots(); track slot.startsAt) {
@@ -277,9 +292,10 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                       }
                     </ul>
                   } @else {
-                    <p class="mt-4 text-sm text-stone-500">
-                      Brak wolnych terminów w tym dniu.
-                    </p>
+                    <app-empty-state
+                      class="mt-4"
+                      title="Brak wolnych terminów w tym dniu."
+                    />
                   }
                 }
               </section>
@@ -500,6 +516,16 @@ export default class BookingWizard {
 
   protected onNoteInput(event: Event): void {
     this.clientNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /** Ponowienie po nieudanym pobraniu profilu firmy — slug trzymamy w sygnale, więc
+   *  nie potrzebujemy nawigacji ani przeładowania strony. */
+  protected retry(): void {
+    this.load(this.slug());
+  }
+
+  protected retrySlots(): void {
+    void this.loadSlots();
   }
 
   protected async onSubmit(): Promise<void> {

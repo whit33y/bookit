@@ -15,7 +15,7 @@ import {
   required,
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient } from '../../core/api-client';
+import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, { submitAuthForm } from '../../public/form-field/form-field';
 import AppMap from '../../shared/map/map';
@@ -29,6 +29,8 @@ interface Category {
 
 // Lustrzane do CreateBusinessDto (apps/api) — patterny i długości takie same.
 const POSTAL_CODE = /^\d{2}-\d{3}$/;
+const STREET_MAX_LENGTH = 120;
+const CITY_MAX_LENGTH = 80;
 const PHONE = /^\+?[0-9\s-]{7,20}$/;
 
 @Component({
@@ -76,6 +78,18 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               <p class="mt-1.5 text-[13px] font-medium text-rose-600">
                 Wybierz kategorię
               </p>
+            }
+            @if (categoriesError(); as msg) {
+              <p role="alert" class="mt-1.5 text-[13px] font-medium text-rose-600">
+                {{ msg }}
+              </p>
+              <button
+                type="button"
+                (click)="loadCategories()"
+                class="mt-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-[13px] font-semibold shadow-card transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              >
+                Spróbuj ponownie
+              </button>
             }
           </div>
 
@@ -157,6 +171,7 @@ export default class CreateBusiness {
 
   protected readonly categories = signal<Category[]>([]);
   protected readonly serverError = signal<string | null>(null);
+  protected readonly categoriesError = signal<string | null>(null);
   protected readonly geocodeError = signal<string | null>(null);
   protected readonly geocoding = signal(false);
   // współrzędne z geokodowania — bez nich formularz się nie wysyła
@@ -192,16 +207,20 @@ export default class CreateBusiness {
     });
     pattern(p.phone, PHONE, { message: 'Nieprawidłowy numer telefonu' });
     required(p.street, { message: 'Ulica jest wymagana' });
+    maxLength(p.street, STREET_MAX_LENGTH, {
+      message: `Ulica może mieć maksymalnie ${STREET_MAX_LENGTH} znaków`,
+    });
     required(p.city, { message: 'Miasto jest wymagane' });
+    maxLength(p.city, CITY_MAX_LENGTH, {
+      message: `Miasto może mieć maksymalnie ${CITY_MAX_LENGTH} znaków`,
+    });
     pattern(p.postalCode, POSTAL_CODE, {
       message: 'Kod pocztowy w formacie 00-000',
     });
   });
 
   constructor() {
-    firstValueFrom(this.api.get<Category[]>('/categories'))
-      .then((cats) => this.categories.set(cats))
-      .catch(() => this.categories.set([]));
+    this.loadCategories();
 
     // zmiana adresu unieważnia zgeokodowaną pinezkę — inaczej wysłalibyśmy stare
     // współrzędne dla nowego adresu; użytkownik musi kliknąć „Znajdź na mapie" ponownie
@@ -214,6 +233,20 @@ export default class CreateBusiness {
         }
       });
     });
+  }
+
+  /** Kategoria jest wymagana, a pusty select blokuje wysłanie formularza — bez ponowienia
+   *  jedynym wyjściem z nieudanego pobrania byłoby przeładowanie strony. */
+  protected loadCategories(): void {
+    this.categoriesError.set(null);
+    firstValueFrom(this.api.get<Category[]>('/categories'))
+      .then((cats) => this.categories.set(cats))
+      .catch((err: unknown) => {
+        this.categories.set([]);
+        this.categoriesError.set(
+          'Nie udało się wczytać listy kategorii. ' + apiErrorMessage(err),
+        );
+      });
   }
 
   protected async onGeocode(): Promise<void> {

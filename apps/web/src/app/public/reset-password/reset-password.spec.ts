@@ -84,8 +84,8 @@ describe('ResetPassword', () => {
       .flush(
         {
           statusCode: 400,
+          code: 'BAD_REQUEST',
           message: 'Nieprawidłowy lub wygasły token',
-          error: 'Bad Request',
         },
         { status: 400, statusText: 'Bad Request' },
       );
@@ -118,17 +118,19 @@ describe('ResetPassword', () => {
     TestBed.inject(HttpTestingController)
       .expectOne('/api/auth/reset-password')
       .flush(
+        // koperta walidacyjna z ValidationPipe (#45): jeden polski komunikat + lista pól
         {
           statusCode: 400,
-          message: ['password must match policy'],
-          error: 'Bad Request',
+          code: 'VALIDATION_FAILED',
+          message: 'Przesłane dane są nieprawidłowe.',
+          fields: [{ field: 'password', constraints: ['matches'] }],
         },
         { status: 400, statusText: 'Bad Request' },
       );
     await settle(fixture);
 
     expect(el.querySelector('[role="alert"]')?.textContent).toContain(
-      'Coś poszło nie tak',
+      'Przesłane dane są nieprawidłowe',
     );
     expect(el.querySelector('form')).not.toBeNull();
   });

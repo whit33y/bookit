@@ -195,6 +195,38 @@ describe('BusinessEmployees', () => {
     expect(comp.employees().length).toBe(1);
   });
 
+  it('błąd pobrania listy: komunikat po polsku z retry zamiast „nie masz pracowników"', async () => {
+    const fixture = TestBed.createComponent(BusinessEmployees);
+    const http = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+    http
+      .expectOne('/api/businesses/mine/employees')
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await tick();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'Brak połączenia z serwerem',
+    );
+    // pusta lista i nieudane pobranie to dwa różne stany
+    expect(el.textContent).not.toContain('Nie masz jeszcze żadnych pracowników');
+
+    const retry = [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+      b.textContent?.includes('Spróbuj ponownie'),
+    );
+    retry?.click();
+    await tick();
+
+    http.expectOne('/api/businesses/mine/employees').flush([]);
+    await tick();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Nie masz jeszcze żadnych pracowników',
+    );
+  });
+
   it('reaktywacja: PATCH isActive:true przełącza pracownika na aktywnego', async () => {
     const { fixture, http, comp } = setup([INACTIVE]);
     await fixture.whenStable();

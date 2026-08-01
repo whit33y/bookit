@@ -79,7 +79,11 @@ describe('ForgotPassword', () => {
     TestBed.inject(HttpTestingController)
       .expectOne('/api/auth/forgot-password')
       .flush(
-        { statusCode: 429, message: 'ThrottlerException: Too Many Requests' },
+        {
+          statusCode: 429,
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Zbyt wiele prób. Spróbuj ponownie za chwilę.',
+        },
         { status: 429, statusText: 'Too Many Requests' },
       );
     await settle(fixture);
@@ -108,7 +112,7 @@ describe('ForgotPassword', () => {
     await settle(fixture);
 
     expect(el.querySelector('[role="alert"]')?.textContent).toContain(
-      'Coś poszło nie tak',
+      'Wystąpił nieoczekiwany błąd serwera',
     );
     expect(el.querySelector('form')).not.toBeNull();
   });

@@ -5,6 +5,9 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../core/api-client';
 import { formatDateTime } from '../shared/business-time';
 import { PricePlnPipe } from '../shared/price-pln.pipe';
+import EmptyState from '../shared/ui/empty-state';
+import ErrorState from '../shared/ui/error-state';
+import LoadingState from '../shared/ui/loading-state';
 
 // lustrzane typy backendu — GET /bookings/mine (#28) i POST /bookings/:id/cancel (#27)
 type BookingStatus =
@@ -82,20 +85,22 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
 
 @Component({
   selector: 'app-my-bookings',
-  imports: [PricePlnPipe, RouterLink],
+  imports: [PricePlnPipe, RouterLink, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Moje wizyty</h1>
 
       @if (loading()) {
-        <p class="mt-6 text-sm text-stone-500" role="status">Ładowanie wizyt…</p>
+        <app-loading-state class="mt-6" message="Ładowanie wizyt…" />
       } @else if (serverError(); as msg) {
         <!-- pusta lista i nieudane pobranie to dwie różne rzeczy: bez tej gałęzi klient
              z wizytami zobaczyłby „nie masz zaplanowanych wizyt" pod komunikatem o błędzie -->
-        <p role="alert" class="alert-danger mt-6">{{ msg }}</p>
-        <button type="button" class="btn-primary mt-4 w-auto" (click)="onRetry()">
-          Spróbuj ponownie
-        </button>
+        <app-error-state
+          class="mt-6"
+          [message]="msg"
+          [retryable]="true"
+          (retry)="onRetry()"
+        />
       } @else {
         <div
           role="tablist"
@@ -206,7 +211,7 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
               }
             </ul>
           } @else {
-            <p class="text-sm text-stone-500">{{ emptyMessage() }}</p>
+            <app-empty-state [title]="emptyMessage()" />
           }
         </div>
       }

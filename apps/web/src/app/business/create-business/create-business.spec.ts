@@ -62,6 +62,37 @@ describe('CreateBusiness', () => {
     return { fixture, http, comp };
   }
 
+  it('nieudane pobranie kategorii: komunikat i ponowna próba, nie ślepy zaułek', async () => {
+    const fixture = TestBed.createComponent(CreateBusiness);
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne('/api/categories')
+      .error(new ProgressEvent('error'), { status: 0, statusText: 'Unknown Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain(
+      'Nie udało się wczytać listy kategorii',
+    );
+
+    // kategoria jest wymagana — bez retry jedynym wyjściem byłoby przeładowanie strony
+    const retry = [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+      b.textContent?.includes('Spróbuj ponownie'),
+    );
+    retry?.click();
+    await fixture.whenStable();
+
+    http
+      .expectOne('/api/categories')
+      .flush([{ id: 'cat-1', name: 'Fryzjer', slug: 'fryzjer' }]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    expect(el.querySelectorAll('#categoryId option')).toHaveLength(2);
+  });
+
   it('bez współrzędnych: nie wysyła żądania i pokazuje komunikat', async () => {
     const { fixture, http, comp } = setup();
     comp.model.set({ ...VALID_MODEL }); // coords null

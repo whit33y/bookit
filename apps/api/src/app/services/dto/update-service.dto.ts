@@ -1,13 +1,13 @@
 import {
   IsBoolean,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
 
 // edycja usługi — wszystkie pola opcjonalne (partial update).
 // businessId celowo poza DTO (usługi nie przenosi się między firmami);
@@ -15,8 +15,7 @@ import {
 // Globalny forbidNonWhitelisted odrzuci pozostałe pola jako 400.
 export class UpdateServiceDto {
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
   @MaxLength(100)
   name?: string;
 

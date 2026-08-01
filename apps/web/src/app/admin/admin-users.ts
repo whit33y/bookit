@@ -1,5 +1,8 @@
 import { Component } from '@angular/core';
 import { formatDate } from '../shared/business-time';
+import EmptyState from '../shared/ui/empty-state';
+import ErrorState from '../shared/ui/error-state';
+import LoadingState from '../shared/ui/loading-state';
 import { createAdminList } from './admin-list';
 import AdminPagination from './admin-pagination';
 import AdminStatusBadge from './admin-status-badge';
@@ -36,7 +39,14 @@ const ROLE_LABELS: Record<UserRole, string> = {
  */
 @Component({
   selector: 'app-admin-users',
-  imports: [AdminToolbar, AdminPagination, AdminStatusBadge],
+  imports: [
+    AdminToolbar,
+    AdminPagination,
+    AdminStatusBadge,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     <app-admin-toolbar
       class="mt-6 block"
@@ -50,17 +60,23 @@ const ROLE_LABELS: Record<UserRole, string> = {
     />
 
     @if (list.loading()) {
-      <p class="py-16 text-center text-sm text-stone-500" role="status">Ładowanie…</p>
+      <app-loading-state paddingClass="py-16 text-center" />
     } @else if (list.serverError(); as msg) {
-      <p role="alert" class="alert-danger mt-6">{{ msg }}</p>
+      <app-error-state
+        class="mt-6"
+        [message]="msg"
+        [retryable]="true"
+        (retry)="list.reload()"
+      />
     } @else if (list.items().length === 0) {
-      <div
-        class="mt-6 rounded-xl border border-stone-200 bg-stone-50 p-8 text-center"
-      >
-        @if (list.params().page) {
-          <!-- paginacja renderuje się tylko przy niepustej liście — bez tego przycisku
-               strona poza zakresem byłaby ślepym zaułkiem -->
-          <p class="font-medium">Ta strona nie ma już wyników.</p>
+      @if (list.params().page) {
+        <!-- paginacja renderuje się tylko przy niepustej liście — bez tego przycisku
+             strona poza zakresem byłaby ślepym zaułkiem -->
+        <app-empty-state
+          class="mt-6"
+          title="Ta strona nie ma już wyników."
+          [boxed]="true"
+        >
           <button
             type="button"
             class="btn-primary mt-4 w-auto"
@@ -68,15 +84,17 @@ const ROLE_LABELS: Record<UserRole, string> = {
           >
             Wróć na pierwszą stronę
           </button>
-        } @else if (list.filtered()) {
-          <p class="font-medium">Brak użytkowników dla podanych filtrów.</p>
-          <p class="mt-1 text-sm text-stone-500">
-            Zmień frazę wyszukiwania lub filtr statusu.
-          </p>
-        } @else {
-          <p class="font-medium">Nie ma jeszcze żadnych użytkowników.</p>
-        }
-      </div>
+        </app-empty-state>
+      } @else if (list.filtered()) {
+        <app-empty-state
+          class="mt-6"
+          title="Brak użytkowników dla podanych filtrów."
+          description="Zmień frazę wyszukiwania lub filtr statusu."
+          [boxed]="true"
+        />
+      } @else {
+        <app-empty-state class="mt-6" title="Nie ma jeszcze żadnych użytkowników." [boxed]="true" />
+      }
     } @else {
       <div
         class="mt-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-card"

@@ -4,6 +4,9 @@ import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppMap, { MapPin } from '../../shared/map/map';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 
 interface SearchResultItem {
   id: string;
@@ -43,29 +46,27 @@ function businessCountLabel(n: number): string {
 
 @Component({
   selector: 'app-search',
-  imports: [AppMap, RouterLink],
+  imports: [AppMap, RouterLink, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
       <section class="lg:w-3/5">
         @if (loading()) {
-          <p class="py-16 text-center text-sm text-stone-500" role="status">
-            Szukam…
-          </p>
+          <app-loading-state message="Szukam…" paddingClass="py-16 text-center" />
         } @else if (serverError(); as msg) {
-          <p role="alert" class="alert-danger">{{ msg }}</p>
+          <app-error-state [message]="msg" [retryable]="true" (retry)="retry()" />
         } @else if (items().length === 0) {
-          <div class="rounded-xl border border-stone-200 bg-stone-50 p-8 text-center">
-            <p class="font-medium">Brak wyników dla podanych filtrów.</p>
-            <p class="mt-1 text-sm text-stone-500">
-              Spróbuj zmienić kategorię, miasto lub frazę wyszukiwania.
-            </p>
+          <app-empty-state
+            title="Brak wyników dla podanych filtrów."
+            description="Spróbuj zmienić kategorię, miasto lub frazę wyszukiwania."
+            [boxed]="true"
+          >
             <a
               routerLink="/"
               class="mt-4 inline-block text-sm font-semibold text-brand-700 hover:underline"
             >
               Wróć do wyszukiwania
             </a>
-          </div>
+          </app-empty-state>
         } @else {
           <p class="mb-4 text-sm text-stone-500">
             Znaleziono {{ total() }} {{ businessCountLabel(total()) }}
@@ -161,6 +162,9 @@ export default class Search {
   // rośnie przy każdym load() — pozwala odrzucić odpowiedź na nieaktualne już
   // zapytanie (np. dwa szybkie kliknięcia paginacji w złej kolejności sieciowej)
   private requestId = 0;
+  // ostatnio użyte parametry — retry po błędzie sieci powtarza dokładnie to zapytanie,
+  // bez ruszania adresu (nawigacja na te same query params nie wywołałaby load())
+  private lastParams: ParamMap | null = null;
 
   constructor() {
     // queryParamMap (nie snapshot) — link z innymi filtrami musi odświeżyć wyniki
@@ -170,8 +174,15 @@ export default class Search {
       .subscribe((params) => this.load(params));
   }
 
+  protected retry(): void {
+    if (this.lastParams) {
+      this.load(this.lastParams);
+    }
+  }
+
   private load(params: ParamMap): void {
     const requestId = ++this.requestId;
+    this.lastParams = params;
     this.loading.set(true);
     this.serverError.set(null);
     this.activeId.set(null);

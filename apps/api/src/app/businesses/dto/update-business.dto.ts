@@ -1,6 +1,5 @@
 import {
   IsInt,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +8,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
+import { CITY_MAX_LENGTH, STREET_MAX_LENGTH } from './create-business.dto';
 
 // edycja profilu — wszystkie pola opcjonalne (partial update).
 // slug, ownerId, isBlocked, categoryId celowo poza DTO: slug niezmienny (MVP),
@@ -16,8 +17,7 @@ import {
 // Globalny forbidNonWhitelisted odrzuci te pola jako 400.
 export class UpdateBusinessDto {
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
   @MaxLength(100)
   name?: string;
 
@@ -31,13 +31,13 @@ export class UpdateBusinessDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(STREET_MAX_LENGTH)
   street?: string;
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
+  @MaxLength(CITY_MAX_LENGTH)
   city?: string;
 
   @IsOptional()

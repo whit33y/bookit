@@ -6,6 +6,9 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import EmptyState from '../../shared/ui/empty-state';
+import ErrorState from '../../shared/ui/error-state';
+import LoadingState from '../../shared/ui/loading-state';
 import NotFound from '../not-found/not-found';
 
 interface PublicBusiness {
@@ -44,17 +47,25 @@ function initials(name: string): string {
 
 @Component({
   selector: 'app-business-profile',
-  imports: [AppMap, PricePlnPipe, NotFound, RouterLink],
+  imports: [
+    AppMap,
+    PricePlnPipe,
+    NotFound,
+    RouterLink,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     @if (loading()) {
       <div class="flex flex-1 items-center justify-center px-4 py-16">
-        <p class="text-sm text-stone-500" role="status">Ładowanie profilu…</p>
+        <app-loading-state message="Ładowanie profilu…" />
       </div>
     } @else if (notFound()) {
       <app-not-found />
     } @else if (serverError(); as msg) {
       <div class="mx-auto w-full max-w-4xl px-4 py-8">
-        <p role="alert" class="alert-danger">{{ msg }}</p>
+        <app-error-state [message]="msg" [retryable]="true" (retry)="retry()" />
       </div>
     } @else if (business(); as b) {
       <div class="mx-auto w-full max-w-4xl px-4 py-8">
@@ -140,7 +151,7 @@ function initials(name: string): string {
                 }
               </div>
             } @else {
-              <p class="text-sm text-stone-500">Ta firma nie ma jeszcze aktywnych usług.</p>
+              <app-empty-state title="Ta firma nie ma jeszcze aktywnych usług." />
             }
 
             @if (b.employees.length) {
@@ -166,6 +177,7 @@ function initials(name: string): string {
 export default class BusinessProfile {
   private readonly api = inject(ApiClient);
   private readonly route = inject(ActivatedRoute);
+  private slug = '';
 
   protected readonly business = signal<PublicBusiness | null>(null);
   protected readonly loading = signal(true);
@@ -192,7 +204,13 @@ export default class BusinessProfile {
       .subscribe((pm) => this.load(pm.get('slug') ?? ''));
   }
 
+  /** Ponowienie po błędzie pobrania — slug trzymamy z ostatniego load(). */
+  protected retry(): void {
+    this.load(this.slug);
+  }
+
   private load(slug: string): void {
+    this.slug = slug;
     this.loading.set(true);
     this.notFound.set(false);
     this.serverError.set(null);

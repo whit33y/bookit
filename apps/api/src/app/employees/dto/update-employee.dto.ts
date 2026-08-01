@@ -1,11 +1,5 @@
-import {
-  IsBoolean,
-  IsEmail,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, MaxLength } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/is-not-blank';
 
 // edycja pracownika — wszystkie pola opcjonalne (partial update).
 // isActive dozwolone, by panel mógł reaktywować dezaktywowanego pracownika (#22).
@@ -13,8 +7,7 @@ import {
 // odrzuci pozostałe pola jako 400.
 export class UpdateEmployeeDto {
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
+  @IsNotBlank()
   @MaxLength(100)
   name?: string;
 
