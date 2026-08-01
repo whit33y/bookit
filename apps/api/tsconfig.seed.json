@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  // tsconfig.app.json obejmuje tylko src/, a webpack buduje z src/main.ts — seed nie wchodzi
+  // do żadnego z nich i bez tego pliku jego typy sprawdzałyby się dopiero przy `prisma db seed`.
+  // Importowane pliki z src/ (helpery availability) kompilator wciąga tranzytywnie.
+  "include": ["prisma/**/*.ts"]
+}

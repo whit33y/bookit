@@ -1,11 +1,12 @@
-# Konta demo
+# Dane demo
 
-Konta zakładane przez seed (`apps/api/prisma/seed.ts`) — po jednym na każdą rolę z `UserRole`.
-Służą wyłącznie do lokalnego developmentu i przeglądu aplikacji.
+Wszystko, co zakłada seed (`apps/api/prisma/seed.ts` + katalog `apps/api/prisma/seed/`):
+konta na każdą rolę, sześć firm z pełną ofertą i grafikami oraz rezerwacje we wszystkich
+statusach. Służą wyłącznie do lokalnego developmentu i przeglądu aplikacji.
 
 > ⚠️ Hasła są jawne i wspólne dla wszystkich kont — wśród nich jest konto **ADMIN**.
-> Dlatego seed zakłada je wyłącznie na środowisku deweloperskim: przy `NODE_ENV` innym niż
-> `development`/`test` (i innym niż puste) pomija je i tylko o tym informuje. Świadome
+> Dlatego seed zakłada dane demo wyłącznie na środowisku deweloperskim: przy `NODE_ENV` innym
+> niż `development`/`test` (i innym niż puste) pomija je i tylko o tym informuje. Świadome
 > wymuszenie: `SEED_DEMO=1`. Kategorie seedują się zawsze.
 
 ## Hasło (wszystkie konta)
@@ -16,24 +17,60 @@ Haslo123!
 
 ## Konta
 
-| Rola | E-mail | Po zalogowaniu ląduje na | Co może |
-|---|---|---|---|
-| **ADMIN** | `admin@bookit.pl` | `/admin` | panel admina: listy firm i użytkowników, blokowanie firm |
-| **CLIENT** | `klient@bookit.pl` | `/client` | wyszukiwanie firm, rezerwacje, „Moje wizyty" |
-| **OWNER** | `wlasciciel@bookit.pl` | `/business` | panel firmy „Studio Fryzur „Nożyczki"": usługi, pracownicy, grafik, kalendarz |
-| **EMPLOYEE** | `pracownik@bookit.pl` | `/business` | kalendarz i lista oczekujących rezerwacji swojej firmy |
+| Rola         | E-mail                                            | Imię i nazwisko    | Po zalogowaniu ląduje na | Co może                                                                        |
+| ------------ | ------------------------------------------------- | ------------------ | ------------------------ | ------------------------------------------------------------------------------ |
+| **ADMIN**    | `admin@bookit.pl`                                 | Admin Bookit       | `/admin`                 | panel admina: listy firm i użytkowników, blokowanie firm                       |
+| **OWNER**    | `wlasciciel@bookit.pl`                            | Anna Kowalska      | `/business`              | panel „Studio Fryzur „Nożyczki”": usługi, pracownicy, grafik, kalendarz        |
+| **OWNER**    | `wlasciciel2@bookit.pl` … `wlasciciel6@bookit.pl` | —                  | `/business`              | właściciele pozostałych pięciu firm                                            |
+| **EMPLOYEE** | `pracownik@bookit.pl`                             | Marek Wiśniewski   | `/business`              | kalendarz i oczekujące rezerwacje „Nożyczek"                                   |
+| **EMPLOYEE** | `barber@bookit.pl`                                | Tomasz Lewandowski | `/business`              | to samo w „Brzytwie"                                                           |
+| **CLIENT**   | `klient@bookit.pl`                                | Kinga Nowak        | `/client`                | wyszukiwanie firm, rezerwacje, „Moje wizyty" (pełny przekrój statusów)         |
+| **CLIENT**   | `klient2@bookit.pl`                               | Bartosz Wróbel     | `/client`                | dodatkowy klient, żeby panel firmy nie pokazywał wszędzie tego samego nazwiska |
+| **CLIENT**   | `klient3@bookit.pl`                               | Zofia Duda         | `/client`                | jw.                                                                            |
 
-## Dane towarzyszące
+Razem 12 kont. Do przeglądu aplikacji wystarczą cztery pierwsze wiersze — reszta istnieje,
+bo `Business.ownerId` jest `@unique` (każda firma musi mieć własnego właściciela) i żeby
+rezerwacje w kalendarzu należały do różnych osób.
 
-Żeby role OWNER i EMPLOYEE miały co pokazywać, seed zakłada też komplet danych firmy:
+## Firmy
 
-- **Firma** „Studio Fryzur „Nożyczki"" (slug `studio-nozyczki`, Kraków, ul. Józefa 12,
-  kategoria *Fryzjer*) — właścicielem jest `wlasciciel@bookit.pl`
-- **Pracownik** Marek Wiśniewski powiązany z kontem `pracownik@bookit.pl`
-- **Usługa** „Strzyżenie męskie" (30 min, 70 zł) przypisana do tego pracownika
-- **Grafik** pracownika: poniedziałek–piątek, 9:00–17:00
+| Slug              | Nazwa                      | Kategoria   | Miasto   | Właściciel              |
+| ----------------- | -------------------------- | ----------- | -------- | ----------------------- |
+| `studio-nozyczki` | Studio Fryzur „Nożyczki”   | Fryzjer     | Kraków   | `wlasciciel@bookit.pl`  |
+| `barber-brzytwa`  | Barber Shop „Brzytwa”      | Barber      | Warszawa | `wlasciciel2@bookit.pl` |
+| `studio-lakier`   | Studio Paznokci „Lakier”   | Paznokcie   | Wrocław  | `wlasciciel3@bookit.pl` |
+| `gabinet-aura`    | Gabinet Kosmetyczny „Aura” | Kosmetyczka | Gdańsk   | `wlasciciel4@bookit.pl` |
+| `studio-relaks`   | Studio Masażu „Relaks”     | Masaż       | Poznań   | `wlasciciel5@bookit.pl` |
+| `salon-azor`      | Salon dla psów „Azor”      | Groomer     | Katowice | `wlasciciel6@bookit.pl` |
 
-## Jak założyć konta
+Współrzędne są prawdziwe — wyszukiwanie po odległości i piny na mapie mają sens.
+**`salon-azor` jest zablokowany** (`isBlocked = true`): panel admina ma co odblokować,
+a wyszukiwarka i availability tej firmy nie pokazują.
+
+Każda firma ma 2–3 aktywne usługi (30–90 min, 50–250 zł) i 1–2 pracowników z grafikiem
+pn–pt, a część także w soboty (godziny różnią się między pracownikami, żeby kalendarz nie był
+jednolitą kratą). Pracownicy poza `pracownik@bookit.pl` i `barber@bookit.pl` nie mają kont
+w systemie — `Employee.userId` jest opcjonalne. Marek Wiśniewski ma urlop (`TimeOff`)
+obejmujący dwa jego dni robocze, mniej więcej tydzień do przodu, żeby w kalendarzu było
+widać zablokowane dni.
+
+## Rezerwacje
+
+15 rezerwacji rozłożonych na trzech klientów, co najmniej po jednej na każdy status
+z `BookingStatus` (`PENDING`, `CONFIRMED` i `COMPLETED` po cztery, pozostałe po jednej).
+Terminy liczone są **względem momentu uruchomienia seeda**, w dniach roboczych pracownika:
+przeszłe wizyty zawsze leżą przed „teraz", przyszłe po nim, wszystkie na siatce 15 minut
+i w godzinach pracy.
+
+Świadome decyzje:
+
+- **Nie ma przeszłych `CONFIRMED`** — cron auto-domykania (#39) przerobiłby je na `COMPLETED`
+  w kwadrans po starcie API i historia rozjechałaby się z tym opisem.
+- Najbliższe `CONFIRMED` leży 2 dni robocze w przód, czyli **poza** oknem przypomnień
+  (2 h – 24,25 h), więc świeży seed nie wysyła od razu maila. Chcąc zobaczyć przypomnienie
+  w Mailpicie, wystarczy przestawić termin wizyty w aplikacji.
+
+## Jak uruchomić seed
 
 ```bash
 docker compose up -d                      # postgres + mailpit
@@ -51,6 +88,23 @@ Seed jest podpięty pod `package.json#prisma.seed`, więc uruchamia go `prisma d
 (`apps/api/prisma/`) albo w katalogu głównym, a plik projektu leży w `apps/api/.env`.
 Sam backend (`npm exec nx serve api`) czyta go już normalnie przez `@nestjs/config`.
 
-Seed jest **idempotentny** — kolejne uruchomienia aktualizują istniejące rekordy
-(po `email`, `slug` i `userId`) zamiast tworzyć duplikaty. Ponowne odpalenie przywraca też
-hasła do wartości z tego pliku, gdyby ktoś zmienił je w aplikacji.
+## Idempotencja
+
+Kolejne uruchomienia aktualizują istniejące rekordy zamiast tworzyć duplikaty — kluczami są
+`User.email`, `Business.ownerId`, `Employee.userId` (a dla pracowników bez konta i dla usług:
+nazwa w obrębie firmy). Ponowne odpalenie przywraca też hasła do wartości z tego pliku, gdyby
+ktoś zmienił je w aplikacji.
+
+Wyjątkiem są **grafiki, urlopy i rezerwacje**: nie mają klucza naturalnego, a rezerwacje są
+dodatkowo liczone względem „teraz", więc seed kasuje je i zapisuje od nowa. Dotyczy to
+wyłącznie firm demo — jeśli klikałeś w nich własne rezerwacje do testów, kolejny seed je
+usunie (wypisuje w logu, ile).
+
+## Struktura
+
+| Plik                                    | Rola                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `apps/api/prisma/seed.ts`               | entry point: kategorie → bramka `NODE_ENV`/`SEED_DEMO` → dane demo   |
+| `apps/api/prisma/seed/demo-data.ts`     | deklaratywny opis danych (konta, firmy, usługi, grafiki, rezerwacje) |
+| `apps/api/prisma/seed/demo-bookings.ts` | przeliczanie terminów względem „teraz" na instanty UTC               |
+| `apps/api/prisma/seed/seed-demo.ts`     | zapis do bazy (idempotentne upserty)                                 |
