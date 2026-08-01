@@ -8,6 +8,8 @@ import { PricePlnPipe } from '../shared/price-pln.pipe';
 import EmptyState from '../shared/ui/empty-state';
 import ErrorState from '../shared/ui/error-state';
 import LoadingState from '../shared/ui/loading-state';
+import RatingStars from '../shared/ui/rating-stars';
+import ReviewDialog, { ReviewSubmission } from './review-dialog';
 
 // lustrzane typy backendu — GET /bookings/mine (#28) i POST /bookings/:id/cancel (#27)
 type BookingStatus =
@@ -17,6 +19,15 @@ type BookingStatus =
   | 'CANCELLED_BY_CLIENT'
   | 'CANCELLED_BY_BUSINESS'
   | 'COMPLETED';
+
+/** Wystawiona recenzja albo null — GET /bookings/mine i POST /bookings/:id/review (#47).
+ *  Backend dokłada to pole wprost po to, by odróżnić odbytą wizytę bez oceny od ocenionej. */
+interface BookingReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
 
 interface ClientBooking {
   id: string;
@@ -45,6 +56,7 @@ interface ClientBooking {
   employee: { id: string; name: string };
   // liczy backend wg polityki firmy — front nie powtarza tej reguły u siebie (AC #28)
   canCancel: boolean;
+  review: BookingReview | null;
 }
 
 interface MyBookingsResponse {
@@ -85,7 +97,15 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
 
 @Component({
   selector: 'app-my-bookings',
-  imports: [PricePlnPipe, RouterLink, LoadingState, ErrorState, EmptyState],
+  imports: [
+    PricePlnPipe,
+    RouterLink,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    RatingStars,
+    ReviewDialog,
+  ],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Moje wizyty</h1>
@@ -207,6 +227,34 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
                       {{ cancellationNote(b.business.cancellationHours) }}
                     </p>
                   }
+
+                  <!-- Wystawiona ocena i akcja oceniania wykluczają się z definicji (recenzja
+                       albo jest, albo jej nie ma); osobny blok od odwołania, bo front nie
+                       powtarza reguł backendu o tym, co może współistnieć. -->
+                  @if (b.review; as review) {
+                    <div class="mt-4 border-t border-stone-100 pt-4">
+                      <p class="text-xs font-semibold uppercase tracking-wider text-stone-400">
+                        Twoja ocena
+                      </p>
+                      <app-rating-stars class="mt-1.5" [value]="review.rating" />
+                      @if (review.comment; as comment) {
+                        <p class="mt-2 text-sm leading-relaxed text-stone-600">
+                          {{ comment }}
+                        </p>
+                      }
+                      <p class="mt-1.5 text-[13px] text-stone-400">
+                        Wystawiona {{ dateTime(review.createdAt) }}
+                      </p>
+                    </div>
+                  } @else if (canReview(b)) {
+                    <button
+                      type="button"
+                      (click)="openReview(b)"
+                      class="mt-4 rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    >
+                      Oceń wizytę
+                    </button>
+                  }
                 </li>
               }
             </ul>
@@ -215,6 +263,18 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
           }
         </div>
       }
+
+      <!-- jeden modal na cały ekran, poza @for: lista pięciu wizyt nie potrzebuje pięciu
+           dialogów, a <dialog> i tak pokazuje się tylko jeden naraz -->
+      <app-review-dialog
+        [open]="reviewTarget() !== null"
+        [serviceName]="reviewServiceName()"
+        [startsAt]="reviewStartsAt()"
+        [busy]="reviewBusy()"
+        [serverError]="reviewError()"
+        (submitted)="onReviewSubmit($event)"
+        (cancelled)="closeReview()"
+      />
     </div>
   `,
 })
@@ -240,10 +300,23 @@ export default class MyBookings {
   // do potwierdzenia), a przy skalarze odpowiedź na pierwsze odblokowywała przycisk drugiego
   private readonly cancelling = signal<ReadonlySet<string>>(new Set());
 
+  // wizyta oceniana w tej chwili — null zamyka modal; stan sieciowy recenzji jest osobny
+  // od odwoływania, bo obie akcje mogą dotyczyć różnych kart
+  protected readonly reviewTarget = signal<ClientBooking | null>(null);
+  protected readonly reviewBusy = signal(false);
+  protected readonly reviewError = signal<string | null>(null);
+
   protected readonly tab = signal<Tab>('upcoming');
 
   protected readonly visible = computed(() =>
     this.tab() === 'upcoming' ? this.upcoming() : this.past(),
+  );
+
+  protected readonly reviewServiceName = computed(
+    () => this.reviewTarget()?.service.name ?? '',
+  );
+  protected readonly reviewStartsAt = computed(
+    () => this.reviewTarget()?.startsAt ?? '',
   );
 
   protected readonly emptyMessage = computed(() =>
@@ -287,6 +360,54 @@ export default class MyBookings {
 
   protected onRetry(): void {
     void this.load();
+  }
+
+  /** Regułę „tylko po odbytej wizycie" trzyma backend (409) — front chowa akcję, której i tak
+   *  nie da się wykonać, ale nie powtarza warunku na endsAt, żeby nie rozjechać się z serwerem. */
+  protected canReview(booking: ClientBooking): boolean {
+    return booking.status === 'COMPLETED' && booking.review === null;
+  }
+
+  protected openReview(booking: ClientBooking): void {
+    this.reviewError.set(null);
+    this.reviewTarget.set(booking);
+  }
+
+  protected closeReview(): void {
+    if (this.reviewBusy()) return;
+    this.reviewTarget.set(null);
+  }
+
+  protected async onReviewSubmit({
+    rating,
+    comment,
+  }: ReviewSubmission): Promise<void> {
+    const target = this.reviewTarget();
+    if (!target || this.reviewBusy()) return;
+
+    this.reviewError.set(null);
+    this.reviewBusy.set(true);
+    try {
+      // pustego komentarza nie wysyłamy jako '' — DTO ma go za opcjonalny, a ValidationPipe
+      // z forbidNonWhitelisted nie wybacza pól spoza kontraktu
+      const body = comment === null ? { rating } : { rating, comment };
+      const created = await firstValueFrom(
+        this.api.post<BookingReview>(`/bookings/${target.id}/review`, body),
+      );
+      // AC: akcja znika, a ocena pokazuje się bez przeładowania strony — podmieniamy jeden
+      // rekord w sygnale, tak samo jak przy odwołaniu wizyty
+      this.patchBooking(target.id, { review: created });
+      this.reviewTarget.set(null);
+    } catch (err) {
+      this.reviewError.set(apiErrorMessage(err));
+      if (err instanceof HttpErrorResponse && err.status === 409) {
+        // recenzja powstała gdzie indziej albo status wizyty się zmienił — lista pokazuje
+        // nieprawdę, więc bierzemy świeżą zamiast zgadywać stan
+        await this.load(true);
+      }
+    } finally {
+      this.reviewBusy.set(false);
+    }
   }
 
   /** Wzorzec „tabs" z ARIA APG: strzałki przełączają zakładki, Home/End skacze na skrajną.

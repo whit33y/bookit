@@ -14,6 +14,18 @@ import MyBookings from './my-bookings';
 @Component({ selector: 'app-blank', template: '' })
 class Blank {}
 
+// jsdom nie implementuje showModal()/close() — ten sam lokalny polyfill co w
+// shared/confirm-dialog.spec.ts; modal oceny renderuje się na tym ekranie
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+    this.dispatchEvent(new Event('close'));
+  };
+});
+
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
 
@@ -28,11 +40,19 @@ const business = {
   cancellationHours: 24,
 };
 
+const review = {
+  id: 'r1',
+  rating: 5,
+  comment: 'Bardzo miła obsługa',
+  createdAt: '2026-08-04T09:00:00.000Z',
+};
+
 const booking = (
   id: string,
   status: string,
   canCancel: boolean,
   serviceName: string,
+  bookingReview: typeof review | null = null,
 ) => ({
   id,
   startsAt: '2026-08-03T07:00:00.000Z',
@@ -50,6 +70,7 @@ const booking = (
   },
   employee: { id: 'e1', name: 'Anna Kowalska' },
   canCancel,
+  review: bookingReview,
 });
 
 const MOCK = {
@@ -94,6 +115,12 @@ async function setup(response: unknown = MOCK) {
       /Odwoł(aj wizytę|ywanie)/.test(b.textContent ?? ''),
     );
   const tabs = () => [...el().querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const reviewButtons = () =>
+    [...el().querySelectorAll<HTMLButtonElement>('button')].filter(
+      (b) => b.textContent?.trim() === 'Oceń wizytę',
+    );
+  const dialog = () => el().querySelector('dialog') as HTMLDialogElement;
+  const dialogOpen = () => dialog().hasAttribute('open');
 
   const click = async (button: HTMLButtonElement) => {
     button.click();
@@ -101,7 +128,39 @@ async function setup(response: unknown = MOCK) {
     harness.detectChanges();
   };
 
-  return { harness, http, el, text, cancelButtons, tabs, click };
+  const rateBooking = async (rating: number, comment?: string) => {
+    await click(reviewButtons()[0]);
+    const stars = [...dialog().querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    stars[rating - 1].click();
+    if (comment !== undefined) {
+      const field = dialog().querySelector('#review-comment') as HTMLTextAreaElement;
+      field.value = comment;
+      field.dispatchEvent(new Event('input'));
+    }
+    await settle(harness.fixture);
+    harness.detectChanges();
+
+    const send = [...dialog().querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+      b.textContent?.includes('Wyślij ocenę'),
+    );
+    send?.click();
+    await settle(harness.fixture);
+    harness.detectChanges();
+  };
+
+  return {
+    harness,
+    http,
+    el,
+    text,
+    cancelButtons,
+    tabs,
+    click,
+    reviewButtons,
+    dialog,
+    dialogOpen,
+    rateBooking,
+  };
 }
 
 describe('MyBookings', () => {
@@ -262,6 +321,117 @@ describe('MyBookings', () => {
 
     expect(ctx.text()).toContain('Masaż');
     expect(ctx.text()).not.toContain('przed terminem');
+  });
+
+  it('„oceń wizytę" tylko przy zakończonej wizycie bez recenzji', async () => {
+    const ctx = await setup({
+      upcoming: [booking('b1', 'CONFIRMED', true, 'Strzyżenie męskie')],
+      past: [
+        booking('b3', 'COMPLETED', false, 'Masaż'),
+        booking('b4', 'COMPLETED', false, 'Koloryzacja', review),
+        booking('b5', 'CANCELLED_BY_CLIENT', false, 'Trymowanie brody'),
+      ],
+    });
+
+    // nadchodząca wizyta jeszcze się nie odbyła — nie ma czego oceniać
+    expect(ctx.reviewButtons()).toHaveLength(0);
+
+    await ctx.click(ctx.tabs()[1]);
+
+    expect(ctx.reviewButtons()).toHaveLength(1);
+    // wizyta z recenzją pokazuje ocenę zamiast akcji
+    expect(ctx.text()).toContain('Twoja ocena');
+    expect(ctx.text()).toContain('Bardzo miła obsługa');
+    expect(ctx.el().querySelector('[aria-label="Ocena 5 na 5"]')).not.toBeNull();
+  });
+
+  it('wystawia ocenę i podmienia kartę bez przeładowania listy', async () => {
+    const ctx = await setup({
+      upcoming: [],
+      past: [booking('b3', 'COMPLETED', false, 'Masaż')],
+    });
+
+    await ctx.click(ctx.tabs()[1]);
+    await ctx.rateBooking(4, 'Polecam');
+
+    const req = ctx.http.expectOne('/api/bookings/b3/review');
+    expect(req.request.method).toBe('POST');
+    // bookingId siedzi w ścieżce; w body wywróciłby ValidationPipe z forbidNonWhitelisted
+    expect(req.request.body).toEqual({ rating: 4, comment: 'Polecam' });
+    req.flush({
+      id: 'r9',
+      bookingId: 'b3',
+      businessId: 'biz1',
+      rating: 4,
+      comment: 'Polecam',
+      createdAt: '2026-08-05T10:00:00.000Z',
+    });
+    await settle(ctx.harness.fixture);
+    ctx.harness.detectChanges();
+
+    // AC: akcja znika, ocena widoczna, brak ponownego GET /bookings/mine (pilnuje verify())
+    expect(ctx.reviewButtons()).toHaveLength(0);
+    expect(ctx.dialogOpen()).toBe(false);
+    expect(ctx.text()).toContain('Twoja ocena');
+    expect(ctx.text()).toContain('Polecam');
+    expect(ctx.el().querySelector('[aria-label="Ocena 4 na 5"]')).not.toBeNull();
+  });
+
+  it('ocena bez komentarza nie wysyła pustego pola', async () => {
+    const ctx = await setup({
+      upcoming: [],
+      past: [booking('b3', 'COMPLETED', false, 'Masaż')],
+    });
+
+    await ctx.click(ctx.tabs()[1]);
+    await ctx.rateBooking(5);
+
+    const req = ctx.http.expectOne('/api/bookings/b3/review');
+    expect(req.request.body).toEqual({ rating: 5 });
+    req.flush({
+      id: 'r9',
+      bookingId: 'b3',
+      businessId: 'biz1',
+      rating: 5,
+      comment: null,
+      createdAt: '2026-08-05T10:00:00.000Z',
+    });
+    await settle(ctx.harness.fixture);
+    ctx.harness.detectChanges();
+
+    expect(ctx.reviewButtons()).toHaveLength(0);
+  });
+
+  it('409 przy ocenie: komunikat w modalu i świeża lista', async () => {
+    const ctx = await setup({
+      upcoming: [],
+      past: [booking('b3', 'COMPLETED', false, 'Masaż')],
+    });
+
+    await ctx.click(ctx.tabs()[1]);
+    await ctx.rateBooking(3);
+
+    ctx.http.expectOne('/api/bookings/b3/review').flush(
+      {
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'Ta wizyta ma już recenzję',
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await settle(ctx.harness.fixture);
+
+    // recenzja powstała poza tą kartą — lista pokazuje nieprawdę, więc bierzemy świeżą
+    ctx.http.expectOne('/api/bookings/mine').flush({
+      upcoming: [],
+      past: [booking('b3', 'COMPLETED', false, 'Masaż', review)],
+    });
+    await settle(ctx.harness.fixture);
+    ctx.harness.detectChanges();
+
+    expect(ctx.dialog().textContent).toContain('Ta wizyta ma już recenzję');
+    expect(ctx.reviewButtons()).toHaveLength(0);
+    expect(ctx.text()).toContain('Twoja ocena');
   });
 
   it('błąd pobrania listy: komunikat i ponowna próba zamiast „nie masz wizyt"', async () => {
