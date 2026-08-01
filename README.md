@@ -73,17 +73,18 @@ npm exec prisma -- db seed
 > w katalogu głównym, a plik projektu leży w `apps/api/.env`. Sam backend (`nx serve api`) czyta
 > go już normalnie — Nx ładuje env projektu automatycznie.
 
-Seed zakłada kategorie, 6 firm z usługami, pracownikami i grafikami oraz 15 rezerwacji we
-wszystkich statusach, żeby świeży klon miał co pokazać. Jest idempotentny — kolejne uruchomienie
-odświeża dane zamiast je duplikować.
+Seed zakłada kategorie, 6 firm z usługami, pracownikami i grafikami, 21 rezerwacji we wszystkich
+statusach oraz 9 recenzji odbytych wizyt, żeby świeży klon miał co pokazać. Jest idempotentny —
+kolejne uruchomienie odświeża dane zamiast je duplikować.
 
 ### 5. Start aplikacji
 
 W **dwóch osobnych terminalach** (oba procesy działają w trybie ciągłym):
 ## Demo data
 
-Seed fills the database with categories, 6 businesses (services, employees, schedules) and
-sample bookings in every status, so a fresh clone has something to show:
+Seed fills the database with categories, 6 businesses (services, employees, schedules),
+sample bookings in every status and reviews of past visits, so a fresh clone has something
+to show:
 
 ```sh
 export DATABASE_URL=postgresql://bookit:bookit@localhost:5432/bookit

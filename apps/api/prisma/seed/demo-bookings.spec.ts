@@ -12,11 +12,12 @@ import {
 } from '../../src/app/availability/slots.util';
 import {
   PlannedBooking,
+  assertValidReview,
   planDemoBookings,
   planDemoTimeOffs,
   workIntervalsFor,
 } from './demo-bookings';
-import { DEMO_BUSINESSES, DemoEmployee } from './demo-data';
+import { DEMO_BUSINESSES, DemoBookingSpec, DemoEmployee } from './demo-data';
 
 const MINUTE_MS = 60_000;
 
@@ -162,6 +163,47 @@ describe('planDemoBookings', () => {
         }
       }
     }
+  });
+});
+
+describe('assertValidReview', () => {
+  const spec = (over: Partial<DemoBookingSpec>): DemoBookingSpec => ({
+    businessSlug: 'studio-nozyczki',
+    employeeName: 'Marek Wiśniewski',
+    serviceName: 'Strzyżenie męskie',
+    clientEmail: 'klient@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -1,
+    startTime: '10:00',
+    ...over,
+  });
+
+  it('przepuszcza rezerwację bez recenzji', () => {
+    expect(() => assertValidReview(spec({}))).not.toThrow();
+  });
+
+  it.each([1, 2, 3, 4, 5])('przepuszcza ocenę %i przy COMPLETED', (rating) => {
+    expect(() => assertValidReview(spec({ review: { rating } }))).not.toThrow();
+  });
+
+  const NOT_COMPLETED = [
+    BookingStatus.PENDING,
+    BookingStatus.CONFIRMED,
+    BookingStatus.DECLINED,
+    BookingStatus.CANCELLED_BY_CLIENT,
+    BookingStatus.CANCELLED_BY_BUSINESS,
+  ];
+
+  it.each(NOT_COMPLETED)('odrzuca recenzję przy statusie %s', (status) => {
+    expect(() =>
+      assertValidReview(spec({ status, review: { rating: 5 } })),
+    ).toThrow(/COMPLETED/);
+  });
+
+  it.each([0, 6, -1, 3.5, Number.NaN])('odrzuca ocenę %s', (rating) => {
+    expect(() => assertValidReview(spec({ review: { rating } }))).toThrow(
+      /1–5/,
+    );
   });
 });
 

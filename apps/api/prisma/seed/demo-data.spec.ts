@@ -1,3 +1,4 @@
+import { BookingStatus } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES,
@@ -125,5 +126,51 @@ describe('dane demo', () => {
   it('każdy status BookingStatus ma przykład w danych', () => {
     const statuses = new Set(DEMO_BOOKINGS.map((b) => b.status));
     expect(statuses.size).toBe(6);
+  });
+
+  it('recenzje wiszą tylko przy COMPLETED i mają całkowitą ocenę 1–5', () => {
+    const reviewed = DEMO_BOOKINGS.filter((b) => b.review);
+    expect(reviewed.length).toBeGreaterThan(0);
+
+    for (const booking of reviewed) {
+      expect(booking.status, booking.serviceName).toBe(BookingStatus.COMPLETED);
+      expect(Number.isInteger(booking.review?.rating)).toBe(true);
+      expect(booking.review?.rating).toBeGreaterThanOrEqual(1);
+      expect(booking.review?.rating).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('główny klient demo ma wizytę COMPLETED bez recenzji — jest co ocenić w „Moich wizytach”', () => {
+    const unreviewed = DEMO_BOOKINGS.filter(
+      (b) =>
+        b.clientEmail === 'klient@bookit.pl' &&
+        b.status === BookingStatus.COMPLETED &&
+        !b.review,
+    );
+
+    expect(unreviewed.length).toBeGreaterThan(0);
+  });
+
+  it('recenzje pokrywają kilka firm, a jedna widoczna firma zostaje bez ocen', () => {
+    const reviewed = new Set(
+      DEMO_BOOKINGS.filter((b) => b.review).map((b) => b.businessSlug),
+    );
+    // profil firmy i wyniki wyszukiwania mają pokazać różne średnie, a nie wszędzie to samo
+    expect(reviewed.size).toBeGreaterThanOrEqual(3);
+
+    // firma bez ani jednej recenzji — UI nie może w takim wypadku pokazywać atrapy „0.0” (#49)
+    const visibleWithout = DEMO_BUSINESSES.filter(
+      (b) => !b.isBlocked && !reviewed.has(b.slug),
+    );
+    expect(visibleWithout.length).toBeGreaterThan(0);
+  });
+
+  it('oceny nie są jednakowe — widać rozrzut od słabej do bardzo dobrej', () => {
+    const ratings = DEMO_BOOKINGS.map((b) => b.review?.rating).filter(
+      (rating): rating is number => rating !== undefined,
+    );
+
+    expect(Math.min(...ratings)).toBeLessThanOrEqual(2);
+    expect(Math.max(...ratings)).toBe(5);
   });
 });

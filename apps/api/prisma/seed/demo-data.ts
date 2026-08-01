@@ -88,6 +88,11 @@ export interface DemoTimeOffSpec {
   reason: string;
 }
 
+export interface DemoReviewSpec {
+  rating: number; // 1–5
+  comment?: string;
+}
+
 export interface DemoBookingSpec {
   businessSlug: string;
   employeeName: string;
@@ -102,6 +107,12 @@ export interface DemoBookingSpec {
   workdayOffset: number;
   startTime: string; // "11:00", czas lokalny firmy
   clientNote?: string;
+  /**
+   * Recenzja wisi przy rezerwacji, a nie na osobnej liście z kluczem naturalnym: inaczej dałoby
+   * się wskazać nieistniejącą wizytę albo wystawić dwie recenzje do jednej. Dozwolona wyłącznie
+   * przy `COMPLETED` — pilnuje tego `assertValidReview` w `demo-bookings.ts`.
+   */
+  review?: DemoReviewSpec;
 }
 
 const MON_FRI = [0, 1, 2, 3, 4];
@@ -514,12 +525,16 @@ export const DEMO_TIME_OFFS: DemoTimeOffSpec[] = [
 ];
 
 /**
- * Rezerwacje we wszystkich sześciu statusach `BookingStatus`.
+ * Rezerwacje we wszystkich sześciu statusach `BookingStatus`, część `COMPLETED` z recenzją.
  *
  * Świadomie nie ma tu przeszłego `CONFIRMED`: cron auto-domykania (#39) przerobiłby je na
  * `COMPLETED` w kwadrans po starcie API i historia rozjechałaby się względem dokumentacji.
  * Najbliższe `CONFIRMED` leży 2 dni robocze w przód, czyli poza oknem przypomnień
  * (2 h – 24,25 h), więc świeży seed nie wysyła od razu maila.
+ *
+ * Recenzje (#46) rozłożone tak, żeby dało się pokazać cały zakres UI: firmy z kilkoma ocenami
+ * i różną średnią, firma z jedną oceną, firma zupełnie bez ocen (`gabinet-aura`) oraz jedna
+ * wizyta `COMPLETED` Kingi bez recenzji — bez niej nie ma na czym przeklikać „oceń wizytę”.
  */
 export const DEMO_BOOKINGS: DemoBookingSpec[] = [
   // Kinga Nowak — główne konto klienta, ma pełny przekrój „Moich wizyt”
@@ -531,8 +546,23 @@ export const DEMO_BOOKINGS: DemoBookingSpec[] = [
     status: BookingStatus.COMPLETED,
     workdayOffset: -9,
     startTime: '10:00',
+    review: {
+      rating: 5,
+      comment: 'Dokładnie tak, jak prosiłam. Marek nie spieszy się z klientem.',
+    },
   },
   {
+    businessSlug: 'studio-lakier',
+    employeeName: 'Julia Mazur',
+    serviceName: 'Manicure hybrydowy',
+    clientEmail: 'klient@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -5,
+    startTime: '10:00',
+    review: { rating: 5 }, // recenzja bez komentarza — sama ocena też jest poprawna
+  },
+  {
+    // jedyna wizyta COMPLETED Kingi bez recenzji — celowo, pod akcję „oceń wizytę” (#48)
     businessSlug: 'studio-relaks',
     employeeName: 'Paweł Górski',
     serviceName: 'Masaż pleców',
@@ -607,6 +637,46 @@ export const DEMO_BOOKINGS: DemoBookingSpec[] = [
     status: BookingStatus.COMPLETED,
     workdayOffset: -4,
     startTime: '13:00',
+    review: { rating: 5, comment: 'Broda wymodelowana perfekcyjnie, wrócę.' },
+  },
+  {
+    businessSlug: 'barber-brzytwa',
+    employeeName: 'Tomasz Lewandowski',
+    serviceName: 'Strzyżenie włosów i brody',
+    clientEmail: 'klient2@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -8,
+    startTime: '11:00',
+    review: {
+      rating: 4,
+      comment: 'Dobre strzyżenie, ale czekałem kwadrans ponad termin.',
+    },
+  },
+  {
+    businessSlug: 'studio-nozyczki',
+    employeeName: 'Ewa Zielińska',
+    serviceName: 'Strzyżenie męskie',
+    clientEmail: 'klient2@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -3,
+    startTime: '12:00',
+    review: {
+      rating: 4,
+      comment: 'Szybko i konkretnie, bez namawiania na dodatki.',
+    },
+  },
+  {
+    businessSlug: 'studio-lakier',
+    employeeName: 'Oliwia Kaczmarek',
+    serviceName: 'Manicure hybrydowy',
+    clientEmail: 'klient2@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -2,
+    startTime: '18:00',
+    review: {
+      rating: 2,
+      comment: 'Hybryda zaczęła schodzić po tygodniu, reklamacji nie uznano.',
+    },
   },
   {
     businessSlug: 'barber-brzytwa',
@@ -636,6 +706,37 @@ export const DEMO_BOOKINGS: DemoBookingSpec[] = [
     status: BookingStatus.COMPLETED,
     workdayOffset: -6,
     startTime: '16:00',
+    review: {
+      rating: 4,
+      comment: 'Ładna robota, choć zabieg przeciągnął się o pół godziny.',
+    },
+  },
+  {
+    // „kolor jak ostatnio” z rezerwacji poniżej odnosi się właśnie do tej wizyty
+    businessSlug: 'studio-nozyczki',
+    employeeName: 'Ewa Zielińska',
+    serviceName: 'Koloryzacja',
+    clientEmail: 'klient3@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -7,
+    startTime: '12:00',
+    review: {
+      rating: 5,
+      comment: 'Kolor wyszedł dokładnie taki, jak ustalałyśmy.',
+    },
+  },
+  {
+    businessSlug: 'studio-relaks',
+    employeeName: 'Iwona Pawlak',
+    serviceName: 'Masaż gorącymi kamieniami',
+    clientEmail: 'klient3@bookit.pl',
+    status: BookingStatus.COMPLETED,
+    workdayOffset: -3,
+    startTime: '15:00',
+    review: {
+      rating: 5,
+      comment: 'Godzina i pół pełnego wyłączenia. Polecam.',
+    },
   },
   {
     businessSlug: 'studio-nozyczki',

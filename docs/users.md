@@ -1,8 +1,9 @@
 # Dane demo
 
 Wszystko, co zakłada seed (`apps/api/prisma/seed.ts` + katalog `apps/api/prisma/seed/`):
-konta na każdą rolę, sześć firm z pełną ofertą i grafikami oraz rezerwacje we wszystkich
-statusach. Służą wyłącznie do lokalnego developmentu i przeglądu aplikacji.
+konta na każdą rolę, sześć firm z pełną ofertą i grafikami, rezerwacje we wszystkich
+statusach oraz recenzje odbytych wizyt. Służą wyłącznie do lokalnego developmentu
+i przeglądu aplikacji.
 
 > ⚠️ Hasła są jawne i wspólne dla wszystkich kont — wśród nich jest konto **ADMIN**.
 > Dlatego seed zakłada dane demo wyłącznie na środowisku deweloperskim: przy `NODE_ENV` innym
@@ -56,8 +57,8 @@ widać zablokowane dni.
 
 ## Rezerwacje
 
-15 rezerwacji rozłożonych na trzech klientów, co najmniej po jednej na każdy status
-z `BookingStatus` (`PENDING`, `CONFIRMED` i `COMPLETED` po cztery, pozostałe po jednej).
+21 rezerwacji rozłożonych na trzech klientów, co najmniej po jednej na każdy status
+z `BookingStatus` (`COMPLETED` dziesięć, `PENDING` i `CONFIRMED` po cztery, pozostałe po jednej).
 Terminy liczone są **względem momentu uruchomienia seeda**, w dniach roboczych pracownika:
 przeszłe wizyty zawsze leżą przed „teraz", przyszłe po nim, wszystkie na siatce 15 minut
 i w godzinach pracy.
@@ -69,6 +70,29 @@ i w godzinach pracy.
 - Najbliższe `CONFIRMED` leży 2 dni robocze w przód, czyli **poza** oknem przypomnień
   (2 h – 24,25 h), więc świeży seed nie wysyła od razu maila. Chcąc zobaczyć przypomnienie
   w Mailpicie, wystarczy przestawić termin wizyty w aplikacji.
+
+## Recenzje
+
+9 recenzji, każda podpięta do wizyty `COMPLETED` (jedna recenzja na rezerwację — pilnuje tego
+`Review.bookingId @unique`). Oceny celowo nie są jednakowe, żeby dało się zobaczyć realne średnie:
+
+| Firma                      | Recenzje | Średnia |
+| -------------------------- | -------- | ------- |
+| Studio Fryzur „Nożyczki”   | 3        | 4,67    |
+| Barber Shop „Brzytwa”      | 2        | 4,50    |
+| Studio Paznokci „Lakier”   | 3        | 3,67    |
+| Studio Masażu „Relaks”     | 1        | 5,00    |
+| Gabinet Kosmetyczny „Aura” | 0        | —       |
+
+Świadome decyzje:
+
+- **Wizyta Kingi w „Relaksie" nie ma recenzji** — to jedyna wizyta `COMPLETED` głównego konta
+  klienta bez oceny, więc w „Moich wizytach" zawsze jest na czym przeklikać „oceń wizytę".
+- **„Aura" nie ma ani jednej recenzji** — profil firmy bez ocen ma pokazywać brak ocen,
+  a nie atrapę „0.0".
+- Część recenzji jest **bez komentarza** (sama ocena) i jest wśród nich ocena `2` — UI musi
+  radzić sobie z jednym i z drugim.
+- Recenzje znikają razem z rezerwacjami (`onDelete: Cascade`), więc seed nie czyści ich osobno.
 
 ## Jak uruchomić seed
 
@@ -98,13 +122,14 @@ ktoś zmienił je w aplikacji.
 Wyjątkiem są **grafiki, urlopy i rezerwacje**: nie mają klucza naturalnego, a rezerwacje są
 dodatkowo liczone względem „teraz", więc seed kasuje je i zapisuje od nowa. Dotyczy to
 wyłącznie firm demo — jeśli klikałeś w nich własne rezerwacje do testów, kolejny seed je
-usunie (wypisuje w logu, ile).
+usunie (wypisuje w logu, ile). Razem z rezerwacjami znikają **recenzje** — kaskadowo, przez
+klucz obcy, więc dotyczy to także recenzji wystawionych ręcznie w aplikacji.
 
 ## Struktura
 
-| Plik                                    | Rola                                                                 |
-| --------------------------------------- | -------------------------------------------------------------------- |
-| `apps/api/prisma/seed.ts`               | entry point: kategorie → bramka `NODE_ENV`/`SEED_DEMO` → dane demo   |
-| `apps/api/prisma/seed/demo-data.ts`     | deklaratywny opis danych (konta, firmy, usługi, grafiki, rezerwacje) |
-| `apps/api/prisma/seed/demo-bookings.ts` | przeliczanie terminów względem „teraz" na instanty UTC               |
-| `apps/api/prisma/seed/seed-demo.ts`     | zapis do bazy (idempotentne upserty)                                 |
+| Plik                                    | Rola                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------ |
+| `apps/api/prisma/seed.ts`               | entry point: kategorie → bramka `NODE_ENV`/`SEED_DEMO` → dane demo             |
+| `apps/api/prisma/seed/demo-data.ts`     | deklaratywny opis danych (konta, firmy, usługi, grafiki, rezerwacje, recenzje) |
+| `apps/api/prisma/seed/demo-bookings.ts` | przeliczanie terminów względem „teraz" na instanty UTC                         |
+| `apps/api/prisma/seed/seed-demo.ts`     | zapis do bazy (idempotentne upserty)                                           |

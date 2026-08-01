@@ -38,6 +38,7 @@ model User {
   business      Business?
   employee      Employee?
   bookings      Booking[]
+  reviews       Review[]
   refreshTokens RefreshToken[]
   resetTokens   PasswordResetToken[]
 }
@@ -92,6 +93,7 @@ model Business {
   employees Employee[]
   services  Service[]
   bookings  Booking[]
+  reviews   Review[]
 
   @@index([city])
   @@index([categoryId])
@@ -168,6 +170,7 @@ model Booking {
   business Business @relation(fields: [businessId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
   service  Service  @relation(fields: [serviceId], references: [id])
+  review   Review?
 
   @@index([employeeId, startsAt])
   @@index([clientId])
@@ -176,4 +179,26 @@ model Booking {
   // więc indeksy powyżej im nie pomagają — bez tych dwóch skan całej tabeli 96 razy na dobę
   @@index([status, startsAt]) // cron przypomnień (#38)
   @@index([status, endsAt]) // cron auto-COMPLETED (#39)
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  bookingId  String   @unique // 1:1 z rezerwacją — dokładnie jedna recenzja na wizytę
+  clientId   String
+  businessId String
+  rating     Int // 1–5; poza Prismą pilnuje tego CHECK w migracji i DTO (#47)
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Cascade, bo seed kasuje i odtwarza rezerwacje firm demo przy każdym przebiegu —
+  // przy RESTRICT drugie `prisma db seed` wywaliłoby się na kluczu obcym.
+  booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  client   User     @relation(fields: [clientId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+
+  // clientId i businessId są zdenormalizowane (da się je wyprowadzić z Booking): średnia oceny
+  // i lista recenzji firmy idą wtedy po jednej tabeli, bez joina przy każdym wyniku wyszukiwarki.
+  @@index([businessId, createdAt]) // publiczna lista recenzji firmy z paginacją (#47)
+  @@index([clientId])
 }
