@@ -116,6 +116,21 @@ describe('ApiExceptionFilter', () => {
     });
   });
 
+  it('nie robi z 409 błędu walidacji, nawet gdy payload niesie fields', () => {
+    const { body } = capture(
+      new ConflictException({
+        message: 'Wybrany termin jest już zajęty',
+        fields: [{ field: 'startsAt', constraints: ['taken'] }],
+      }),
+    );
+
+    expect(body).toEqual({
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'Wybrany termin jest już zajęty',
+    });
+  });
+
   it('nie udaje walidacji przy zwykłym 400 z komunikatem', () => {
     const { body } = capture(new BadRequestException('startsAt musi być w przyszłości'));
 

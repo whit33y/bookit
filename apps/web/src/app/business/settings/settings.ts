@@ -34,6 +34,8 @@ interface Business {
 
 // Lustrzane do UpdateBusinessDto (apps/api) — patterny i długości takie same.
 const POSTAL_CODE = /^\d{2}-\d{3}$/;
+const STREET_MAX_LENGTH = 120;
+const CITY_MAX_LENGTH = 80;
 const PHONE = /^\+?[0-9\s-]{7,20}$/;
 
 @Component({
@@ -224,7 +226,13 @@ export default class BusinessSettings {
     });
     pattern(p.phone, PHONE, { message: 'Nieprawidłowy numer telefonu' });
     required(p.street, { message: 'Ulica jest wymagana' });
+    maxLength(p.street, STREET_MAX_LENGTH, {
+      message: `Ulica może mieć maksymalnie ${STREET_MAX_LENGTH} znaków`,
+    });
     required(p.city, { message: 'Miasto jest wymagane' });
+    maxLength(p.city, CITY_MAX_LENGTH, {
+      message: `Miasto może mieć maksymalnie ${CITY_MAX_LENGTH} znaków`,
+    });
     pattern(p.postalCode, POSTAL_CODE, {
       message: 'Kod pocztowy w formacie 00-000',
     });

@@ -75,7 +75,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const statusCode = exception.getStatus();
     const payload = exception.getResponse();
-    const fields = this.readFields(payload);
+    // tylko 400 — inaczej wyjątek biznesowy, który przypadkiem niesie `fields` (np. 409
+    // z listą kolidujących terminów), dostałby kod VALIDATION_FAILED i zgubił swój komunikat
+    const fields =
+      statusCode === HttpStatus.BAD_REQUEST ? this.readFields(payload) : null;
     if (fields) {
       return {
         statusCode,

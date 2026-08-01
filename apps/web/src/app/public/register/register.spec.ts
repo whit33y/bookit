@@ -41,6 +41,25 @@ describe('Register', () => {
     expect(el.textContent).toContain('Hasło jest wymagane');
   });
 
+  it('za długie nazwisko: błąd przy polu, bez okrężnej drogi przez 400 z serwera', async () => {
+    const fixture = TestBed.createComponent(Register);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // limit lustrzany do NAME_MAX_LENGTH w apps/api (auth.dto.ts)
+    setValue(el.querySelector('#firstName') as HTMLInputElement, 'Anna');
+    setValue(el.querySelector('#lastName') as HTMLInputElement, 'a'.repeat(51));
+    setValue(el.querySelector('#email') as HTMLInputElement, 'anna@example.com');
+    setValue(el.querySelector('#password') as HTMLInputElement, 'tajneHaslo1');
+    el.querySelector('form')?.dispatchEvent(
+      new Event('submit', { cancelable: true }),
+    );
+    await settle(fixture);
+
+    TestBed.inject(HttpTestingController).expectNone('/api/auth/register');
+    expect(el.textContent).toContain('Nazwisko może mieć maksymalnie 50 znaków');
+  });
+
   it('sukces: wysyła dane, auto-loguje i przekierowuje na stronę roli', async () => {
     const navigate = vi
       .spyOn(TestBed.inject(Router), 'navigateByUrl')

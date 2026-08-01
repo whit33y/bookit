@@ -27,6 +27,21 @@ export const emailSchema = schema<string>((p) => {
   });
 });
 
+/** Limit imienia i nazwiska — lustro NAME_MAX_LENGTH z apps/api (auth.dto.ts). Bez tej
+ *  reguły przekroczenie limitu wychodzi dopiero z serwera jako jeden ogólny komunikat
+ *  nad formularzem, bez wskazania pola. */
+export const NAME_MAX_LENGTH = 50;
+
+/** Reguły imienia/nazwiska — register (i każdy przyszły formularz profilu). */
+export function personNameSchema(label: string) {
+  return schema<string>((p) => {
+    required(p, { message: `${label} jest wymagane` });
+    maxLength(p, NAME_MAX_LENGTH, {
+      message: `${label} może mieć maksymalnie ${NAME_MAX_LENGTH} znaków`,
+    });
+  });
+}
+
 /** Reguły nowego hasła zgodne z backendowym DTO (8–72 znaki) — register i reset hasła. */
 export const passwordSchema = schema<string>((p) => {
   required(p, { message: 'Hasło jest wymagane' });

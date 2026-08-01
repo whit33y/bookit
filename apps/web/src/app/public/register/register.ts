@@ -1,10 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { apply, form, required } from '@angular/forms/signals';
+import { apply, form } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, {
   emailSchema,
   passwordSchema,
+  personNameSchema,
   submitAuthForm,
 } from '../form-field/form-field';
 
@@ -99,8 +100,8 @@ export default class Register {
   protected readonly serverError = signal<string | null>(null);
 
   protected readonly registerForm = form(this.model, (p) => {
-    required(p.firstName, { message: 'Imię jest wymagane' });
-    required(p.lastName, { message: 'Nazwisko jest wymagane' });
+    apply(p.firstName, personNameSchema('Imię'));
+    apply(p.lastName, personNameSchema('Nazwisko'));
     apply(p.email, emailSchema);
     apply(p.password, passwordSchema);
   });
