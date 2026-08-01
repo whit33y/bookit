@@ -17,6 +17,12 @@ import {
  * wcześniejszych wersjach seeda mają już własne UUID-y pod tymi samymi e-mailami.
  */
 
+// Domyślne 5 s Prismy jest liczone pod pojedyncze operacje aplikacji, nie pod seed, który
+// w jednej transakcji wstawia komplet rezerwacji z recenzjami. Seed odpalamy raz, ręcznie,
+// więc dłuższe czekanie nic nie blokuje — a limit poniżej sumy round-tripów zostawiłby
+// firmy demo bez rezerwacji.
+const TRANSACTION_OPTIONS = { timeout: 30_000 };
+
 /** Kategorie seedujemy zawsze — także tam, gdzie kont demo nie zakładamy. */
 export const seedCategories = async (prisma: PrismaClient): Promise<void> => {
   for (const category of CATEGORIES) {
@@ -216,36 +222,63 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
 
   // Rezerwacje są liczone względem „teraz”, więc każdy przebieg ma je odświeżyć, a nie dokleić —
   // a Booking nie ma klucza naturalnego, po którym dałoby się je zaktualizować. Kasujemy tylko
-  // w firmach demo; to jedyne miejsce w seedzie, które usuwa cudze dane.
+  // w firmach demo; to jedyne miejsce w seedzie, które usuwa cudze dane. Recenzje znikają razem
+  // z rezerwacjami (`Review.booking` ma `onDelete: Cascade`), więc nie ma osobnego kroku.
   //
   // Kasowanie i zapis w jednej transakcji: reszta seeda to upserty, które same się naprawiają
   // przy kolejnym uruchomieniu, a to jedyny krok, który po awarii w połowie zostawiłby bazę
   // demo zupełnie bez rezerwacji.
-  const [removed] = await prisma.$transaction([
-    prisma.booking.deleteMany({
+  //
+  // Pojedyncze `create` zamiast `createMany`: recenzję zakładamy zagnieżdżeniem, a `createMany`
+  // nie zwraca identyfikatorów, więc trzeba by dopytywać bazę o świeżo wstawione rezerwacje.
+  // Kosztem jest kilkadziesiąt round-tripów zamiast dwóch, a transakcja interaktywna ma domyślny
+  // limit 5 s — na wolniejszym połączeniu do bazy seed przerwałby się w połowie na P2028.
+  const removed = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.booking.deleteMany({
       where: { businessId: { in: [...businessIds.values()] } },
-    }),
-    prisma.booking.createMany({
-      data: bookings.map(({ spec, startsAt, endsAt }) => ({
-        clientId: userIds.get(spec.clientEmail) as string,
-        businessId: businessIds.get(spec.businessSlug) as string,
-        employeeId: employeeIds.get(
-          `${spec.businessSlug}/${spec.employeeName}`,
-        ) as string,
-        serviceId: serviceIds.get(
-          `${spec.businessSlug}/${spec.serviceName}`,
-        ) as string,
-        startsAt,
-        endsAt,
-        status: spec.status,
-        clientNote: spec.clientNote ?? null,
-      })),
-    }),
-  ]);
+    });
+
+    for (const { spec, startsAt, endsAt } of bookings) {
+      const clientId = userIds.get(spec.clientEmail) as string;
+      const businessId = businessIds.get(spec.businessSlug) as string;
+
+      await tx.booking.create({
+        data: {
+          clientId,
+          businessId,
+          employeeId: employeeIds.get(
+            `${spec.businessSlug}/${spec.employeeName}`,
+          ) as string,
+          serviceId: serviceIds.get(
+            `${spec.businessSlug}/${spec.serviceName}`,
+          ) as string,
+          startsAt,
+          endsAt,
+          status: spec.status,
+          clientNote: spec.clientNote ?? null,
+          review: spec.review
+            ? {
+                create: {
+                  clientId,
+                  businessId,
+                  rating: spec.review.rating,
+                  comment: spec.review.comment ?? null,
+                },
+              }
+            : undefined,
+        },
+      });
+    }
+
+    return count;
+  }, TRANSACTION_OPTIONS);
+
+  const reviewCount = bookings.filter(({ spec }) => spec.review).length;
 
   console.log(
     `Dane demo: ${DEMO_USERS.length} użytkowników, ${DEMO_BUSINESSES.length} firm, ` +
       `${employeeIds.size} pracowników, ${serviceIds.size} usług, ` +
-      `${bookings.length} rezerwacji (usunięto poprzednie: ${removed.count}).`,
+      `${bookings.length} rezerwacji (usunięto poprzednie: ${removed}), ` +
+      `${reviewCount} recenzji.`,
   );
 };

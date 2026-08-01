@@ -1,3 +1,4 @@
+import { BookingStatus } from '@prisma/client';
 import {
   LocalDate,
   addMinutes,
@@ -77,6 +78,36 @@ const findService = (businessSlug: string, name: string) => {
     );
   }
   return service;
+};
+
+/**
+ * Recenzję wolno dopiąć tylko do odbytej wizyty i tylko z oceną 1–5 — te same reguły, które
+ * później egzekwuje API (#47) i CHECK w bazie. Osobna eksportowana funkcja, bo `planDemoBookings`
+ * czyta `DEMO_BOOKINGS` z modułu i inaczej nie dałoby się przetestować ścieżki błędu.
+ */
+export const assertValidReview = (spec: DemoBookingSpec): void => {
+  const { review } = spec;
+  if (!review) {
+    return;
+  }
+
+  if (spec.status !== BookingStatus.COMPLETED) {
+    throw new Error(
+      `Dane demo: recenzja przy rezerwacji w statusie ${spec.status} ` +
+        `("${spec.serviceName}", ${spec.clientEmail}) — dozwolone tylko dla COMPLETED`,
+    );
+  }
+
+  if (
+    !Number.isInteger(review.rating) ||
+    review.rating < 1 ||
+    review.rating > 5
+  ) {
+    throw new Error(
+      `Dane demo: ocena ${review.rating} w recenzji "${spec.serviceName}" ` +
+        `(${spec.clientEmail}) — dozwolona liczba całkowita 1–5`,
+    );
+  }
 };
 
 /** Data lokalna przesunięta o `days` dób kalendarzowych — przez Date.UTC, więc bez DST-owych pułapek. */
@@ -243,6 +274,8 @@ export const planDemoBookings = (now: Date): PlannedBooking[] => {
         `Dane demo: usługa "${spec.serviceName}" nie jest przypisana do "${spec.employeeName}"`,
       );
     }
+
+    assertValidReview(spec);
 
     const key = `${spec.businessSlug}/${spec.employeeName}`;
     const busy = busyByEmployee.get(key) ?? [];
