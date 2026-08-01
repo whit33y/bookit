@@ -973,6 +973,19 @@ describe('BookingsService — moje wizyty', () => {
       expect(select.business.select).not.toHaveProperty('ownerId');
       expect(select.business.select).not.toHaveProperty('isBlocked');
     });
+
+    // #47/#48: bez tego pola front nie odróżni odbytej wizyty bez oceny od już ocenionej
+    it('pobiera wystawioną recenzję razem z wizytą', async () => {
+      await service.findMine(CLIENT_ID);
+
+      const { select } = findMany.mock.calls[0][0];
+      expect(select.review.select).toEqual({
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+      });
+    });
   });
 
   describe('flaga canCancel', () => {

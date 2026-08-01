@@ -72,6 +72,10 @@ const clientBookingSelect = {
   },
   service: { select: serviceClientFields },
   employee: { select: { id: true, name: true } },
+  // Wystawiona recenzja albo null (#47). Bez tego pola #48 nie odróżni odbytej wizyty bez oceny
+  // od już ocenionej, więc akcji „oceń wizytę" nie dałoby się pokazać warunkowo — a dopytywanie
+  // o to osobnym requestem per wizyta mnożyłoby zapytania na całą listę.
+  review: { select: { id: true, rating: true, comment: true, createdAt: true } },
 } satisfies Prisma.BookingSelect;
 
 type ClientBooking = Prisma.BookingGetPayload<{ select: typeof clientBookingSelect }>;

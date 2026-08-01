@@ -8,6 +8,8 @@ import { Prisma, UserRole } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { Pagination, parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { EMPTY_REVIEW_STATS } from '../reviews/review-stats';
+import { ReviewsService } from '../reviews/reviews.service';
 import { serviceClientFields } from '../services/services.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { SearchBusinessesQueryDto } from './dto/search-businesses-query.dto';
@@ -111,7 +113,25 @@ const isUniqueViolationOn = (e: unknown, field: string) =>
 
 @Injectable()
 export class BusinessesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reviews: ReviewsService,
+  ) {}
+
+  /**
+   * Doklejenie agregatu ocen (#47): jedno zapytanie na całą stronę wyników, niezależnie od tego,
+   * czy powstała przez Prismę (searchAlphabetical), przez surowy SQL Haversine (searchByDistance),
+   * czy to pojedynczy profil. Dzięki temu średnia liczy się w jednym miejscu i zapytania
+   * geograficznego nie trzeba rozbudowywać o podselekt.
+   */
+  private async withReviewStats<T extends { id: string }>(items: T[]) {
+    const stats = await this.reviews.statsFor(items.map((item) => item.id));
+    return items.map((item) => ({
+      ...item,
+      // firma bez recenzji nie wraca z groupBy — dostaje avgRating: null, nie 0
+      ...(stats.get(item.id) ?? EMPTY_REVIEW_STATS),
+    }));
+  }
 
   // publiczna wyszukiwarka (#34) — bez geo: alfabetycznie przez Prisma; z lat/lng:
   // Haversine liczony natywnie w Postgresie (searchByDistance), żeby filtrować po
@@ -191,7 +211,7 @@ export class BusinessesService {
       }),
       this.prisma.business.count({ where }),
     ]);
-    return { items, total, page, limit };
+    return { items: await this.withReviewStats(items), total, page, limit };
   }
 
   private async searchByDistance(
@@ -248,18 +268,20 @@ export class BusinessesService {
       `,
     ]);
 
+    const items = rows.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      name: r.name,
+      city: r.city,
+      street: r.street,
+      lat: r.lat,
+      lng: r.lng,
+      category: { id: r.categoryId, name: r.categoryName, slug: r.categorySlug },
+      distanceKm: Math.round(r.distanceKm * 10) / 10,
+    }));
+
     return {
-      items: rows.map((r) => ({
-        id: r.id,
-        slug: r.slug,
-        name: r.name,
-        city: r.city,
-        street: r.street,
-        lat: r.lat,
-        lng: r.lng,
-        category: { id: r.categoryId, name: r.categoryName, slug: r.categorySlug },
-        distanceKm: Math.round(r.distanceKm * 10) / 10,
-      })),
+      items: await this.withReviewStats(items),
       total: count,
       page,
       limit,
@@ -275,7 +297,10 @@ export class BusinessesService {
     if (!business) {
       throw new NotFoundException('Nie znaleziono firmy');
     }
-    return business;
+
+    // profil niesie ten sam agregat co karta w wyszukiwarce (#47), więc idzie tym samym helperem
+    const [profile] = await this.withReviewStats([business]);
+    return profile;
   }
 
   async findMine(userId: string) {
