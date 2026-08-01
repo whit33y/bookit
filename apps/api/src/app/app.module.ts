@@ -12,6 +12,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { EmployeesModule } from './employees/employees.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReviewsModule } from './reviews/reviews.module';
 import { ServicesModule } from './services/services.module';
 import { TimeOffsModule } from './time-offs/time-offs.module';
 import { UsersModule } from './users/users.module';
@@ -34,6 +35,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     TimeOffsModule,
     AvailabilityModule,
     BookingsModule,
+    ReviewsModule,
     AdminModule,
     // Wchodzi też tranzytywnie (BookingsModule, AuthModule), ale wprost, żeby cron przypomnień
     // (#38) nie zniknął z grafu przy zmianie importów tamtych modułów. Nest instancjonuje

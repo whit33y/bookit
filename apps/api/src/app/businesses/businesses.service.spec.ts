@@ -1,6 +1,7 @@
 import { Prisma, UserRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { BusinessesService } from './businesses.service';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { SearchBusinessesQueryDto } from './dto/search-businesses-query.dto';
@@ -32,7 +33,11 @@ describe('BusinessesService', () => {
   let findMany: ReturnType<typeof vi.fn>;
   let count: ReturnType<typeof vi.fn>;
   let queryRaw: ReturnType<typeof vi.fn>;
+  let statsFor: ReturnType<typeof vi.fn>;
   let service: BusinessesService;
+
+  // firma bez recenzji — tyle dokleja się domyślnie do każdego wyniku (#47)
+  const noStats = { avgRating: null, reviewCount: 0 };
 
   beforeEach(() => {
     tx = {
@@ -45,12 +50,17 @@ describe('BusinessesService', () => {
     findMany = vi.fn().mockResolvedValue([]);
     count = vi.fn().mockResolvedValue(0);
     queryRaw = vi.fn();
+    // domyślnie żadna firma nie ma recenzji — groupBy nie zwraca dla nich wierszy
+    statsFor = vi.fn().mockResolvedValue(new Map());
     const prisma = {
       $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
       $queryRaw: queryRaw,
       business: { findFirst, findUnique, update, findMany, count },
     };
-    service = new BusinessesService(prisma as unknown as PrismaService);
+    service = new BusinessesService(
+      prisma as unknown as PrismaService,
+      { statsFor } as unknown as ReviewsService,
+    );
   });
 
   it('findBySlug zwraca profil i pyta tylko o niezablokowaną firmę bez pól wrażliwych', async () => {
@@ -68,7 +78,25 @@ describe('BusinessesService', () => {
       isActive: true,
     });
     expect(arg.select.employees.where).toEqual({ isActive: true });
-    expect(result).toEqual({ id: 'b1', slug: 'salon' });
+    expect(result).toEqual({ id: 'b1', slug: 'salon', ...noStats });
+  });
+
+  it('findBySlug dokleja avgRating i reviewCount z agregatu recenzji', async () => {
+    findFirst.mockResolvedValue({ id: 'b1', slug: 'salon' });
+    statsFor.mockResolvedValue(new Map([['b1', { avgRating: 4.7, reviewCount: 3 }]]));
+
+    const result = await service.findBySlug('salon');
+
+    expect(statsFor).toHaveBeenCalledWith(['b1']);
+    expect(result).toEqual({ id: 'b1', slug: 'salon', avgRating: 4.7, reviewCount: 3 });
+  });
+
+  it('findBySlug firmy bez recenzji → avgRating null, nie atrapa 0.0', async () => {
+    findFirst.mockResolvedValue({ id: 'b1', slug: 'salon' });
+
+    const result = await service.findBySlug('salon');
+
+    expect(result).toMatchObject({ avgRating: null, reviewCount: 0 });
   });
 
   it('findBySlug → 404 gdy brak firmy (nieistniejąca lub zablokowana)', async () => {
@@ -214,7 +242,28 @@ describe('BusinessesService', () => {
 
       const result = await service.search({ page: '2', limit: '10' });
 
-      expect(result).toEqual({ items: [{ id: 'b1' }], total: 42, page: 2, limit: 10 });
+      expect(result).toEqual({
+        items: [{ id: 'b1', ...noStats }],
+        total: 42,
+        page: 2,
+        limit: 10,
+      });
+    });
+
+    it('ścieżka alfabetyczna dokleja statystyki ocen do każdej karty wyniku', async () => {
+      findMany.mockResolvedValue([{ id: 'b1' }, { id: 'b2' }]);
+      count.mockResolvedValue(2);
+      statsFor.mockResolvedValue(new Map([['b2', { avgRating: 3.5, reviewCount: 8 }]]));
+
+      const result = await service.search({});
+
+      // jedno zapytanie na całą stronę wyników, nie po jednym na firmę
+      expect(statsFor).toHaveBeenCalledTimes(1);
+      expect(statsFor).toHaveBeenCalledWith(['b1', 'b2']);
+      expect(result.items).toEqual([
+        { id: 'b1', ...noStats },
+        { id: 'b2', avgRating: 3.5, reviewCount: 8 },
+      ]);
     });
 
     it('tylko lat bez lng → 400', async () => {
@@ -277,12 +326,39 @@ describe('BusinessesService', () => {
             lng: 21.0122,
             category: { id: 'cat-1', name: 'Fryzjer', slug: 'fryzjer' },
             distanceKm: 3.1,
+            ...noStats,
           },
         ],
         total: 1,
         page: 1,
         limit: 20,
       });
+    });
+
+    it('ścieżka geograficzna też dokleja statystyki ocen (bez podselektu w SQL)', async () => {
+      queryRaw
+        .mockResolvedValueOnce([
+          {
+            id: 'b1',
+            slug: 'salon',
+            name: 'Salon',
+            city: 'Warszawa',
+            street: 'Kwiatowa 1',
+            lat: 52.2297,
+            lng: 21.0122,
+            categoryId: 'cat-1',
+            categoryName: 'Fryzjer',
+            categorySlug: 'fryzjer',
+            distanceKm: 3.14159,
+          },
+        ])
+        .mockResolvedValueOnce([{ count: 1 }]);
+      statsFor.mockResolvedValue(new Map([['b1', { avgRating: 5, reviewCount: 1 }]]));
+
+      const result = await service.search({ lat: '52.23', lng: '21.01' });
+
+      expect(statsFor).toHaveBeenCalledWith(['b1']);
+      expect(result.items[0]).toMatchObject({ distanceKm: 3.1, avgRating: 5, reviewCount: 1 });
     });
   });
 });
