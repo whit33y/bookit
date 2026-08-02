@@ -87,6 +87,13 @@ export default class BusinessReviews {
   protected readonly loading = signal(true);
   protected readonly serverError = signal<string | null>(null);
 
+  // Licznik zapytań jak w public/search/search.ts i business/pending-count-store.ts. Pasek stron
+  // znika na czas ładowania, więc drugiego kliknięcia „Następna" nie da się wyklikać — ale zmiana
+  // `slug` przy żądaniu w locie już tak, a wtedy bez tej bramki opinie poprzedniej firmy wchodzą
+  // pod nazwę nowej. Bramka pilnuje też, żeby pierwsza odpowiedź nie zdejmowała „Ładowanie…"
+  // z listy, która wciąż czeka na swoje dane.
+  private requestId = 0;
+
   constructor() {
     // Angular reużywa instancję przy przejściu między dwoma profilami (:slug → :slug), więc
     // zmiana wejścia musi zresetować stronę — inaczej nowa firma otwiera się na stronie 3.
@@ -110,6 +117,7 @@ export default class BusinessReviews {
   }
 
   private async load(slug: string, page: number): Promise<void> {
+    const requestId = ++this.requestId;
     this.loading.set(true);
     this.serverError.set(null);
     try {
@@ -118,15 +126,21 @@ export default class BusinessReviews {
           `/businesses/${slug}/reviews?page=${page}`,
         ),
       );
+      if (requestId !== this.requestId) return; // odpowiedź na porzucone zapytanie
       this.items.set(res.items);
       this.total.set(res.total);
       this.page.set(res.page);
       // limit dyktuje serwer (domyślnie 20) — pasek stron liczy z niego zakres „21–40 z 47"
       this.limit.set(res.limit);
     } catch (err) {
+      if (requestId !== this.requestId) return;
       this.serverError.set(apiErrorMessage(err));
     } finally {
-      this.loading.set(false);
+      // gaśnie tylko na najświeższym żądaniu — inaczej pierwsza odpowiedź zdejmuje „Ładowanie…"
+      // z listy, która wciąż czeka na swoje dane
+      if (requestId === this.requestId) {
+        this.loading.set(false);
+      }
     }
   }
 }

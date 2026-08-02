@@ -106,6 +106,44 @@ describe('BusinessReviews', () => {
     expect(ctx.text()).toContain('21–40 z 45 opinii');
   });
 
+  it('spóźniona odpowiedź poprzedniej firmy nie nadpisuje nowszej', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(BusinessReviews);
+    fixture.componentRef.setInput('slug', 'test-slug');
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    const first = http.expectOne(reviewsUrl(1));
+
+    // zmiana firmy z żądaniem w locie — oba wiszą naraz
+    fixture.componentRef.setInput('slug', 'inna-firma');
+    fixture.detectChanges();
+    const second = http.expectOne('/api/businesses/inna-firma/reviews?page=1');
+
+    // nowsza firma wraca pierwsza, spóźnialska po niej
+    second.flush({
+      items: [review('r9', 5, 'Opinia nowej firmy')],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    await settle(fixture);
+    first.flush({
+      items: [review('r1', 1, 'Opinia poprzedniej firmy')],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    await settle(fixture);
+    fixture.detectChanges();
+
+    const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').trim();
+    expect(text).toContain('Opinia nowej firmy');
+    expect(text).not.toContain('Opinia poprzedniej firmy');
+  });
+
   it('błąd pobrania: komunikat i ponowna próba zamiast „brak opinii"', async () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
