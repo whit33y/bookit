@@ -2,11 +2,11 @@
 
 Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoterapeuta, groomer…) — alternatywa dla Booksy.
 
-| | |
-|---|---|
-| Status | Draft — żywy dokument |
-| Data | 2026-07-17 |
-| Stack | NestJS + PostgreSQL + Prisma · Angular + Tailwind CSS · monorepo Nx |
+|        |                                                                     |
+| ------ | ------------------------------------------------------------------- |
+| Status | Draft — żywy dokument                                               |
+| Data   | 2026-07-17                                                          |
+| Stack  | NestJS + PostgreSQL + Prisma · Angular + Tailwind CSS · monorepo Nx |
 
 ---
 
@@ -20,12 +20,12 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 
 ### Personas i role
 
-| Rola | Kim jest | Co robi w systemie |
-|---|---|---|
-| **Klient** | Osoba szukająca usługi | Wyszukuje firmy, przegląda profile i cenniki, rezerwuje/odwołuje wizyty, widzi historię |
-| **Właściciel** | Prowadzi firmę usługową | Zakłada profil firmy, zarządza usługami, pracownikami i grafikami, akceptuje rezerwacje, ustawia politykę odwołań |
-| **Pracownik** | Specjalista zatrudniony w firmie | Widzi swój kalendarz i rezerwacje przypisane do siebie |
-| **Admin** | Operator platformy | Przegląda firmy i użytkowników, blokuje naruszające zasady |
+| Rola           | Kim jest                         | Co robi w systemie                                                                                                |
+| -------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Klient**     | Osoba szukająca usługi           | Wyszukuje firmy, przegląda profile i cenniki, rezerwuje/odwołuje wizyty, widzi historię                           |
+| **Właściciel** | Prowadzi firmę usługową          | Zakłada profil firmy, zarządza usługami, pracownikami i grafikami, akceptuje rezerwacje, ustawia politykę odwołań |
+| **Pracownik**  | Specjalista zatrudniony w firmie | Widzi swój kalendarz i rezerwacje przypisane do siebie                                                            |
+| **Admin**      | Operator platformy               | Przegląda firmy i użytkowników, blokuje naruszające zasady                                                        |
 
 ---
 
@@ -61,17 +61,20 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 ## 3. User stories
 
 ### Epik: Konta i autentykacja
+
 - Jako **gość** mogę założyć konto (email, hasło, imię), aby rezerwować wizyty.
 - Jako **użytkownik** mogę się zalogować i pozostać zalogowanym (refresh token).
 - Jako **użytkownik** mogę zresetować hasło linkiem wysłanym na email.
 - Jako **klient** mogę przekształcić konto w konto firmowe, zakładając profil firmy.
 
 ### Epik: Katalog i wyszukiwanie
+
 - Jako **klient** mogę wyszukać firmy po kategorii, mieście i frazie.
 - Jako **klient** mogę zobaczyć firmy w mojej okolicy na mapie i posortować po odległości.
 - Jako **klient** mogę otworzyć profil firmy: opis, adres, cennik usług, pracowników.
 
 ### Epik: Rezerwacje
+
 - Jako **klient** wybieram usługę i pracownika (lub „dowolny") i widzę wolne terminy.
 - Jako **klient** rezerwuję termin; rezerwacja czeka na akceptację firmy.
 - Jako **klient** mogę odwołać wizytę, o ile mieszczę się w polityce odwołań firmy.
@@ -79,6 +82,7 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 - Jako **klient** dostaję email po potwierdzeniu/odrzuceniu/odwołaniu i przypomnienie ~24 h przed wizytą.
 
 ### Epik: Panel firmy
+
 - Jako **właściciel** tworzę profil firmy: nazwa, kategoria, opis, adres (geokodowany na mapie), polityka odwołań.
 - Jako **właściciel** zarządzam usługami (czas trwania, cena) i przypisuję je pracownikom.
 - Jako **właściciel** dodaję pracowników i ustawiam ich tygodniowe grafiki oraz urlopy.
@@ -87,6 +91,7 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 - Jako **pracownik** widzę własny kalendarz i szczegóły swoich wizyt.
 
 ### Epik: Administracja
+
 - Jako **admin** przeglądam listę firm i użytkowników.
 - Jako **admin** blokuję firmę naruszającą zasady — znika z wyszukiwarki, nie przyjmuje rezerwacji.
 
@@ -327,6 +332,7 @@ model Payment {
 ```
 
 Uwagi:
+
 - Wolne sloty **nie są materializowane w bazie** — wyliczane on-the-fly (sekcja 7).
 - Geo: zwykłe kolumny `lat`/`lng` + Haversine w SQL; PostGIS dopiero przy tysiącach firm.
 - `WorkingHours` dopuszcza wiele przedziałów na dzień (np. 9–13 i 15–19).
@@ -338,47 +344,49 @@ Uwagi:
 
 Moduły w `apps/api/src/app/`:
 
-| Moduł | Odpowiedzialność |
-|---|---|
-| `auth` | rejestracja, login, refresh, reset hasła; guardy JWT + role |
-| `users` | profil zalogowanego użytkownika |
-| `categories` | słownik kategorii (seed + odczyt) |
-| `businesses` | CRUD profilu firmy, wyszukiwarka publiczna |
-| `employees` | CRUD pracowników, grafiki (`WorkingHours`), urlopy (`TimeOff`) |
-| `services` | CRUD usług, przypisania pracownik↔usługa |
-| `availability` | wyliczanie wolnych slotów |
-| `bookings` | tworzenie/akceptacja/odwoływanie rezerwacji, maszyna stanów |
-| `notifications` | wysyłka emaili (Nodemailer) + cron przypomnień (`@nestjs/schedule`) |
-| `admin` | listy firm/użytkowników, blokowanie |
-| `prisma` | `PrismaService` (globalny) |
+| Moduł           | Odpowiedzialność                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `auth`          | rejestracja, login, refresh, reset hasła; guardy JWT + role                                       |
+| `users`         | profil zalogowanego użytkownika                                                                   |
+| `categories`    | słownik kategorii (seed + odczyt)                                                                 |
+| `businesses`    | CRUD profilu firmy, wyszukiwarka publiczna                                                        |
+| `employees`     | CRUD pracowników, grafiki (`WorkingHours`), urlopy (`TimeOff`)                                    |
+| `services`      | CRUD usług, przypisania pracownik↔usługa                                                          |
+| `availability`  | wyliczanie wolnych slotów                                                                         |
+| `bookings`      | tworzenie/akceptacja/odwoływanie rezerwacji, maszyna stanów                                       |
+| `notifications` | wysyłka emaili (Nodemailer) + cron przypomnień (`@nestjs/schedule`)                               |
+| `payments`      | zaliczki: `PaymentIntent` przy rezerwacji, webhook Stripe, cron wygaszania nieopłaconych (Faza 2) |
+| `admin`         | listy firm/użytkowników, blokowanie                                                               |
+| `prisma`        | `PrismaService` (globalny)                                                                        |
 
 ### Kontrakt API (REST, prefix `/api`)
 
-| Metoda i ścieżka | Rola | Opis |
-|---|---|---|
-| `POST /auth/register` | publiczne | rejestracja klienta |
-| `POST /auth/login` | publiczne | logowanie → access + refresh token |
-| `POST /auth/refresh` | publiczne | odświeżenie access tokena |
-| `POST /auth/forgot-password` / `POST /auth/reset-password` | publiczne | reset hasła mailem |
-| `GET /me` / `PATCH /me` | zalogowany | profil |
-| `GET /categories` | publiczne | słownik kategorii |
-| `GET /businesses` | publiczne | wyszukiwarka: `?category=&city=&q=&lat=&lng=&radiusKm=` |
-| `GET /businesses/:slug` | publiczne | profil firmy z usługami i pracownikami |
-| `POST /businesses` | zalogowany | założenie firmy (klient staje się właścicielem) |
-| `PATCH /businesses/mine` | właściciel | edycja profilu, polityki odwołań |
-| `GET/POST/PATCH/DELETE /businesses/mine/services…` | właściciel | CRUD usług |
-| `GET/POST/PATCH/DELETE /businesses/mine/employees…` | właściciel | CRUD pracowników |
-| `PUT /businesses/mine/employees/:id/working-hours` | właściciel | zapis całego grafiku tygodniowego |
-| `GET/POST/DELETE /businesses/mine/employees/:id/time-offs…` | właściciel | urlopy |
-| `GET /businesses/:slug/availability` | publiczne | wolne sloty: `?serviceId=&employeeId=&date=` |
-| `POST /bookings` | klient | utworzenie rezerwacji (`PENDING`) |
-| `GET /bookings/mine` | klient | moje wizyty |
-| `POST /bookings/:id/cancel` | klient | odwołanie (walidacja polityki firmy) |
-| `GET /businesses/mine/bookings` | właściciel/pracownik | kalendarz: `?from=&to=&employeeId=` |
-| `POST /bookings/:id/confirm` / `POST /bookings/:id/decline` | właściciel | decyzja o rezerwacji |
-| `POST /bookings/:id/cancel-by-business` | właściciel | odwołanie przez firmę (zawsze możliwe) |
-| `GET /admin/businesses` / `GET /admin/users` | admin | listy z paginacją |
-| `POST /admin/businesses/:id/block` / `unblock` | admin | moderacja |
+| Metoda i ścieżka                                            | Rola                 | Opis                                                                               |
+| ----------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+| `POST /auth/register`                                       | publiczne            | rejestracja klienta                                                                |
+| `POST /auth/login`                                          | publiczne            | logowanie → access + refresh token                                                 |
+| `POST /auth/refresh`                                        | publiczne            | odświeżenie access tokena                                                          |
+| `POST /auth/forgot-password` / `POST /auth/reset-password`  | publiczne            | reset hasła mailem                                                                 |
+| `GET /me` / `PATCH /me`                                     | zalogowany           | profil                                                                             |
+| `GET /categories`                                           | publiczne            | słownik kategorii                                                                  |
+| `GET /businesses`                                           | publiczne            | wyszukiwarka: `?category=&city=&q=&lat=&lng=&radiusKm=`                            |
+| `GET /businesses/:slug`                                     | publiczne            | profil firmy z usługami i pracownikami                                             |
+| `POST /businesses`                                          | zalogowany           | założenie firmy (klient staje się właścicielem)                                    |
+| `PATCH /businesses/mine`                                    | właściciel           | edycja profilu, polityki odwołań                                                   |
+| `GET/POST/PATCH/DELETE /businesses/mine/services…`          | właściciel           | CRUD usług                                                                         |
+| `GET/POST/PATCH/DELETE /businesses/mine/employees…`         | właściciel           | CRUD pracowników                                                                   |
+| `PUT /businesses/mine/employees/:id/working-hours`          | właściciel           | zapis całego grafiku tygodniowego                                                  |
+| `GET/POST/DELETE /businesses/mine/employees/:id/time-offs…` | właściciel           | urlopy                                                                             |
+| `GET /businesses/:slug/availability`                        | publiczne            | wolne sloty: `?serviceId=&employeeId=&date=`                                       |
+| `POST /bookings`                                            | klient               | utworzenie rezerwacji (`PENDING`); usługa z zaliczką zwraca `payment.clientSecret` |
+| `GET /bookings/mine`                                        | klient               | moje wizyty                                                                        |
+| `POST /bookings/:id/cancel`                                 | klient               | odwołanie (walidacja polityki firmy)                                               |
+| `GET /businesses/mine/bookings`                             | właściciel/pracownik | kalendarz: `?from=&to=&employeeId=`                                                |
+| `POST /bookings/:id/confirm` / `POST /bookings/:id/decline` | właściciel           | decyzja o rezerwacji                                                               |
+| `POST /bookings/:id/cancel-by-business`                     | właściciel           | odwołanie przez firmę (zawsze możliwe)                                             |
+| `POST /payments/webhook`                                    | Stripe               | zdarzenia płatności; bez JWT, uwierzytelnia podpis `stripe-signature` (Faza 2)     |
+| `GET /admin/businesses` / `GET /admin/users`                | admin                | listy z paginacją                                                                  |
+| `POST /admin/businesses/:id/block` / `unblock`              | admin                | moderacja                                                                          |
 
 Konwencje: DTO z walidacją `class-validator`, globalny `ValidationPipe`, guardy `JwtAuthGuard` + `RolesGuard`, błędy jako standardowe kody HTTP.
 
@@ -455,6 +463,16 @@ stateDiagram-v2
 
 Co 15 minut: znajdź `CONFIRMED` z `startsAt` w oknie 24–24,25 h od teraz i `reminderSentAt = null` → wyślij email, ustaw `reminderSentAt`. Drugi job: `CONFIRMED` z `endsAt < now` → `COMPLETED`.
 
+### Zaliczki a maszyna stanów (Faza 2, #51)
+
+Rezerwacja z zaliczką nie ma osobnego stanu — powstaje jako `PENDING`, tak samo jak każda inna, więc slot blokuje się już w chwili rezerwacji. To, czy została opłacona, niesie `Payment.status`:
+
+- `PENDING` → czeka na płatność. Firma nie może jej potwierdzić (`409`) i nie dostaje maila „nowa rezerwacja"; ten wychodzi dopiero po `payment_intent.succeeded`.
+- `SUCCEEDED` → rezerwacja zachowuje się jak zwykła `PENDING`, czeka na decyzję firmy.
+- `CANCELLED` → zaliczka przepadła bez opłacenia; rezerwacja jest wtedy `CANCELLED_BY_CLIENT`, ale bez maila do firmy, bo o tej rezerwacji nigdy się nie dowiedziała.
+
+Trzeci job (co 5 minut): `Payment` w `PENDING` starszy niż 15 minut → anuluj `PaymentIntent` w Stripie, ustaw `CANCELLED`, przestaw rezerwację na `CANCELLED_BY_CLIENT`. Anulowanie w Stripie idzie **przed** zapisem, żeby zwolniony slot nie mógł zostać opłacony po fakcie.
+
 ---
 
 ## 8. Środowisko deweloperskie i monorepo
@@ -482,10 +500,10 @@ npx prisma migrate dev         # migracje (uruchamiane z apps/api)
 
 ### Docker Compose (`docker-compose.yml` w root)
 
-| Serwis | Obraz | Port | Cel |
-|---|---|---|---|
-| `postgres` | `postgres:17` | 5432 | baza danych |
-| `mailpit` | `axllent/mailpit` | 8025 (UI) / 1025 (SMTP) | podgląd maili lokalnie |
+| Serwis     | Obraz             | Port                    | Cel                    |
+| ---------- | ----------------- | ----------------------- | ---------------------- |
+| `postgres` | `postgres:17`     | 5432                    | baza danych            |
+| `mailpit`  | `axllent/mailpit` | 8025 (UI) / 1025 (SMTP) | podgląd maili lokalnie |
 
 Api i web w dev uruchamiane przez `nx serve` (szybszy feedback niż kontenery); konteneryzacja api/web opisana zostanie przy fazie deploymentu.
 
@@ -512,15 +530,15 @@ STRIPE_WEBHOOK_SECRET=…
 
 ## 9. Roadmapa implementacji
 
-| Etap | Zakres | Efekt do pokazania |
-|---|---|---|
-| 1. Fundament | docker-compose, Prisma + migracja initial, moduł `auth`, guardy, shell frontu z logowaniem | rejestracja i logowanie działają E2E |
-| 2. Firmy | moduł `businesses` + `categories` (seed), zakładanie i edycja profilu firmy, geokodowanie adresu | firma widoczna pod `/:slug` |
-| 3. Usługi i pracownicy | CRUD usług, pracowników, przypisania, grafiki + urlopy | panel firmy kompletny bez kalendarza |
-| 4. Sloty i rezerwacje | `availability`, `bookings` z maszyną stanów, wizard rezerwacji, „moje wizyty" | pełny flow klient → firma |
-| 5. Kalendarz firmy | widok dzień/tydzień, akceptacja/odrzucanie, odwołania z polityką | firma pracuje na kalendarzu |
-| 6. Wyszukiwarka | lista + filtry + mapa Leaflet + sortowanie po odległości | odkrywanie firm |
-| 7. Emaile | Nodemailer + szablony, cron przypomnień i auto-`COMPLETED` | powiadomienia działają na Mailpit |
-| 8. Admin + polish | panel admina, blokowanie, walidacje brzegowe, seedy demo, README | MVP gotowe do pokazania |
+| Etap                   | Zakres                                                                                           | Efekt do pokazania                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| 1. Fundament           | docker-compose, Prisma + migracja initial, moduł `auth`, guardy, shell frontu z logowaniem       | rejestracja i logowanie działają E2E |
+| 2. Firmy               | moduł `businesses` + `categories` (seed), zakładanie i edycja profilu firmy, geokodowanie adresu | firma widoczna pod `/:slug`          |
+| 3. Usługi i pracownicy | CRUD usług, pracowników, przypisania, grafiki + urlopy                                           | panel firmy kompletny bez kalendarza |
+| 4. Sloty i rezerwacje  | `availability`, `bookings` z maszyną stanów, wizard rezerwacji, „moje wizyty"                    | pełny flow klient → firma            |
+| 5. Kalendarz firmy     | widok dzień/tydzień, akceptacja/odrzucanie, odwołania z polityką                                 | firma pracuje na kalendarzu          |
+| 6. Wyszukiwarka        | lista + filtry + mapa Leaflet + sortowanie po odległości                                         | odkrywanie firm                      |
+| 7. Emaile              | Nodemailer + szablony, cron przypomnień i auto-`COMPLETED`                                       | powiadomienia działają na Mailpit    |
+| 8. Admin + polish      | panel admina, blokowanie, walidacje brzegowe, seedy demo, README                                 | MVP gotowe do pokazania              |
 
 Każdy etap kończy się działającą aplikacją (`nx run-many -t test lint build` zielone).

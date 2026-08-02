@@ -5,8 +5,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { BookingStatus, Prisma, UserRole } from '@prisma/client';
+import { BookingStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
 import {
   addMinutes,
   isOnSlotGrid,
@@ -23,11 +24,17 @@ import {
   overlapsAny,
 } from '../availability/slots.util';
 import { AuthUser } from '../common/types/auth-user';
+import { depositAmountCents } from '../payments/deposit';
+import { PAYMENT_CURRENCY, paymentDeadline } from '../payments/payment-window';
+import { PaymentsService, UnpaidPayment } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { serviceClientFields } from '../services/services.service';
 import { BookingEventsService } from './booking-events.service';
 import { STATUS_LABELS, canTransition } from './booking-status';
-import { canClientCancel, cancellationWindowMessage } from './cancellation-policy';
+import {
+  canClientCancel,
+  cancellationWindowMessage,
+} from './cancellation-policy';
 import { BusinessBookingsQueryDto } from './dto/business-bookings-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
@@ -46,6 +53,21 @@ const bookingSelect = {
   status: true,
   clientNote: true,
 } satisfies Prisma.BookingSelect;
+
+// To samo plus świeżo utworzona zaliczka — POST /bookings potrzebuje jej id (żeby dopiąć
+// PaymentIntent) i createdAt (żeby policzyć termin ważności). Osobny select, bo confirm/decline
+// zwracają bookingSelect i nie mają po co wozić danych płatności.
+const createdBookingSelect = {
+  ...bookingSelect,
+  payment: { select: { id: true, createdAt: true } },
+} satisfies Prisma.BookingSelect;
+
+// Zaliczka pokazywana na listach rezerwacji. Bez client_secret — ten wychodzi wyłącznie
+// z odpowiedzi na POST /bookings, bo jest jednorazowym poświadczeniem do zapłaty i nie ma
+// prawa wyciec z listy, którą ogląda też firma.
+const paymentListSelect = {
+  select: { status: true, amountCents: true },
+} as const;
 
 // Karta wizyty na liście klienta (#28) — komplet danych do wyświetlenia bez dopytywania
 // o firmę/usługę/pracownika. Firma bez ownerId i isBlocked, tak jak w businessSelect;
@@ -75,10 +97,17 @@ const clientBookingSelect = {
   // Wystawiona recenzja albo null (#47). Bez tego pola #48 nie odróżni odbytej wizyty bez oceny
   // od już ocenionej, więc akcji „oceń wizytę" nie dałoby się pokazać warunkowo — a dopytywanie
   // o to osobnym requestem per wizyta mnożyłoby zapytania na całą listę.
-  review: { select: { id: true, rating: true, comment: true, createdAt: true } },
+  review: {
+    select: { id: true, rating: true, comment: true, createdAt: true },
+  },
+  // null = usługa bez zaliczki; PENDING = czeka na opłacenie (#53 pokazuje po tym stan
+  // płatności i przycisk „zapłać")
+  payment: paymentListSelect,
 } satisfies Prisma.BookingSelect;
 
-type ClientBooking = Prisma.BookingGetPayload<{ select: typeof clientBookingSelect }>;
+type ClientBooking = Prisma.BookingGetPayload<{
+  select: typeof clientBookingSelect;
+}>;
 
 // Kafelek kalendarza firmy (#31) — dane klienta (imię, telefon) i pracownika zamiast firmy,
 // bo to widok firmy patrzącej na własne rezerwacje, nie klienta. Bez business/canCancel —
@@ -92,6 +121,9 @@ const businessBookingSelect = {
   client: { select: { firstName: true, lastName: true, phone: true } },
   service: { select: serviceClientFields },
   employee: { select: { id: true, name: true } },
+  // firma widzi w kalendarzu, czy zaliczka wpłynęła — nieopłaconej rezerwacji i tak
+  // nie potwierdzi (409 w transition)
+  payment: paymentListSelect,
 } satisfies Prisma.BookingSelect;
 
 /**
@@ -121,6 +153,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: BookingEventsService,
+    private readonly payments: PaymentsService,
   ) {}
 
   /**
@@ -216,17 +249,32 @@ export class BookingsService {
 
   // decyzje firmy — dwa wejścia do tej samej maszyny stanów (SDD §7)
   confirm(userId: string, bookingId: string) {
-    return this.transition(userId, bookingId, BookingStatus.CONFIRMED, 'BUSINESS');
+    return this.transition(
+      userId,
+      bookingId,
+      BookingStatus.CONFIRMED,
+      'BUSINESS',
+    );
   }
 
   decline(userId: string, bookingId: string) {
-    return this.transition(userId, bookingId, BookingStatus.DECLINED, 'BUSINESS');
+    return this.transition(
+      userId,
+      bookingId,
+      BookingStatus.DECLINED,
+      'BUSINESS',
+    );
   }
 
   // Odwołania (#27). Ta sama maszyna stanów, inny aktor: klient odpowiada za własną
   // rezerwację i obowiązuje go okno z polityki firmy, firma odwołuje swoje bez ograniczeń.
   cancel(userId: string, bookingId: string) {
-    return this.transition(userId, bookingId, BookingStatus.CANCELLED_BY_CLIENT, 'CLIENT');
+    return this.transition(
+      userId,
+      bookingId,
+      BookingStatus.CANCELLED_BY_CLIENT,
+      'CLIENT',
+    );
   }
 
   cancelByBusiness(userId: string, bookingId: string) {
@@ -262,6 +310,9 @@ export class BookingsService {
         clientId: true,
         startsAt: true,
         business: { select: { ownerId: true, cancellationHours: true } },
+        payment: {
+          select: { id: true, status: true, stripePaymentIntentId: true },
+        },
       },
     });
     if (!booking) {
@@ -271,7 +322,9 @@ export class BookingsService {
     // odchodzimy od „cudze = 404" z ServicesService. „Cudza" znaczy co innego dla
     // każdego aktora: klienta wiąże clientId, firmę — właściciel firmy z rezerwacji.
     const isOwn =
-      actor === 'CLIENT' ? booking.clientId === userId : booking.business.ownerId === userId;
+      actor === 'CLIENT'
+        ? booking.clientId === userId
+        : booking.business.ownerId === userId;
     if (!isOwn) {
       throw new ForbiddenException('Brak uprawnień');
     }
@@ -281,6 +334,14 @@ export class BookingsService {
         `Rezerwacja jest ${STATUS_LABELS[from]} — nie można zmienić jej statusu`,
       );
     }
+    // Nieopłaconej zaliczki nie da się potwierdzić (#51). Bez tego właściciel przyjąłby
+    // wizytę, za którą nikt nie zapłacił, a cron i tak zwolniłby jej termin kwadrans później
+    // — firma miałaby w kalendarzu potwierdzenie bez pokrycia.
+    const unpaidDeposit = booking.payment?.status === PaymentStatus.PENDING;
+    if (unpaidDeposit && to === BookingStatus.CONFIRMED) {
+      throw new ConflictException('Rezerwacja czeka na opłacenie zaliczki');
+    }
+
     // Okno odwołania dotyczy wyłącznie klienta — firma odwołuje zawsze (SDD §7).
     if (
       actor === 'CLIENT' &&
@@ -306,11 +367,28 @@ export class BookingsService {
         select: bookingSelect,
       })
       .catch((e: unknown) => {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-          throw new ConflictException('Status rezerwacji zmienił się w międzyczasie');
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2025'
+        ) {
+          throw new ConflictException(
+            'Status rezerwacji zmienił się w międzyczasie',
+          );
         }
         throw e;
       });
+
+    // Rezerwacja przestała istnieć jako termin, a zaliczka wciąż czeka na zapłatę —
+    // trzeba unieważnić PaymentIntent. Inaczej klient mógłby odwołać wizytę i zaraz potem
+    // dokończyć płatność w otwartym formularzu Stripe'a, a my mielibyśmy pieniądze
+    // za zwolniony slot. Zwroty już pobranych zaliczek to osobny temat (#52).
+    if (unpaidDeposit && booking.payment) {
+      await this.releaseDeposit({
+        id: booking.payment.id,
+        bookingId,
+        stripePaymentIntentId: booking.payment.stripePaymentIntentId,
+      });
+    }
 
     // Dopiero po zatwierdzonym zapisie — stąd wychodzą maile z #37. Powiadomienie jest
     // efektem ubocznym, nie częścią operacji: rezerwacja jest już zmieniona, więc padnięta
@@ -318,6 +396,23 @@ export class BookingsService {
     // operacji na rezerwacji").
     this.notify(() => this.events.statusChanged(updated, from, to), updated.id);
     return updated;
+  }
+
+  /**
+   * Unieważnienie nieopłaconej zaliczki przy okazji innej, już zapisanej operacji.
+   * Best-effort z tego samego powodu, co notify(): zmiana statusu jest w bazie, więc błąd
+   * Stripe'a ma trafić do logu, a nie zamienić udane odwołanie w 500. Nic się nie gubi —
+   * płatność zostaje w PENDING, a cron wygaszania spróbuje ponownie.
+   */
+  private async releaseDeposit(payment: UnpaidPayment): Promise<void> {
+    try {
+      await this.payments.releaseUnpaid(payment);
+    } catch (e) {
+      this.logger.error(
+        `Nie udało się unieważnić zaliczki ${payment.id}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
   }
 
   /**
@@ -343,7 +438,9 @@ export class BookingsService {
     // /availability wystawia wyłącznie starty z siatki 15 min, więc cokolwiek innego
     // to ręcznie sklejony request, nie zniknięty slot → 400, nie 409.
     if (!isOnSlotGrid(startsAt)) {
-      throw new BadRequestException('startsAt musi być wielokrotnością 15 minut');
+      throw new BadRequestException(
+        'startsAt musi być wielokrotnością 15 minut',
+      );
     }
     if (startsAt <= new Date()) {
       throw new BadRequestException('startsAt musi być w przyszłości');
@@ -353,10 +450,17 @@ export class BookingsService {
     // pracownik — aktywny i przypisany do tej usługi. Firma po relacji, nie po fetchu,
     // więc zablokowana i nieistniejąca dają identyczne 404 (jak w AvailabilityService).
     const service = await this.prisma.service.findFirst({
-      where: { id: dto.serviceId, isActive: true, business: { isBlocked: false } },
+      where: {
+        id: dto.serviceId,
+        isActive: true,
+        business: { isBlocked: false },
+      },
       select: {
         businessId: true,
         durationMin: true,
+        priceCents: true,
+        depositType: true,
+        depositValue: true,
         employees: {
           where: { id: dto.employeeId, isActive: true },
           select: { id: true },
@@ -368,6 +472,21 @@ export class BookingsService {
     }
     if (service.employees.length === 0) {
       throw new NotFoundException('Nie znaleziono pracownika');
+    }
+
+    // null = usługa bez zaliczki, płatna w całości na miejscu. Kwotę liczy helper z payments,
+    // ten sam, którym waliduje się CRUD usług (#50) i który pokaże kwotę klientowi (#53) —
+    // gdyby każde miejsce zaokrąglało procent po swojemu, klient widziałby inną sumę,
+    // niż pobrałby Stripe.
+    const depositCents = depositAmountCents(service);
+
+    // Zanim cokolwiek trafi do bazy: rezerwacja, której nie da się opłacić, jest gorsza niż
+    // brak rezerwacji — zablokowałaby slot do czasu wygaśnięcia. Usługi bez zaliczki nie
+    // dotykają tej gałęzi w ogóle, więc działają jak dotąd także bez kluczy Stripe.
+    if (depositCents !== null && !this.payments.isEnabled) {
+      throw new ServiceUnavailableException(
+        'Płatności online są chwilowo niedostępne',
+      );
     }
 
     // długość wizyty zawsze z usługi — klient nie przysyła endsAt
@@ -394,7 +513,9 @@ export class BookingsService {
         endUtc: zonedWallClockToUtc(localDate, wh.endTime),
       }));
       if (!fitsAnyInterval(startsAt, endsAt, intervals)) {
-        throw new ConflictException('Wybrany termin jest poza grafikiem pracownika');
+        throw new ConflictException(
+          'Wybrany termin jest poza grafikiem pracownika',
+        );
       }
 
       // Urlopy i cudze rezerwacje nachodzące na [startsAt, endsAt) — warunek nachodzenia
@@ -423,7 +544,11 @@ export class BookingsService {
         throw new ConflictException('Wybrany termin jest już zajęty');
       }
 
-      // status zostaje domyślny PENDING ze schematu
+      // Status zostaje domyślny PENDING ze schematu — również dla rezerwacji z zaliczką.
+      // PENDING jest w BLOCKING_STATUSES, więc slot blokuje się w chwili commitu i to samo
+      // widzi /availability: „slot tymczasowo zablokowany" wychodzi bez osobnego stanu.
+      // Wiersz Payment powstaje tu, w jednej transakcji z rezerwacją; identyfikatory ze
+      // Stripe'a dopinamy niżej, po odpowiedzi z API.
       return tx.booking.create({
         data: {
           clientId: userId,
@@ -433,14 +558,86 @@ export class BookingsService {
           startsAt,
           endsAt,
           clientNote: dto.clientNote ?? null,
+          ...(depositCents === null
+            ? {}
+            : {
+                payment: {
+                  create: {
+                    amountCents: depositCents,
+                    currency: PAYMENT_CURRENCY,
+                  },
+                },
+              }),
         },
-        select: bookingSelect,
+        select: createdBookingSelect,
       });
     });
 
-    // Poza transakcją: firma dowiaduje się o rezerwacji dopiero wtedy, gdy ta na pewno
-    // istnieje (rollback nie może wysłać maila o czymś, czego nie ma).
-    this.notify(() => this.events.created(created), created.id);
-    return created;
+    const { payment, ...booking } = created;
+
+    if (depositCents === null || !payment) {
+      // Poza transakcją: firma dowiaduje się o rezerwacji dopiero wtedy, gdy ta na pewno
+      // istnieje (rollback nie może wysłać maila o czymś, czego nie ma).
+      this.notify(() => this.events.created(booking), booking.id);
+      return { ...booking, payment: null };
+    }
+
+    // Maila do firmy tu celowo nie ma — wyśle go webhook po opłaceniu zaliczki. Inaczej
+    // każdy porzucony checkout zgłaszałby firmie wizytę, która za kwadrans wygaśnie.
+    return {
+      ...booking,
+      payment: await this.startDepositPayment(
+        { id: payment.id, bookingId: booking.id, stripePaymentIntentId: null },
+        depositCents,
+        payment.createdAt,
+      ),
+    };
+  }
+
+  /**
+   * PaymentIntent dla świeżo utworzonej rezerwacji. Wołany **po** commicie, nigdy w środku
+   * transakcji: ta trzyma advisory lock na pracowniku, więc round-trip do Stripe'a
+   * zablokowałby na ten czas wszystkie rezerwacje u tego samego pracownika.
+   *
+   * Gdy Stripe zawiedzie, slot wraca od razu — czekanie na crona trzymałoby kwadrans wolny
+   * termin za rezerwację, o której klient już wie, że się nie udała.
+   */
+  private async startDepositPayment(
+    payment: UnpaidPayment,
+    amountCents: number,
+    createdAt: Date,
+  ) {
+    let paymentIntentId: string | null = null;
+    try {
+      const intent = await this.payments.createDepositIntent(
+        payment,
+        amountCents,
+      );
+      paymentIntentId = intent.paymentIntentId;
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { stripePaymentIntentId: intent.paymentIntentId },
+      });
+      return {
+        amountCents,
+        currency: PAYMENT_CURRENCY,
+        clientSecret: intent.clientSecret,
+        expiresAt: paymentDeadline(createdAt),
+      };
+    } catch (e) {
+      this.logger.error(
+        `Nie udało się rozpocząć płatności dla rezerwacji ${payment.bookingId}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+      // paymentIntentId bywa już ustawione, gdy padł dopiero zapis do bazy — wtedy jest co
+      // anulować po stronie Stripe'a.
+      await this.releaseDeposit({
+        ...payment,
+        stripePaymentIntentId: paymentIntentId,
+      });
+      throw new ServiceUnavailableException(
+        'Nie udało się rozpocząć płatności — spróbuj ponownie za chwilę',
+      );
+    }
   }
 }

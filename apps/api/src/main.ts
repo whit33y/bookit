@@ -10,9 +10,15 @@ import { validationExceptionFactory } from './app/common/errors/validation-excep
 import { ApiExceptionFilter } from './app/common/filters/api-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: Nest zachowuje surowe bajty żądania obok sparsowanego `body`. Potrzebuje ich
+  // weryfikacja podpisu webhooka Stripe (#51) — HMAC liczy się ze znaków sprzed parsowania,
+  // więc ponowny JSON.stringify(req.body) dałby inny podpis. Koszt to jeden bufor na żądanie.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
+  // Pipe zostaje globalny również dla trasy webhooka: jej handler nie ma @Body(), więc
+  // ValidationPipe nie ma czego sprawdzać i forbidNonWhitelisted nie odrzuci payloadu
+  // Stripe'a — wyłączanie pipe'a per trasa byłoby konfiguracją bez efektu.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

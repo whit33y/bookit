@@ -80,6 +80,7 @@ kolejne uruchomienie odświeża dane zamiast je duplikować.
 ### 5. Start aplikacji
 
 W **dwóch osobnych terminalach** (oba procesy działają w trybie ciągłym):
+
 ## Demo data
 
 Seed fills the database with categories, 6 businesses (services, employees, schedules),
@@ -176,8 +177,8 @@ Trzy zmienne **opcjonalne**: bez nich backend startuje normalnie, a usługi bez 
 jak dotąd — dzięki temu lokalny setup i CI nie wymagają konta Stripe. Próba pobrania zaliczki
 przy braku klucza kończy się błędem `503`, a nie wywaleniem startu jak przy `SMTP_*`.
 
-| Zmienna                  | Skąd                                                        | Kto używa                          |
-| ------------------------ | ----------------------------------------------------------- | ---------------------------------- |
+| Zmienna                  | Skąd                                                         | Kto używa                          |
+| ------------------------ | ------------------------------------------------------------ | ---------------------------------- |
 | `STRIPE_SECRET_KEY`      | sandbox → Developers → API keys → _Secret key_ (`sk_test_…`) | backend, PaymentIntent i refund    |
 | `STRIPE_PUBLISHABLE_KEY` | ten sam ekran, _Publishable key_ (`pk_test_…`)               | front, Payment Element (#53)       |
 | `STRIPE_WEBHOOK_SECRET`  | `stripe listen` — patrz niżej, **nie** dashboard             | weryfikacja podpisu webhooka (#51) |
@@ -219,8 +220,29 @@ Sztuczne zdarzenie do przetestowania handlera, w drugim terminalu obok działaj�
 stripe trigger payment_intent.succeeded
 ```
 
-> Endpoint `/api/payments/webhook` powstaje w #51 — do tego czasu `stripe listen` zwróci 404,
-> co i tak wystarcza do sprawdzenia, że tunel i logowanie CLI działają.
+#### Jak działa zaliczka (#51)
+
+Rezerwacja usługi z zaliczką tworzy `PaymentIntent` i zwraca `client_secret` w polu `payment`
+odpowiedzi `POST /api/bookings`. Rezerwacja od razu jest `PENDING`, więc **slot jest zajęty już
+w chwili rezerwacji** — klient nie traci terminu, dopóki płaci. Usługi bez zaliczki nie dotykają
+Stripe'a w ogóle i działają jak przed #51.
+
+Endpoint `POST /api/payments/webhook` obsługuje trzy zdarzenia:
+
+| Zdarzenie                       | Skutek                                                   |
+| ------------------------------- | -------------------------------------------------------- |
+| `payment_intent.succeeded`      | `Payment` → `SUCCEEDED`, mail „nowa rezerwacja" do firmy |
+| `payment_intent.canceled`       | `Payment` → `CANCELLED`, rezerwacja odwołana, slot wolny |
+| `payment_intent.payment_failed` | tylko log — klient może ponowić do końca okna płatności  |
+
+Handler jest **idempotentny**: powtórzone dostarczenie tego samego zdarzenia (`stripe events
+resend <evt_id>`) trafia w warunek `status: PENDING` i nie zmienia nic ani nie wysyła drugiego
+maila. Nieznane typy zdarzeń dostają `200`, żeby Stripe nie ponawiał ich w nieskończoność.
+
+Nieopłacona rezerwacja **wygasa po 15 minutach**: cron (co 5 min) anuluje `PaymentIntent`
+w Stripie, ustawia `Payment` na `CANCELLED` i zwalnia termin. Kolejność jest istotna — najpierw
+anulowanie w Stripie, dopiero potem zapis, więc klient nie zapłaci za slot, który już oddaliśmy.
+Do czasu opłacenia firma nie może potwierdzić takiej rezerwacji (`409`) i nie dostaje o niej maila.
 
 ## Codzienna praca
 
