@@ -11,12 +11,20 @@ import { of } from 'rxjs';
 import { settle } from '../testing-helpers';
 import AppMap from '../../shared/map/map';
 import BusinessProfile from './business-profile';
+import BusinessReviews from './business-reviews';
 
 // Podmiana mapy — Leaflet nie działa w jsdom (brak rozmiarów DOM).
 @Component({ selector: 'app-map', template: '' })
 class MapStub {
   readonly lat = input<number | null>(null);
   readonly lng = input<number | null>(null);
+}
+
+// Sekcja opinii strzela własnym żądaniem i ma osobny spec — tutaj tylko atrapa,
+// żeby testy profilu nie musiały obsługiwać HTTP, którego nie sprawdzają.
+@Component({ selector: 'app-business-reviews', template: '' })
+class ReviewsStub {
+  readonly slug = input.required<string>();
 }
 
 const MOCK = {
@@ -51,6 +59,8 @@ const MOCK = {
     },
   ],
   employees: [{ id: 'e1', name: 'Anna Kowalska' }],
+  avgRating: 4.9,
+  reviewCount: 132,
 };
 
 async function setup(slug = 'test-slug') {
@@ -67,8 +77,8 @@ async function setup(slug = 'test-slug') {
     ],
   })
     .overrideComponent(BusinessProfile, {
-      remove: { imports: [AppMap] },
-      add: { imports: [MapStub] },
+      remove: { imports: [AppMap, BusinessReviews] },
+      add: { imports: [MapStub, ReviewsStub] },
     })
     .compileComponents();
   const fixture = TestBed.createComponent(BusinessProfile);
@@ -86,6 +96,34 @@ describe('BusinessProfile', () => {
     expect(text).toContain('Studio Fryzur');
     expect(text.replace(/\s/g, ' ')).toContain('70 zł');
     expect(text).toContain('Anna Kowalska');
+  });
+
+  it('pokazuje średnią ocenę i liczbę opinii w nagłówku', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/businesses/test-slug').flush(MOCK);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(
+      'Ocena 4,9 na 5, 132 opinie',
+    );
+    expect((root.textContent ?? '').replace(/\s+/g, ' ')).toContain('4,9 (132)');
+  });
+
+  it('firma bez ocen nie dostaje atrapy „0,0"', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne('/api/businesses/test-slug')
+      .flush({ ...MOCK, avgRating: null, reviewCount: 0 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[role="img"]')).toBeNull();
+    expect(root.textContent).not.toContain('0,0');
+    // profil nadal się renderuje — brak ocen to nie brak firmy
+    expect(root.textContent).toContain('Studio Fryzur');
   });
 
   it('CTA usługi prowadzi do wizarda rezerwacji z wybraną usługą', async () => {
@@ -107,8 +145,8 @@ describe('BusinessProfile', () => {
       ],
     })
       .overrideComponent(BusinessProfile, {
-        remove: { imports: [AppMap] },
-        add: { imports: [MapStub] },
+        remove: { imports: [AppMap, BusinessReviews] },
+        add: { imports: [MapStub, ReviewsStub] },
       })
       .compileComponents();
 

@@ -4,7 +4,7 @@ import EmptyState from '../shared/ui/empty-state';
 import ErrorState from '../shared/ui/error-state';
 import LoadingState from '../shared/ui/loading-state';
 import { createAdminList } from './admin-list';
-import AdminPagination from './admin-pagination';
+import Pagination from '../shared/ui/pagination';
 import AdminStatusBadge from './admin-status-badge';
 import AdminToolbar from './admin-toolbar';
 
@@ -41,7 +41,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   selector: 'app-admin-users',
   imports: [
     AdminToolbar,
-    AdminPagination,
+    Pagination,
     AdminStatusBadge,
     LoadingState,
     ErrorState,
@@ -163,7 +163,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
           </table>
         </div>
 
-        <app-admin-pagination
+        <app-pagination
           [page]="list.page()"
           [limit]="list.limit()"
           [total]="list.total()"

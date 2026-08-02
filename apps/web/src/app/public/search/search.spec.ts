@@ -41,6 +41,8 @@ const RESPONSE = {
       lng: 21.01,
       category: { id: 'c1', name: 'Fryzjer', slug: 'fryzjer' },
       distanceKm: 3.14,
+      avgRating: 4.5,
+      reviewCount: 12,
     },
     {
       id: 'b2',
@@ -51,6 +53,9 @@ const RESPONSE = {
       lat: 52.24,
       lng: 21.02,
       category: { id: 'c1', name: 'Fryzjer', slug: 'fryzjer' },
+      // firma bez recenzji — backend zwraca null, nigdy 0
+      avgRating: null,
+      reviewCount: 0,
     },
   ],
   total: 2,
@@ -98,6 +103,25 @@ describe('Search', () => {
     expect(text).toContain('Salon Y');
     expect(text).toContain('Znaleziono 2 firm');
     expect(text.replace(/\s/g, ' ')).toContain('3,1 km');
+  });
+
+  it('karta z ocenami pokazuje gwiazdki i liczbę opinii, karta bez ocen nic', async () => {
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses?') && !r.url.includes('/mine'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const ratings = [...root.querySelectorAll('[role="img"]')];
+    // dokładnie jedna karta z oceną — druga firma nie ma recenzji (AC #49: bez atrapy „0.0")
+    expect(ratings).toHaveLength(1);
+    expect(ratings[0].getAttribute('aria-label')).toBe('Ocena 4,5 na 5, 12 opinii');
+
+    const cardY = root.querySelector('#card-b2');
+    expect(cardY?.querySelector('[role="img"]')).toBeNull();
+    expect(cardY?.textContent).not.toContain('0,0');
   });
 
   it('brak wyników → czytelny komunikat zamiast pustej listy', async () => {
