@@ -7,6 +7,12 @@ import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
 import Pagination from '../../shared/ui/pagination';
 import RatingStars from '../../shared/ui/rating-stars';
+import RatingDistributionChart, { RatingDistribution } from './rating-distribution';
+
+// Stan przed pierwszą odpowiedzią. Współdzielona instancja jest tu bezpieczna (w przeciwieństwie
+// do backendu, gdzie taki obiekt idzie prosto do odpowiedzi HTTP) — front tylko go czyta,
+// a sygnał zawsze podmienia całą wartość.
+const EMPTY_DISTRIBUTION: RatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
 // lustrzane typy backendu — GET /businesses/:slug/reviews (#47).
 // `author` przychodzi już zamaskowany („Anna K.") — front nie skraca nazwisk u siebie.
@@ -23,6 +29,8 @@ interface BusinessReviewsResponse {
   total: number;
   page: number;
   limit: number;
+  // rozkład 1–5 całej firmy, niezależny od numeru strony (#111)
+  ratingDistribution: RatingDistribution;
 }
 
 /**
@@ -35,7 +43,14 @@ interface BusinessReviewsResponse {
  */
 @Component({
   selector: 'app-business-reviews',
-  imports: [RatingStars, Pagination, LoadingState, ErrorState, EmptyState],
+  imports: [
+    RatingStars,
+    RatingDistributionChart,
+    Pagination,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+  ],
   template: `
     <h2 class="mb-4 mt-8 text-lg font-bold">Recenzje</h2>
 
@@ -44,6 +59,8 @@ interface BusinessReviewsResponse {
     } @else if (serverError(); as msg) {
       <app-error-state [message]="msg" [retryable]="true" (retry)="onRetry()" />
     } @else if (items().length) {
+      <app-rating-distribution [distribution]="distribution()" />
+
       <ul class="divide-y divide-stone-100">
         @for (review of items(); track review.id) {
           <li class="py-4 first:pt-0">
@@ -82,6 +99,7 @@ export default class BusinessReviews {
 
   protected readonly items = signal<BusinessReview[]>([]);
   protected readonly total = signal(0);
+  protected readonly distribution = signal<RatingDistribution>(EMPTY_DISTRIBUTION);
   protected readonly page = signal(1);
   protected readonly limit = signal(0);
   protected readonly loading = signal(true);
@@ -129,6 +147,9 @@ export default class BusinessReviews {
       if (requestId !== this.requestId) return; // odpowiedź na porzucone zapytanie
       this.items.set(res.items);
       this.total.set(res.total);
+      // rozkład jedzie tą samą odpowiedzią co lista — bez osobnego żądania, więc histogram
+      // i lista nigdy nie pokazują danych z dwóch różnych momentów
+      this.distribution.set(res.ratingDistribution ?? EMPTY_DISTRIBUTION);
       this.page.set(res.page);
       // limit dyktuje serwer (domyślnie 20) — pasek stron liczy z niego zakres „21–40 z 47"
       this.limit.set(res.limit);
