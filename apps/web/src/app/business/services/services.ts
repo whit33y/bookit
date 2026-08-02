@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import {
   FormField,
   form,
+  hidden,
   max,
   maxLength,
   min,
@@ -13,6 +14,11 @@ import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppFormField, {
   submitAuthForm,
 } from '../../public/form-field/form-field';
+import {
+  DepositType,
+  depositAmountCents,
+  depositError,
+} from '../../shared/deposit';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
@@ -30,6 +36,9 @@ interface Service {
   durationMin: number;
   priceCents: number;
   isActive: boolean;
+  // zaliczka (#50/#114) — oba pola null = usługa płatna w całości na miejscu
+  depositType: DepositType | null;
+  depositValue: number | null;
   employees: ServiceEmployee[];
 }
 // GET /businesses/mine/employees zwraca więcej pól — bierzemy id + name do multi-selecta
@@ -178,6 +187,128 @@ interface DeleteResult {
               </fieldset>
             }
 
+            <fieldset class="mt-5 rounded-lg border border-stone-200 p-4">
+              <legend class="px-1 text-sm font-medium">Zaliczka</legend>
+
+              <label class="inline-flex cursor-pointer items-center gap-3">
+                <input
+                  [formField]="serviceForm.depositEnabled"
+                  type="checkbox"
+                  role="switch"
+                  class="peer sr-only"
+                />
+                <span
+                  aria-hidden="true"
+                  class="relative h-6 w-11 rounded-full bg-stone-300 transition after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-brand-700 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2"
+                ></span>
+                <span class="text-sm font-medium">
+                  Pobieraj zaliczkę za tę usługę
+                </span>
+              </label>
+
+              @if (!serviceForm.depositKind().hidden()) {
+                <fieldset class="mt-4">
+                  <legend class="mb-1.5 block text-sm font-medium">
+                    Typ zaliczki
+                  </legend>
+                  <div class="flex flex-wrap gap-x-6 gap-y-1">
+                    <label class="flex items-center gap-2.5 py-1 text-sm">
+                      <input
+                        type="radio"
+                        name="depositKind"
+                        value="FIXED"
+                        class="h-4 w-4 border-stone-300 text-brand-700 focus:ring-brand-ring"
+                        [checked]="model().depositKind === 'FIXED'"
+                        (change)="setDepositKind('FIXED')"
+                      />
+                      <span>Kwota w zł</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 py-1 text-sm">
+                      <input
+                        type="radio"
+                        name="depositKind"
+                        value="PERCENT"
+                        class="h-4 w-4 border-stone-300 text-brand-700 focus:ring-brand-ring"
+                        [checked]="model().depositKind === 'PERCENT'"
+                        (change)="setDepositKind('PERCENT')"
+                      />
+                      <span>Procent ceny</span>
+                    </label>
+                  </div>
+                </fieldset>
+              }
+
+              @if (!serviceForm.depositAmountZl().hidden()) {
+                <div class="mt-4 sm:max-w-[220px]">
+                  <label
+                    for="depositAmountZl"
+                    class="mb-1.5 block text-sm font-medium"
+                  >
+                    Kwota zaliczki (zł)
+                  </label>
+                  <input
+                    [formField]="serviceForm.depositAmountZl"
+                    id="depositAmountZl"
+                    type="number"
+                    inputmode="decimal"
+                    step="0.01"
+                    [attr.aria-invalid]="depositAmountInvalid()"
+                    [attr.aria-describedby]="
+                      depositAmountInvalid() ? 'depositAmountZl-err' : null
+                    "
+                    class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
+                  />
+                  @if (depositAmountInvalid()) {
+                    <p
+                      id="depositAmountZl-err"
+                      class="mt-1.5 text-[13px] font-medium text-rose-600"
+                    >
+                      {{ serviceForm.depositAmountZl().errors()[0]?.message }}
+                    </p>
+                  }
+                </div>
+              }
+
+              @if (!serviceForm.depositPercent().hidden()) {
+                <div class="mt-4 sm:max-w-[220px]">
+                  <label
+                    for="depositPercent"
+                    class="mb-1.5 block text-sm font-medium"
+                  >
+                    Procent ceny (%)
+                  </label>
+                  <input
+                    [formField]="serviceForm.depositPercent"
+                    id="depositPercent"
+                    type="number"
+                    inputmode="numeric"
+                    [attr.aria-invalid]="depositPercentInvalid()"
+                    [attr.aria-describedby]="
+                      depositPercentInvalid()
+                        ? 'depositPercent-err'
+                        : depositPreviewCents()
+                          ? 'depositPercent-hint'
+                          : null
+                    "
+                    class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
+                  />
+                  @if (depositPercentInvalid()) {
+                    <p
+                      id="depositPercent-err"
+                      class="mt-1.5 text-[13px] font-medium text-rose-600"
+                    >
+                      {{ serviceForm.depositPercent().errors()[0]?.message }}
+                    </p>
+                  } @else if (depositPreviewCents(); as cents) {
+                    <p id="depositPercent-hint" class="mt-1.5 text-[13px] text-stone-600">
+                      Zaliczka wyniesie {{ cents | pricePln }} przy cenie
+                      {{ priceCents() | pricePln }}.
+                    </p>
+                  }
+                </div>
+              }
+            </fieldset>
+
             <div class="mt-6 flex gap-3">
               <button
                 type="submit"
@@ -227,6 +358,15 @@ interface DeleteResult {
                     <p class="mt-0.5 text-sm text-stone-500">
                       {{ s.durationMin }} min · {{ s.priceCents | pricePln }}
                     </p>
+                    @if (depositCents(s); as cents) {
+                      <p class="mt-0.5 text-[13px] text-stone-500">
+                        Zaliczka: {{ cents | pricePln }}@if (
+                          s.depositType === 'PERCENT'
+                        ) {
+                          ({{ s.depositValue }}% ceny)
+                        }
+                      </p>
+                    }
                     @if (s.employees.length) {
                       <p class="mt-0.5 text-[13px] text-stone-500">
                         Pracownicy:
@@ -296,6 +436,15 @@ export default class BusinessServices {
     description: '',
     durationMin: 30,
     priceZl: 0,
+    // zaliczka rozbita na cztery pola formularza, bo backendowa para (typ + jedna liczba
+    // znacząca inaczej dla FIXED i PERCENT) nie da się sensownie zwalidować jednym polem;
+    // scalenie z powrotem do pary robi onSubmit()
+    depositEnabled: false,
+    depositKind: 'FIXED' as DepositType,
+    /** tryb FIXED — w złotych, jak priceZl; na grosze przeliczamy przy wysyłce */
+    depositAmountZl: 0,
+    /** tryb PERCENT — całkowity procent ceny */
+    depositPercent: 10,
   });
 
   protected readonly serviceForm = form(this.model, (p) => {
@@ -327,6 +476,61 @@ export default class BusinessServices {
         ? undefined
         : { kind: 'grosze', message: 'Cena może mieć maksymalnie 2 miejsca po przecinku' };
     });
+
+    // Pole ukryte nie wnosi walidacji do formularza — bez tego wyłączona zaliczka
+    // (albo drugi, nieaktywny tryb) blokowałaby zapis usługi swoim `required`.
+    hidden(p.depositKind, { when: ({ valueOf }) => !valueOf(p.depositEnabled) });
+    hidden(p.depositAmountZl, {
+      when: ({ valueOf }) =>
+        !valueOf(p.depositEnabled) || valueOf(p.depositKind) !== 'FIXED',
+    });
+    hidden(p.depositPercent, {
+      when: ({ valueOf }) =>
+        !valueOf(p.depositEnabled) || valueOf(p.depositKind) !== 'PERCENT',
+    });
+
+    required(p.depositAmountZl, { message: 'Podaj kwotę zaliczki' });
+    // jak przy cenie: grosze muszą wyjść całkowite
+    validate(p.depositAmountZl, ({ value }) => {
+      const v = value();
+      if (v == null) return undefined;
+      return Math.abs(v * 100 - Math.round(v * 100)) < 1e-6
+        ? undefined
+        : {
+            kind: 'grosze',
+            message: 'Kwota zaliczki może mieć maksymalnie 2 miejsca po przecinku',
+          };
+    });
+    // reguły krzyżowe (zaliczka ↔ cena) liczy lustro backendu — jeden zestaw komunikatów
+    validate(p.depositAmountZl, ({ value, valueOf }) => {
+      const v = value();
+      if (v == null) return undefined;
+      const message = depositError({
+        depositType: 'FIXED',
+        depositValue: Math.round(v * 100),
+        priceCents: Math.round((valueOf(p.priceZl) ?? 0) * 100),
+      });
+      return message ? { kind: 'deposit', message } : undefined;
+    });
+
+    required(p.depositPercent, { message: 'Podaj procent ceny' });
+    validate(p.depositPercent, ({ value }) => {
+      const v = value();
+      return v == null || Number.isInteger(v)
+        ? undefined
+        : { kind: 'integer', message: 'Podaj pełny procent, bez ułamków' };
+    });
+    // pokrywa i zakres 1–100, i procent zaokrąglający się do 0 gr przy niskiej cenie
+    validate(p.depositPercent, ({ value, valueOf }) => {
+      const v = value();
+      if (v == null || !Number.isInteger(v)) return undefined;
+      const message = depositError({
+        depositType: 'PERCENT',
+        depositValue: v,
+        priceCents: Math.round((valueOf(p.priceZl) ?? 0) * 100),
+      });
+      return message ? { kind: 'deposit', message } : undefined;
+    });
   });
 
   protected readonly durationInvalid = computed(
@@ -338,6 +542,39 @@ export default class BusinessServices {
     () =>
       this.serviceForm.priceZl().touched() && this.serviceForm.priceZl().invalid(),
   );
+  protected readonly depositAmountInvalid = computed(
+    () =>
+      this.serviceForm.depositAmountZl().touched() &&
+      this.serviceForm.depositAmountZl().invalid(),
+  );
+  protected readonly depositPercentInvalid = computed(
+    () =>
+      this.serviceForm.depositPercent().touched() &&
+      this.serviceForm.depositPercent().invalid(),
+  );
+
+  /** Cena z formularza w groszach — do podglądu zaliczki przez PricePlnPipe. */
+  protected readonly priceCents = computed(() =>
+    Math.round((this.model().priceZl ?? 0) * 100),
+  );
+
+  /** Podgląd kwoty zaliczki procentowej — ta sama funkcja, która liczy kwotę na liście
+   *  i (po stronie backendu) kwotę PaymentIntenta, więc właściciel widzi dokładnie to,
+   *  co zapłaci klient. */
+  protected readonly depositPreviewCents = computed(() => {
+    const m = this.model();
+    if (!m.depositEnabled || m.depositKind !== 'PERCENT') return null;
+    // Tylko dla procentu przechodzącego walidację. Bez tego warunku podgląd reklamowałby
+    // kwotę, której zapis i tak odrzuci (150% ceny → „270 zł przy cenie 180 zł"), i to zanim
+    // pole zostanie dotknięte i pokaże błąd. Poprawny procent gwarantuje kwotę >= 1 gr,
+    // więc niepusty wynik zawsze ma co pokazać.
+    if (this.serviceForm.depositPercent().invalid()) return null;
+    return depositAmountCents({
+      depositType: 'PERCENT',
+      depositValue: m.depositPercent,
+      priceCents: this.priceCents(),
+    });
+  });
 
   constructor() {
     this.load();
@@ -366,6 +603,21 @@ export default class BusinessServices {
     return s.employees.map((e) => e.name).join(', ');
   }
 
+  /** Kwota zaliczki wiersza listy w groszach (procent przeliczony z ceny) albo null. */
+  protected depositCents(s: Service): number | null {
+    return depositAmountCents({
+      depositType: s.depositType,
+      depositValue: s.depositValue,
+      priceCents: s.priceCents,
+    });
+  }
+
+  // radio nie ma bindingu w Signal Forms — model jest sygnałem, więc formularz i tak
+  // zobaczy zmianę (ten sam wzorzec co toggleEmployee)
+  protected setDepositKind(kind: DepositType): void {
+    this.model.update((m) => ({ ...m, depositKind: kind }));
+  }
+
   protected isSelected(id: string): boolean {
     return this.selectedEmployeeIds().includes(id);
   }
@@ -377,7 +629,16 @@ export default class BusinessServices {
   }
 
   protected openCreate(): void {
-    this.model.set({ name: '', description: '', durationMin: 30, priceZl: 0 });
+    this.model.set({
+      name: '',
+      description: '',
+      durationMin: 30,
+      priceZl: 0,
+      depositEnabled: false,
+      depositKind: 'FIXED',
+      depositAmountZl: 0,
+      depositPercent: 10,
+    });
     this.selectedEmployeeIds.set([]);
     this.originalEmployeeIds = [];
     this.editingId.set(null);
@@ -391,6 +652,13 @@ export default class BusinessServices {
       description: s.description ?? '',
       durationMin: s.durationMin,
       priceZl: s.priceCents / 100,
+      depositEnabled: s.depositType !== null,
+      // nieaktywny tryb dostaje wartość domyślną, żeby przełączenie radia nie startowało od pustego pola
+      depositKind: s.depositType ?? 'FIXED',
+      depositAmountZl:
+        s.depositType === 'FIXED' ? (s.depositValue ?? 0) / 100 : 0,
+      depositPercent:
+        s.depositType === 'PERCENT' ? (s.depositValue ?? 10) : 10,
     });
     const ids = s.employees.map((e) => e.id);
     this.selectedEmployeeIds.set(ids);
@@ -411,10 +679,22 @@ export default class BusinessServices {
       const m = this.model();
       // ponytail: puste opcjonalne pole pomijamy → wyczyszczenie opisu przy edycji
       // nie jest wspierane (poza MVP), tak jak telefon w ustawieniach firmy
+      // Zaliczkę wysyłamy zawsze w komplecie — także jako para nulli, gdy wyłączona.
+      // Backend rewaliduje zaliczkę przy każdej zmianie ceny (services.service.ts), więc
+      // pominięcie tych pól przy obniżce ceny kończyłoby się 400 od starej wartości z bazy.
+      const deposit = m.depositEnabled
+        ? m.depositKind === 'PERCENT'
+          ? { depositType: 'PERCENT' as const, depositValue: m.depositPercent }
+          : {
+              depositType: 'FIXED' as const,
+              depositValue: Math.round(m.depositAmountZl * 100),
+            }
+        : { depositType: null, depositValue: null };
       const payload = {
         name: m.name,
         durationMin: m.durationMin,
         priceCents: Math.round(m.priceZl * 100),
+        ...deposit,
         ...(m.description ? { description: m.description } : {}),
       };
       const id = this.editingId();
