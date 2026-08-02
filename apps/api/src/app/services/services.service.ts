@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DepositFields, depositError } from '../payments/deposit';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -16,6 +17,10 @@ export const serviceClientFields = {
   description: true,
   durationMin: true,
   priceCents: true,
+  // zaliczka jest w części klienckiej, nie tylko właścicielskiej: publiczny profil (#11)
+  // i wizard (#53) muszą pokazać jej kwotę, zanim klient potwierdzi rezerwację
+  depositType: true,
+  depositValue: true,
 } satisfies Prisma.ServiceSelect;
 
 // widok właściciela — dodatkowo isActive (publiczny profil #11 filtruje isActive osobno)
@@ -94,8 +99,22 @@ export class ServicesService {
     }
   }
 
+  // reguły zaliczki żyją w payments/deposit.ts (te same liczą kwotę PaymentIntenta w #51);
+  // tutaj tylko mapowanie komunikatu na 400
+  private assertDepositValid(fields: DepositFields): void {
+    const message = depositError(fields);
+    if (message) {
+      throw new BadRequestException(message);
+    }
+  }
+
   async create(userId: string, dto: CreateServiceDto) {
     const businessId = await this.resolveBusinessId(userId);
+    this.assertDepositValid({
+      depositType: dto.depositType ?? null,
+      depositValue: dto.depositValue ?? null,
+      priceCents: dto.priceCents,
+    });
     return this.prisma.service.create({
       data: { ...dto, businessId },
       select: serviceSelect,
@@ -104,6 +123,31 @@ export class ServicesService {
 
   async update(userId: string, id: string, dto: UpdateServiceDto) {
     const businessId = await this.resolveBusinessId(userId);
+    // Zaliczka to reguła krzyżowa (typ ↔ wartość ↔ cena), a PATCH bywa częściowy: samo
+    // obniżenie ceny może unieważnić zaliczkę FIXED zapisaną wcześniej. Gdy body dotyka
+    // któregokolwiek z tych pól, dobieramy stan bieżący i walidujemy całość po scaleniu.
+    if (
+      'depositType' in dto ||
+      'depositValue' in dto ||
+      dto.priceCents !== undefined
+    ) {
+      const current = await this.prisma.service.findFirst({
+        where: { id, businessId },
+        select: { depositType: true, depositValue: true, priceCents: true },
+      });
+      if (!current) {
+        throw new NotFoundException('Nie znaleziono usługi');
+      }
+      // obecność klucza, nie `??` — jawny null czyści zaliczkę i musi być rozróżnialny
+      // od pola nieprzesłanego, które zostawia wartość z bazy
+      this.assertDepositValid({
+        depositType:
+          'depositType' in dto ? dto.depositType ?? null : current.depositType,
+        depositValue:
+          'depositValue' in dto ? dto.depositValue ?? null : current.depositValue,
+        priceCents: dto.priceCents ?? current.priceCents,
+      });
+    }
     // updateMany zamiast update — pozwala scope'ować po businessId (własność) w WHERE;
     // cudza/nieistniejąca usługa → count 0 → 404
     const { count } = await this.prisma.service.updateMany({

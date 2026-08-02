@@ -31,7 +31,8 @@
     "leaflet": "^1.9.4",
     "nodemailer": "^9.0.3",
     "reflect-metadata": "^0.2.0",
-    "rxjs": "~7.8.0"
+    "rxjs": "~7.8.0",
+    "stripe": "^22.4.0"
   },
   "devDependencies": {
     "@analogjs/vite-plugin-angular": "2.6.3",
