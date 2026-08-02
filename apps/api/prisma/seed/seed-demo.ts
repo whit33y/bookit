@@ -182,6 +182,10 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
         durationMin: service.durationMin,
         priceCents: service.priceCents,
         isActive: true,
+        // jawne null, nie undefined: Prisma pomija undefined, więc usługa, która straciła
+        // zaliczkę w danych demo, zostałaby z nią w bazie po ponownym seedzie
+        depositType: service.depositType ?? null,
+        depositValue: service.depositValue ?? null,
       };
       // Service też nie ma naturalnego klucza unikalnego — szukamy po nazwie w obrębie firmy
       const existing = await prisma.service.findFirst({

@@ -1,5 +1,6 @@
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, DepositType } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
+import { depositError } from '../../src/app/payments/deposit';
 import {
   CATEGORIES,
   DEMO_BOOKINGS,
@@ -83,6 +84,32 @@ describe('dane demo', () => {
         }
       }
     }
+  });
+
+  // te same reguły pilnują CHECK-i na tabeli Service — bez tego testu wywaliłby się dopiero
+  // `prisma db seed`, i to komunikatem z Postgresa, nie wskazaniem usługi w danych
+  it('zaliczki w danych demo spełniają reguły z payments/deposit.ts (#50)', () => {
+    for (const business of DEMO_BUSINESSES) {
+      for (const service of business.services) {
+        expect(
+          depositError({
+            depositType: service.depositType ?? null,
+            depositValue: service.depositValue ?? null,
+            priceCents: service.priceCents,
+          }),
+        ).toBeNull();
+      }
+    }
+  });
+
+  // #51 i #53 potrzebują w bazie obu odmian zaliczki, żeby dało się je przeklikać bez
+  // ręcznego dłubania w danych
+  it('dane demo mają usługę z zaliczką procentową i z kwotową', () => {
+    const withDeposit = DEMO_BUSINESSES.flatMap((b) => b.services).filter(
+      (s) => s.depositType,
+    );
+    expect(withDeposit.map((s) => s.depositType)).toContain(DepositType.PERCENT);
+    expect(withDeposit.map((s) => s.depositType)).toContain(DepositType.FIXED);
   });
 
   it('rezerwacje i urlopy wskazują istniejące firmy, pracowników, usługi i klientów', () => {

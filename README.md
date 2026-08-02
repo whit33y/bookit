@@ -154,9 +154,9 @@ Pełna lista 12 kont, 6 firm i zaseedowanych rezerwacji: [docs/users.md](docs/us
 
 ## Zmienne środowiskowe
 
-Plik `apps/api/.env` (wzorzec: `apps/api/.env.example`). Wszystkie są wymagane — brak
-`SMTP_*` lub `MAIL_FROM` zatrzyma start backendu, brak pozostałych ujawni się przy pierwszym
-żądaniu, które ich potrzebuje (logowanie, wysyłka maila).
+Plik `apps/api/.env` (wzorzec: `apps/api/.env.example`). Poza `STRIPE_*` wszystkie są
+wymagane — brak `SMTP_*` lub `MAIL_FROM` zatrzyma start backendu, brak pozostałych ujawni się
+przy pierwszym żądaniu, które ich potrzebuje (logowanie, wysyłka maila).
 
 | Zmienna              | Domyślnie (dev)                                    | Do czego                                |
 | -------------------- | -------------------------------------------------- | --------------------------------------- |
@@ -169,6 +169,58 @@ Plik `apps/api/.env` (wzorzec: `apps/api/.env.example`). Wszystkie są wymagane 
 | `APP_URL`            | `http://localhost:4200`                            | baza linków w mailach (np. reset hasła) |
 
 Opcjonalnie `PORT` — port API, domyślnie `3000`.
+
+### Stripe (płatności, #50)
+
+Trzy zmienne **opcjonalne**: bez nich backend startuje normalnie, a usługi bez zaliczki działają
+jak dotąd — dzięki temu lokalny setup i CI nie wymagają konta Stripe. Próba pobrania zaliczki
+przy braku klucza kończy się błędem `503`, a nie wywaleniem startu jak przy `SMTP_*`.
+
+| Zmienna                  | Skąd                                                        | Kto używa                          |
+| ------------------------ | ----------------------------------------------------------- | ---------------------------------- |
+| `STRIPE_SECRET_KEY`      | sandbox → Developers → API keys → _Secret key_ (`sk_test_…`) | backend, PaymentIntent i refund    |
+| `STRIPE_PUBLISHABLE_KEY` | ten sam ekran, _Publishable key_ (`pk_test_…`)               | front, Payment Element (#53)       |
+| `STRIPE_WEBHOOK_SECRET`  | `stripe listen` — patrz niżej, **nie** dashboard             | weryfikacja podpisu webhooka (#51) |
+
+Sprawdzenie, że klucz testowy działa — utworzenie i anulowanie PaymentIntenta na 10 zł:
+
+```sh
+export $(grep STRIPE_SECRET_KEY apps/api/.env | xargs)
+curl -s https://api.stripe.com/v1/payment_intents \
+  -u "$STRIPE_SECRET_KEY:" -d amount=1000 -d currency=pln -d "payment_method_types[]=card"
+curl -s -X POST https://api.stripe.com/v1/payment_intents/<id-z-odpowiedzi>/cancel \
+  -u "$STRIPE_SECRET_KEY:"
+```
+
+Zaliczkę ustawia się per usługa (`depositType` + `depositValue`): `PERCENT` z wartością 1–100
+liczy procent ceny, `FIXED` to kwota w groszach, nie wyższa niż cena. Oba pola puste = usługa
+bez zaliczki. W danych demo zaliczkę ma „Koloryzacja" (30%) i „Masaż gorącymi kamieniami" (50 zł).
+
+#### Webhooki lokalnie — Stripe CLI
+
+Stripe **nie potrafi dostarczyć zdarzenia na `localhost`**, bo endpoint musi być publicznie
+osiągalny. Sekret podpisu z dashboardu (Developers → Webhooks) jest więc lokalnie bezużyteczny —
+przyda się dopiero przy deployu z publicznym URL-em. W developmencie tunel zestawia Stripe CLI:
+
+```sh
+brew install stripe                 # macOS; inne systemy: github.com/stripe/stripe-cli
+stripe login                        # jednorazowo, otwiera przeglądarkę
+stripe listen --forward-to localhost:3000/api/payments/webhook
+```
+
+`stripe listen` wypisuje na start **własny** sekret podpisu (`whsec_…`) — to jego trzeba wkleić
+do `STRIPE_WEBHOOK_SECRET` w `apps/api/.env` i zrestartować backend. Sekret jest **ważny tylko
+przez czas tej sesji CLI**: po `Ctrl-C` i ponownym `stripe listen` dostaniesz nowy i trzeba go
+podmienić, inaczej weryfikacja podpisu zacznie odrzucać zdarzenia.
+
+Sztuczne zdarzenie do przetestowania handlera, w drugim terminalu obok działającego `listen`:
+
+```sh
+stripe trigger payment_intent.succeeded
+```
+
+> Endpoint `/api/payments/webhook` powstaje w #51 — do tego czasu `stripe listen` zwróci 404,
+> co i tak wystarcza do sprawdzenia, że tunel i logowanie CLI działają.
 
 ## Codzienna praca
 

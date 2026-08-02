@@ -109,6 +109,7 @@ erDiagram
     Employee ||--o{ Booking : ""
     Service ||--o{ Booking : ""
     Employee }o--o{ Service : "wykonuje"
+    Booking ||--o| Payment : "zaliczka (Faza 2)"
 ```
 
 ### Szkic `schema.prisma`
@@ -128,6 +129,19 @@ enum UserRole {
   OWNER
   EMPLOYEE
   ADMIN
+}
+
+// Faza 2, płatności (#50)
+enum DepositType {
+  FIXED
+  PERCENT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
 }
 
 enum BookingStatus {
@@ -234,8 +248,12 @@ model Service {
   name        String
   description String?
   durationMin Int
-  priceCents  Int // cena informacyjna, płatność na miejscu
+  priceCents  Int // pełna cena; na miejscu klient dopłaca ją pomniejszoną o zaliczkę
   isActive    Boolean @default(true)
+
+  // zaliczka (#50); oba pola null = usługa płatna w całości na miejscu
+  depositType  DepositType?
+  depositValue Int? // FIXED → grosze, PERCENT → 1–100
 
   business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
   employees Employee[]
@@ -282,10 +300,29 @@ model Booking {
   business Business @relation(fields: [businessId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
   service  Service  @relation(fields: [serviceId], references: [id])
+  payment  Payment? // Faza 2 (#50); brak = usługa bez zaliczki
 
   @@index([employeeId, startsAt])
   @@index([clientId])
   @@index([businessId, startsAt])
+}
+
+// Faza 2, płatności (#50): zaliczka za rezerwację, 1:1 z Booking
+model Payment {
+  id                    String        @id @default(uuid())
+  bookingId             String        @unique
+  amountCents           Int
+  currency              String        @default("pln")
+  status                PaymentStatus @default(PENDING)
+  stripePaymentIntentId String?       @unique // idempotentny lookup w webhooku (#51)
+  stripeChargeId        String? // potrzebne do refundu (#52)
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 ```
 
@@ -461,6 +498,14 @@ JWT_REFRESH_SECRET=…
 SMTP_HOST=localhost
 SMTP_PORT=1025
 MAIL_FROM=no-reply@bookit.local
+APP_URL=http://localhost:4200
+# Faza 2, płatności (#50) — opcjonalne: bez nich backend startuje, a usługi
+# bez zaliczki działają normalnie
+STRIPE_SECRET_KEY=…
+STRIPE_PUBLISHABLE_KEY=…
+# lokalnie z `stripe listen` (Stripe CLI) — Stripe nie dostarcza zdarzeń na localhost,
+# a sekret CLI jest ważny tylko przez czas sesji; z dashboardu dopiero po deployu
+STRIPE_WEBHOOK_SECRET=…
 ```
 
 ---

@@ -23,6 +23,19 @@ enum BookingStatus {
   COMPLETED
 }
 
+enum DepositType {
+  FIXED // depositValue w groszach
+  PERCENT // depositValue w procentach ceny (1–100)
+}
+
+enum PaymentStatus {
+  PENDING // PaymentIntent utworzony, czekamy na potwierdzenie webhookiem (#51)
+  SUCCEEDED
+  FAILED
+  CANCELLED // rezerwacja wygasła nieopłacona (#51)
+  // REFUNDED dołoży #52 razem z prowizją platformy i kwotą zwrotu
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -120,8 +133,14 @@ model Service {
   name        String
   description String?
   durationMin Int
-  priceCents  Int // cena informacyjna, płatność na miejscu
+  priceCents  Int // pełna cena usługi w groszach; na miejscu klient dopłaca ją pomniejszoną o zaliczkę
   isActive    Boolean @default(true)
+
+  // null = usługa bez zaliczki, cała płatność na miejscu. Oba pola ustawiane razem —
+  // pilnują tego CHECK-i w migracji, bo sam typ bez kwoty nie daje się przeliczyć na
+  // PaymentIntent, a #51 wywaliłoby się dopiero wtedy, gdy klient jest już w kasie.
+  depositType  DepositType?
+  depositValue Int?
 
   business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
   employees Employee[]
@@ -171,6 +190,7 @@ model Booking {
   employee Employee @relation(fields: [employeeId], references: [id])
   service  Service  @relation(fields: [serviceId], references: [id])
   review   Review?
+  payment  Payment?
 
   @@index([employeeId, startsAt])
   @@index([clientId])
@@ -201,4 +221,25 @@ model Review {
   // i lista recenzji firmy idą wtedy po jednej tabeli, bez joina przy każdym wyniku wyszukiwarki.
   @@index([businessId, createdAt]) // publiczna lista recenzji firmy z paginacją (#47)
   @@index([clientId])
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  bookingId             String        @unique // 1:1 z rezerwacją — dokładnie jedna zaliczka na wizytę
+  amountCents           Int // kwota zaliczki wyliczona przy rezerwacji, w groszach
+  currency              String        @default("pln")
+  status                PaymentStatus @default(PENDING)
+  // nullable, bo wiersz powstaje w tej samej transakcji co rezerwacja, a identyfikatory
+  // ze Stripe dopinamy po odpowiedzi z API; @unique daje webhookowi idempotentny lookup (#51)
+  stripePaymentIntentId String?       @unique
+  stripeChargeId        String? // potrzebne do refundu (#52)
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  // Cascade jak w Review: seed kasuje i odtwarza rezerwacje firm demo przy każdym przebiegu —
+  // przy RESTRICT drugie `prisma db seed` wywaliłoby się na kluczu obcym.
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt]) // cron wygaszania nieopłaconych rezerwacji (#51)
 }

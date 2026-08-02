@@ -1,4 +1,4 @@
-import { BookingStatus, UserRole } from '@prisma/client';
+import { BookingStatus, DepositType, UserRole } from '@prisma/client';
 
 /**
  * Deklaratywny opis danych demo — bez ani jednego wywołania Prismy, żeby dało się go
@@ -53,6 +53,10 @@ export interface DemoService {
   priceCents: number;
   /** pracownicy wykonujący usługę — nazwy z `employees` tej samej firmy */
   employeeNames: string[];
+  /** zaliczka (#50); pominięta = usługa bez zaliczki, płatna w całości na miejscu */
+  depositType?: DepositType;
+  /** FIXED → grosze, PERCENT → procent ceny */
+  depositValue?: number;
 }
 
 export interface DemoBusiness {
@@ -275,12 +279,15 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
         priceCents: 12000,
         employeeNames: ['Ewa Zielińska'],
       },
+      // zaliczka procentowa (#50) — dłuższy zabieg, na którym puste okno najwięcej kosztuje
       {
         name: 'Koloryzacja',
         description: 'Farbowanie całości wraz z pielęgnacją i modelowaniem.',
         durationMin: 90,
         priceCents: 22000,
         employeeNames: ['Ewa Zielińska'],
+        depositType: DepositType.PERCENT,
+        depositValue: 30,
       },
     ],
   },
@@ -456,6 +463,7 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
         priceCents: 16000,
         employeeNames: ['Paweł Górski', 'Iwona Pawlak'],
       },
+      // zaliczka kwotowa (#50) — druga odmiana obok procentowej z „Koloryzacji”
       {
         name: 'Masaż gorącymi kamieniami',
         description:
@@ -463,6 +471,8 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
         durationMin: 90,
         priceCents: 25000,
         employeeNames: ['Iwona Pawlak'],
+        depositType: DepositType.FIXED,
+        depositValue: 5000,
       },
       {
         name: 'Masaż pleców',

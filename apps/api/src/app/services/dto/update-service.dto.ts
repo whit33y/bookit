@@ -1,5 +1,7 @@
+import { DepositType } from '@prisma/client';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -40,4 +42,17 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  // Zaliczka (#50) — @IsOptional() przepuszcza null, i tak ma być: żeby wyłączyć zaliczkę,
+  // panel wysyła oba pola jako null. Serwis waliduje stan po scaleniu z wierszem z bazy,
+  // więc odróżnia „pole nieprzesłane" od jawnego null.
+  @IsOptional()
+  @IsEnum(DepositType)
+  depositType?: DepositType | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100_000_000)
+  depositValue?: number | null;
 }
