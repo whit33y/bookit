@@ -11,7 +11,9 @@ async function render(inputs: Record<string, unknown>) {
   fixture.detectChanges();
   const el = fixture.nativeElement as HTMLElement;
   return {
-    label: () => el.querySelector('[aria-label]')?.getAttribute('aria-label'),
+    // celowo przez role="img": aria-label na elemencie bez roli bywa ignorowane przez AT,
+    // a wnętrze komponentu jest w całości aria-hidden
+    label: () => el.querySelector('[role="img"]')?.getAttribute('aria-label'),
     filled: () => (el.textContent?.match(/★/g) ?? []).length,
     empty: () => (el.textContent?.match(/☆/g) ?? []).length,
     text: () => el.textContent ?? '',
@@ -51,6 +53,13 @@ describe('RatingStars', () => {
     const ctx = await render({ value: 5, count });
 
     expect(ctx.label()).toBe(expected);
+  });
+
+  it('zero opinii pokazuje licznik na ekranie, skoro etykieta o nim mówi', async () => {
+    const ctx = await render({ value: 4, count: 0 });
+
+    expect(ctx.text()).toContain('(0)');
+    expect(ctx.label()).toBe('Ocena 4 na 5, 0 opinii');
   });
 
   it('showValue=false zostawia same gwiazdki, ale etykieta nadal niesie liczbę', async () => {

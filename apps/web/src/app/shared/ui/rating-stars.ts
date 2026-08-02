@@ -16,7 +16,14 @@ const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
   selector: 'app-rating-stars',
   host: { class: 'inline-block' },
   template: `
-    <span class="inline-flex items-center gap-1.5" [attr.aria-label]="label()">
+    <!-- role="img" jest tu warunkiem działania, nie ozdobą: aria-label na elemencie bez roli
+         jest przez AT ignorowane (axe: aria-prohibited-attr), a że całe wnętrze jest
+         aria-hidden, ocena zostałaby wtedy nieodczytana. -->
+    <span
+      role="img"
+      class="inline-flex items-center gap-1.5"
+      [attr.aria-label]="label()"
+    >
       <span aria-hidden="true" class="text-amber-500">
         @for (position of positions; track position) {
           <span [class]="position <= filled() ? '' : 'text-stone-300'">
@@ -28,9 +35,11 @@ const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
         <span aria-hidden="true" class="text-sm font-semibold">
           {{ formattedValue() }}
         </span>
-        @if (count(); as total) {
+        <!-- porównanie z null, nie truthiness: przy count = 0 licznik zniknąłby z ekranu,
+             a etykieta i tak mówiłaby „0 opinii" (ta sama reguła co w label()) -->
+        @if (count() !== null) {
           <span aria-hidden="true" class="text-sm font-medium text-stone-400">
-            ({{ total }})
+            ({{ count() }})
           </span>
         }
       }
