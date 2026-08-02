@@ -16,11 +16,22 @@ const review = (id: string, rating: number, comment: string | null) => ({
   author: 'Anna K.',
 });
 
+/** Rozkład opisuje całą firmę, nie stronę — backend liczy go bez skip/take (#111). */
+const distribution = (counts: Partial<Record<1 | 2 | 3 | 4 | 5, number>> = {}) => ({
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 0,
+  5: 0,
+  ...counts,
+});
+
 const RESPONSE = {
   items: [review('r1', 5, 'Bardzo miła obsługa'), review('r2', 4, null)],
   total: 2,
   page: 1,
   limit: 20,
+  ratingDistribution: distribution({ 4: 1, 5: 1 }),
 };
 
 /** URL z query stringiem — expectOne(url) porównuje też parametry, więc łapiemy predykatem. */
@@ -67,16 +78,31 @@ describe('BusinessReviews', () => {
     expect(ctx.text()).toContain('Anna K.');
     expect(ctx.text()).toContain('Bardzo miła obsługa');
     expect(ctx.text()).toContain('1.08.2026');
-    expect(ctx.el().querySelectorAll('li')).toHaveLength(2);
+    // scope na listę opinii — nad nią stoi histogram, który ma własne pięć <li>
+    expect(ctx.el().querySelectorAll('ul.divide-y > li')).toHaveLength(2);
     // ocena idzie do czytnika ekranu jako jedna etykieta, bez powtarzania liczby przy gwiazdkach
     expect(ctx.el().querySelector('[aria-label="Ocena 5 na 5"]')).not.toBeNull();
   });
 
-  it('brak opinii: komunikat zamiast pustej listy i bez paska stron', async () => {
-    const ctx = await setup({ items: [], total: 0, page: 1, limit: 20 });
+  it('pokazuje rozkład ocen z agregatu nad listą opinii', async () => {
+    const ctx = await setup();
+
+    const histogram = ctx.el().querySelector('app-rating-distribution');
+    expect(histogram).not.toBeNull();
+    // nad listą opinii, nie pod nią — pozycja w DOM decyduje o kolejności czytania
+    const list = ctx.el().querySelector('ul.divide-y')!;
+    expect(
+      histogram!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(ctx.text()).toContain('5 ★ 1 · 50%');
+  });
+
+  it('brak opinii: komunikat zamiast pustej listy, bez paska stron i bez histogramu', async () => {
+    const ctx = await setup({ items: [], total: 0, page: 1, limit: 20, ratingDistribution: distribution() });
 
     expect(ctx.text()).toContain('Ta firma nie ma jeszcze opinii');
     expect(ctx.el().querySelector('nav')).toBeNull();
+    expect(ctx.el().querySelector('app-rating-distribution')).toBeNull();
   });
 
   it('jedna strona opinii nie dostaje paska stron', async () => {
@@ -86,7 +112,7 @@ describe('BusinessReviews', () => {
   });
 
   it('przy wielu stronach klik „Następna" pobiera kolejną stronę i podmienia listę', async () => {
-    const ctx = await setup({ ...RESPONSE, total: 45 });
+    const ctx = await setup({ ...RESPONSE, total: 45, ratingDistribution: distribution({ 5: 30, 4: 15 }) });
 
     expect(ctx.text()).toContain('1–20 z 45 opinii');
 
@@ -97,6 +123,7 @@ describe('BusinessReviews', () => {
       total: 45,
       page: 2,
       limit: 20,
+      ratingDistribution: distribution({ 5: 30, 4: 15 }),
     });
     await settle(ctx.fixture);
     ctx.fixture.detectChanges();
@@ -128,6 +155,7 @@ describe('BusinessReviews', () => {
       total: 1,
       page: 1,
       limit: 20,
+      ratingDistribution: distribution({ 5: 1 }),
     });
     await settle(fixture);
     first.flush({
@@ -135,6 +163,7 @@ describe('BusinessReviews', () => {
       total: 1,
       page: 1,
       limit: 20,
+      ratingDistribution: distribution({ 1: 1 }),
     });
     await settle(fixture);
     fixture.detectChanges();
@@ -180,7 +209,7 @@ describe('BusinessReviews', () => {
   });
 
   it('zmiana firmy resetuje stronę i pobiera opinie nowej firmy', async () => {
-    const ctx = await setup({ ...RESPONSE, total: 45 });
+    const ctx = await setup({ ...RESPONSE, total: 45, ratingDistribution: distribution({ 5: 30, 4: 15 }) });
 
     await ctx.click(ctx.buttonWith('Następna'));
     ctx.http.expectOne(reviewsUrl(2)).flush({ ...RESPONSE, total: 45, page: 2 });
@@ -195,7 +224,7 @@ describe('BusinessReviews', () => {
 
     ctx.http
       .expectOne('/api/businesses/inna-firma/reviews?page=1')
-      .flush({ items: [], total: 0, page: 1, limit: 20 });
+      .flush({ items: [], total: 0, page: 1, limit: 20, ratingDistribution: distribution() });
     await settle(ctx.fixture);
     ctx.fixture.detectChanges();
 

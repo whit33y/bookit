@@ -1,4 +1,5 @@
 import { Component, computed, input } from '@angular/core';
+import { pluralPl } from '../plural-pl';
 
 const MAX_RATING = 5;
 const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
@@ -61,20 +62,13 @@ export default class RatingStars {
   protected readonly label = computed(() => {
     const base = `Ocena ${this.formattedValue()} na ${MAX_RATING}`;
     const total = this.count();
-    return total === null ? base : `${base}, ${total} ${opinionsWord(total)}`;
+    return total === null
+      ? base
+      : `${base}, ${total} ${pluralPl(total, 'opinia', 'opinie', 'opinii')}`;
   });
 }
 
 /** Przecinek dziesiętny i maksymalnie jedno miejsce po przecinku — jak w design systemie („4,9"). */
 function formatRating(value: number): string {
   return value.toLocaleString('pl-PL', { maximumFractionDigits: 1 });
-}
-
-/** Polska odmiana: 1 opinia, 2–4 opinie, 5+ opinii (z wyjątkiem nastek: 12 opinii). */
-function opinionsWord(count: number): string {
-  if (count === 1) return 'opinia';
-  const lastTwo = count % 100;
-  const last = count % 10;
-  const isTeen = lastTwo >= 12 && lastTwo <= 14;
-  return !isTeen && last >= 2 && last <= 4 ? 'opinie' : 'opinii';
 }
