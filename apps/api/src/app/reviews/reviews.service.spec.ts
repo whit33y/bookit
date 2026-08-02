@@ -22,7 +22,6 @@ describe('ReviewsService', () => {
   let businessFindFirst: ReturnType<typeof vi.fn>;
   let reviewCreate: ReturnType<typeof vi.fn>;
   let reviewFindMany: ReturnType<typeof vi.fn>;
-  let reviewCount: ReturnType<typeof vi.fn>;
   let reviewGroupBy: ReturnType<typeof vi.fn>;
   let service: ReviewsService;
 
@@ -31,7 +30,6 @@ describe('ReviewsService', () => {
     businessFindFirst = vi.fn().mockResolvedValue({ id: 'b1' });
     reviewCreate = vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'r1', ...data }));
     reviewFindMany = vi.fn().mockResolvedValue([]);
-    reviewCount = vi.fn().mockResolvedValue(0);
     reviewGroupBy = vi.fn().mockResolvedValue([]);
     const prisma = {
       booking: { findUnique: bookingFindUnique },
@@ -39,7 +37,6 @@ describe('ReviewsService', () => {
       review: {
         create: reviewCreate,
         findMany: reviewFindMany,
-        count: reviewCount,
         groupBy: reviewGroupBy,
       },
     };
@@ -131,9 +128,16 @@ describe('ReviewsService', () => {
       client: { firstName: 'Anna', lastName: 'Kowalska' },
     };
 
+    // wiersze tak, jak zwraca je groupBy({ by: ['rating'] })
+    const byRating = (counts: Record<number, number>) =>
+      Object.entries(counts).map(([rating, count]) => ({
+        rating: Number(rating),
+        _count: { _all: count },
+      }));
+
     it('maskuje autora do imienia z inicjałem i nie zwraca danych klienta', async () => {
       reviewFindMany.mockResolvedValue([row]);
-      reviewCount.mockResolvedValue(1);
+      reviewGroupBy.mockResolvedValue(byRating({ 5: 1 }));
 
       const result = await service.listForBusiness('salon', {});
 
@@ -157,7 +161,7 @@ describe('ReviewsService', () => {
         isBlocked: false,
       });
       expect(reviewFindMany.mock.calls[0][0].where).toEqual({ businessId: 'b1' });
-      expect(reviewCount.mock.calls[0][0]).toEqual({ where: { businessId: 'b1' } });
+      expect(reviewGroupBy.mock.calls[0][0].where).toEqual({ businessId: 'b1' });
     });
 
     it('sortuje od najnowszych, z id jako tiebreakerem', async () => {
@@ -176,12 +180,60 @@ describe('ReviewsService', () => {
     });
 
     it('page/limit przeliczają się na skip/take i wracają w odpowiedzi', async () => {
-      reviewCount.mockResolvedValue(42);
+      reviewGroupBy.mockResolvedValue(byRating({ 1: 0, 2: 1, 3: 4, 4: 12, 5: 25 }));
 
       const result = await service.listForBusiness('salon', { page: '3', limit: '5' });
 
       expect(reviewFindMany.mock.calls[0][0]).toMatchObject({ skip: 10, take: 5 });
       expect(result).toMatchObject({ total: 42, page: 3, limit: 5 });
+    });
+
+    it('rozkład ocen liczy groupBy po rating, tym samym where co lista i bez skip/take', async () => {
+      await service.listForBusiness('salon', { page: '2', limit: '5' });
+
+      const arg = reviewGroupBy.mock.calls[0][0];
+      expect(arg).toMatchObject({ by: ['rating'], _count: { _all: true } });
+      expect(arg.where).toEqual({ businessId: 'b1' });
+      expect(arg.skip).toBeUndefined();
+      expect(arg.take).toBeUndefined();
+    });
+
+    it('rozkład zwraca wszystkie stopnie, z zerami dla ocen bez recenzji', async () => {
+      reviewGroupBy.mockResolvedValue(byRating({ 3: 4, 5: 25 }));
+
+      const result = await service.listForBusiness('salon', {});
+
+      expect(result.ratingDistribution).toEqual({ 1: 0, 2: 0, 3: 4, 4: 0, 5: 25 });
+    });
+
+    // sedno #111: histogram opisuje całą firmę, więc nie może zależeć od tego, którą stronę
+    // recenzji akurat czytamy
+    it('rozkład ten sam niezależnie od numeru strony', async () => {
+      reviewGroupBy.mockResolvedValue(byRating({ 4: 2, 5: 7 }));
+
+      const first = await service.listForBusiness('salon', { page: '1', limit: '1' });
+      const third = await service.listForBusiness('salon', { page: '3', limit: '1' });
+
+      expect(third.ratingDistribution).toEqual(first.ratingDistribution);
+      expect(third.total).toBe(first.total);
+    });
+
+    it('firma bez recenzji → zera na każdym stopniu i total 0', async () => {
+      reviewGroupBy.mockResolvedValue([]);
+
+      const result = await service.listForBusiness('nowa', {});
+
+      expect(result.ratingDistribution).toEqual({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
+      expect(result.total).toBe(0);
+    });
+
+    it('total bierze się z sumy rozkładu, bez osobnego zapytania zliczającego', async () => {
+      reviewGroupBy.mockResolvedValue(byRating({ 1: 0, 2: 1, 3: 4, 4: 12, 5: 25 }));
+
+      const result = await service.listForBusiness('salon', {});
+
+      expect(result.total).toBe(42);
+      expect(reviewGroupBy).toHaveBeenCalledTimes(1);
     });
 
     // paginację walidujemy przed zapytaniem o firmę, więc zły limit daje 400 także dla
@@ -230,6 +282,18 @@ describe('ReviewsService', () => {
         businessId: { in: ['b1', 'b2'] },
       });
       expect(result.get('b1')).toEqual({ avgRating: 4.7, reviewCount: 3 });
+    });
+
+    // AC #111: rozkład zostaje w liście recenzji i nie wchodzi na karty wyszukiwarki (#34),
+    // które biorą kształt właśnie stąd
+    it('nie dokłada rozkładu ocen — tylko avgRating i reviewCount', async () => {
+      reviewGroupBy.mockResolvedValue([
+        { businessId: 'b1', _avg: { rating: 4 }, _count: { _all: 2 } },
+      ]);
+
+      const result = await service.statsFor(['b1']);
+
+      expect(Object.keys(result.get('b1') ?? {})).toEqual(['avgRating', 'reviewCount']);
     });
 
     it('firma bez recenzji nie trafia do mapy (wołający podstawia EMPTY_REVIEW_STATS)', async () => {
