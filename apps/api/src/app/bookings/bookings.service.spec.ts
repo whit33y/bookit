@@ -1,7 +1,19 @@
-import { BookingStatus, Prisma, UserRole } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+import {
+  BookingStatus,
+  DepositType,
+  PaymentStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addMinutes, localDayRangeUtc, parseLocalDate } from '../availability/business-time';
+import {
+  addMinutes,
+  localDayRangeUtc,
+  parseLocalDate,
+} from '../availability/business-time';
 import { AuthUser } from '../common/types/auth-user';
+import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingEventsService } from './booking-events.service';
 import { BookingsService } from './bookings.service';
@@ -17,12 +29,41 @@ const OWNER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const BOOKING_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const EMPLOYEE_USER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const OTHER_EMPLOYEE_ID = '99999999-9999-4999-8999-999999999999';
+const PAYMENT_ID = '77777777-7777-4777-8777-777777777777';
+const PAYMENT_CREATED_AT = new Date('2026-01-01T00:00:00.000Z');
 
 type BusyRow = { startsAt: Date; endsAt: Date };
 
 // hook powiadomień (#37) — serwis ma go wołać, ale nic z niego nie odczytuje
 const eventsMock = () =>
-  ({ statusChanged: vi.fn(), created: vi.fn() }) as unknown as BookingEventsService;
+  ({
+    statusChanged: vi.fn(),
+    created: vi.fn(),
+  }) as unknown as BookingEventsService;
+
+// PaymentsService widziany od strony bookings (#51): rozgałęzienie po isEnabled, PaymentIntent
+// przy rezerwacji z zaliczką i unieważnienie nieopłaconej zaliczki przy odwołaniu.
+const paymentsMock = (overrides: Record<string, unknown> = {}) =>
+  ({
+    isEnabled: true,
+    createDepositIntent: vi.fn().mockResolvedValue({
+      paymentIntentId: 'pi_1',
+      clientSecret: 'pi_1_secret',
+    }),
+    releaseUnpaid: vi.fn().mockResolvedValue(true),
+    ...overrides,
+  }) as unknown as PaymentsService;
+
+// usługa bez zaliczki — domyślny kształt zwracany przez service.findFirst w create()
+const serviceRow = (deposit: Partial<Record<string, unknown>> = {}) => ({
+  businessId: BUSINESS_ID,
+  durationMin: 60,
+  priceCents: 22000,
+  depositType: null,
+  depositValue: null,
+  employees: [{ id: EMPLOYEE_ID }],
+  ...deposit,
+});
 
 // odwzorowanie warunku nachodzenia z WHERE (startsAt: { lt }, endsAt: { gt })
 const overlappingRows = (rows: BusyRow[], where: Prisma.BookingWhereInput) => {
@@ -40,6 +81,9 @@ describe('BookingsService', () => {
   let executeRaw: ReturnType<typeof vi.fn>;
   let calls: string[];
   let bookingCreated: ReturnType<typeof vi.fn>;
+  let paymentUpdate: ReturnType<typeof vi.fn>;
+  let payments: PaymentsService;
+  let buildService: () => BookingsService;
   let service: BookingsService;
 
   beforeEach(() => {
@@ -53,23 +97,38 @@ describe('BookingsService', () => {
       return value;
     };
 
-    serviceFindFirst = vi.fn().mockResolvedValue({
-      businessId: BUSINESS_ID,
-      durationMin: 60,
-      employees: [{ id: EMPLOYEE_ID }],
-    });
-    executeRaw = vi.fn().mockImplementation(() => Promise.resolve(record('lock', 1)));
+    serviceFindFirst = vi.fn().mockResolvedValue(serviceRow());
+    executeRaw = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(record('lock', 1)));
     whFindMany = vi
       .fn()
       .mockImplementation(() =>
-        Promise.resolve(record('workingHours', [{ startTime: '09:00', endTime: '11:00' }])),
+        Promise.resolve(
+          record('workingHours', [{ startTime: '09:00', endTime: '11:00' }]),
+        ),
       );
-    timeOffFindMany = vi.fn().mockImplementation(() => Promise.resolve(record('timeOff', [])));
-    bookingFindMany = vi.fn().mockImplementation(() => Promise.resolve(record('booking', [])));
-    bookingCreate = vi
+    timeOffFindMany = vi
       .fn()
-      .mockImplementation(({ data }) => Promise.resolve({ id: 'booking-1', ...data }));
+      .mockImplementation(() => Promise.resolve(record('timeOff', [])));
+    bookingFindMany = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(record('booking', [])));
+    // Prisma rozwija zagnieżdżone `payment: { create }` w relację, więc atrapa musi oddać
+    // utworzony wiersz, a nie surowy input — create() czyta z niego id i createdAt.
+    bookingCreate = vi.fn().mockImplementation(({ data }) => {
+      const { payment, ...rest } = data;
+      return Promise.resolve({
+        id: 'booking-1',
+        ...rest,
+        payment: payment
+          ? { id: PAYMENT_ID, createdAt: PAYMENT_CREATED_AT }
+          : null,
+      });
+    });
     bookingCreated = vi.fn();
+    paymentUpdate = vi.fn().mockResolvedValue({});
+    payments = paymentsMock();
 
     const tx = {
       $executeRaw: executeRaw,
@@ -78,20 +137,29 @@ describe('BookingsService', () => {
       booking: { findMany: bookingFindMany, create: bookingCreate },
     };
 
-    service = new BookingsService(
-      {
-        service: { findFirst: serviceFindFirst },
-        $transaction: (cb: (client: typeof tx) => unknown) => cb(tx),
-      } as unknown as PrismaService,
-      { statusChanged: vi.fn(), created: bookingCreated } as unknown as BookingEventsService,
-    );
+    buildService = () =>
+      new BookingsService(
+        {
+          service: { findFirst: serviceFindFirst },
+          payment: { update: paymentUpdate },
+          $transaction: (cb: (client: typeof tx) => unknown) => cb(tx),
+        } as unknown as PrismaService,
+        {
+          statusChanged: vi.fn(),
+          created: bookingCreated,
+        } as unknown as BookingEventsService,
+        payments,
+      );
+    service = buildService();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  const create = (overrides: Partial<Parameters<BookingsService['create']>[1]> = {}) =>
+  const create = (
+    overrides: Partial<Parameters<BookingsService['create']>[1]> = {},
+  ) =>
     service.create(CLIENT_ID, {
       serviceId: SERVICE_ID,
       employeeId: EMPLOYEE_ID,
@@ -115,16 +183,15 @@ describe('BookingsService', () => {
       });
       // status nie jest ustawiany ręcznie — schodzi z domyślnego PENDING w schemacie
       expect(bookingCreate.mock.calls[0][0].data).not.toHaveProperty('status');
-      expect(bookingCreate.mock.calls[0][0].select).toHaveProperty('status', true);
+      expect(bookingCreate.mock.calls[0][0].select).toHaveProperty(
+        'status',
+        true,
+      );
       expect(booking).toHaveProperty('id', 'booking-1');
     });
 
     it('endsAt liczone z durationMin usługi, nie z body', async () => {
-      serviceFindFirst.mockResolvedValue({
-        businessId: BUSINESS_ID,
-        durationMin: 30,
-        employees: [{ id: EMPLOYEE_ID }],
-      });
+      serviceFindFirst.mockResolvedValue(serviceRow({ durationMin: 30 }));
 
       await create();
 
@@ -143,22 +210,27 @@ describe('BookingsService', () => {
       const booking = await create();
 
       expect(bookingCreated).toHaveBeenCalledTimes(1);
-      expect(bookingCreated).toHaveBeenCalledWith(booking);
+      // bez pola payment: zdarzenie dostaje samą rezerwację, a płatność (tu null) jest
+      // dokładana dopiero do odpowiedzi HTTP
+      const { payment, ...withoutPayment } = booking;
+      expect(payment).toBeNull();
+      expect(bookingCreated).toHaveBeenCalledWith(withoutPayment);
     });
 
     it('rezerwacja stykająca się końcem z cudzą przechodzi', async () => {
-      bookingFindMany.mockImplementation(({ where }: { where: Prisma.BookingWhereInput }) =>
-        Promise.resolve(
-          overlappingRows(
-            [
-              {
-                startsAt: new Date('2026-01-14T09:00:00.000Z'), // 10:00 lokalnie
-                endsAt: new Date('2026-01-14T10:00:00.000Z'),
-              },
-            ],
-            where,
+      bookingFindMany.mockImplementation(
+        ({ where }: { where: Prisma.BookingWhereInput }) =>
+          Promise.resolve(
+            overlappingRows(
+              [
+                {
+                  startsAt: new Date('2026-01-14T09:00:00.000Z'), // 10:00 lokalnie
+                  endsAt: new Date('2026-01-14T10:00:00.000Z'),
+                },
+              ],
+              where,
+            ),
           ),
-        ),
       );
 
       await expect(create()).resolves.toHaveProperty('id', 'booking-1');
@@ -167,28 +239,36 @@ describe('BookingsService', () => {
 
   describe('walidacja czasu', () => {
     it('startsAt poza siatką 15 min → 400, bez zapytań do bazy', async () => {
-      await expect(create({ startsAt: '2026-01-14T08:07:00.000Z' })).rejects.toMatchObject({
+      await expect(
+        create({ startsAt: '2026-01-14T08:07:00.000Z' }),
+      ).rejects.toMatchObject({
         status: 400,
       });
       expect(serviceFindFirst).not.toHaveBeenCalled();
     });
 
     it('niezerowe sekundy też są poza siatką → 400', async () => {
-      await expect(create({ startsAt: '2026-01-14T08:00:30.000Z' })).rejects.toMatchObject({
+      await expect(
+        create({ startsAt: '2026-01-14T08:00:30.000Z' }),
+      ).rejects.toMatchObject({
         status: 400,
       });
       expect(serviceFindFirst).not.toHaveBeenCalled();
     });
 
     it('startsAt w przeszłości → 400, bez zapytań do bazy', async () => {
-      await expect(create({ startsAt: '2025-12-31T10:00:00.000Z' })).rejects.toMatchObject({
+      await expect(
+        create({ startsAt: '2025-12-31T10:00:00.000Z' }),
+      ).rejects.toMatchObject({
         status: 400,
       });
       expect(serviceFindFirst).not.toHaveBeenCalled();
     });
 
     it('startsAt równe teraz → 400 (musi być w przyszłości)', async () => {
-      await expect(create({ startsAt: '2026-01-01T00:00:00.000Z' })).rejects.toMatchObject({
+      await expect(
+        create({ startsAt: '2026-01-01T00:00:00.000Z' }),
+      ).rejects.toMatchObject({
         status: 400,
       });
     });
@@ -199,11 +279,22 @@ describe('BookingsService', () => {
       await create();
 
       expect(serviceFindFirst).toHaveBeenCalledWith({
-        where: { id: SERVICE_ID, isActive: true, business: { isBlocked: false } },
+        where: {
+          id: SERVICE_ID,
+          isActive: true,
+          business: { isBlocked: false },
+        },
         select: {
           businessId: true,
           durationMin: true,
-          employees: { where: { id: EMPLOYEE_ID, isActive: true }, select: { id: true } },
+          // pola zaliczki (#51) — z nich liczy się kwota PaymentIntenta
+          priceCents: true,
+          depositType: true,
+          depositValue: true,
+          employees: {
+            where: { id: EMPLOYEE_ID, isActive: true },
+            select: { id: true },
+          },
         },
       });
     });
@@ -216,11 +307,7 @@ describe('BookingsService', () => {
     });
 
     it('pracownik nieprzypisany do usługi lub nieaktywny → 404', async () => {
-      serviceFindFirst.mockResolvedValue({
-        businessId: BUSINESS_ID,
-        durationMin: 60,
-        employees: [],
-      });
+      serviceFindFirst.mockResolvedValue(serviceRow({ employees: [] }));
 
       await expect(create()).rejects.toMatchObject({ status: 404 });
       expect(executeRaw).not.toHaveBeenCalled();
@@ -248,7 +335,9 @@ describe('BookingsService', () => {
 
     it('slot wychodzący za grafik → 409', async () => {
       // 10:15 lokalnie + 60 min = 11:15, a grafik kończy się 11:00
-      await expect(create({ startsAt: '2026-01-14T09:15:00.000Z' })).rejects.toMatchObject({
+      await expect(
+        create({ startsAt: '2026-01-14T09:15:00.000Z' }),
+      ).rejects.toMatchObject({
         status: 409,
       });
       expect(bookingCreate).not.toHaveBeenCalled();
@@ -311,7 +400,8 @@ describe('BookingsService', () => {
       const tx = {
         $executeRaw: () => Promise.resolve(1),
         workingHours: {
-          findMany: () => Promise.resolve([{ startTime: '09:00', endTime: '11:00' }]),
+          findMany: () =>
+            Promise.resolve([{ startTime: '09:00', endTime: '11:00' }]),
         },
         timeOff: { findMany: () => Promise.resolve([]) },
         booking: {
@@ -325,14 +415,7 @@ describe('BookingsService', () => {
       };
 
       const prisma = {
-        service: {
-          findFirst: () =>
-            Promise.resolve({
-              businessId: BUSINESS_ID,
-              durationMin: 60,
-              employees: [{ id: EMPLOYEE_ID }],
-            }),
-        },
+        service: { findFirst: () => Promise.resolve(serviceRow()) },
         $transaction: (cb: (client: typeof tx) => unknown) => {
           const result = queue.then(() => cb(tx));
           queue = result.catch(() => undefined);
@@ -341,7 +424,11 @@ describe('BookingsService', () => {
       };
 
       return {
-        service: new BookingsService(prisma as unknown as PrismaService, eventsMock()),
+        service: new BookingsService(
+          prisma as unknown as PrismaService,
+          eventsMock(),
+          paymentsMock(),
+        ),
         stored,
       };
     };
@@ -376,11 +463,166 @@ describe('BookingsService', () => {
       const results = await Promise.allSettled([
         serialized.create(CLIENT_ID, { ...base, startsAt: STARTS_AT }),
         // 10:00 lokalnie — styk z poprzednią, nie kolizja
-        serialized.create(CLIENT_ID, { ...base, startsAt: '2026-01-14T09:00:00.000Z' }),
+        serialized.create(CLIENT_ID, {
+          ...base,
+          startsAt: '2026-01-14T09:00:00.000Z',
+        }),
       ]);
 
       expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
       expect(stored).toHaveLength(2);
+    });
+  });
+
+  // AC #51: „Usługa z zaliczką: POST /bookings zwraca client_secret; slot tymczasowo
+  // zablokowany" oraz „Usługi bez zaliczki działają po staremu".
+  describe('zaliczka (#51)', () => {
+    // Koloryzacja z danych demo: 220 zł, zaliczka 30% → 66 zł
+    const withDeposit = () =>
+      serviceFindFirst.mockResolvedValue(
+        serviceRow({ depositType: DepositType.PERCENT, depositValue: 30 }),
+      );
+
+    it('bez zaliczki: żadnego wiersza Payment, żadnego kontaktu ze Stripe, payment null', async () => {
+      const booking = await create();
+
+      expect(bookingCreate.mock.calls[0][0].data).not.toHaveProperty('payment');
+      expect(payments.createDepositIntent).not.toHaveBeenCalled();
+      expect(paymentUpdate).not.toHaveBeenCalled();
+      expect(booking.payment).toBeNull();
+      // mail do firmy wychodzi od razu, tak jak przed #51
+      expect(bookingCreated).toHaveBeenCalledTimes(1);
+    });
+
+    it('z zaliczką: Payment powstaje w tej samej transakcji co rezerwacja', async () => {
+      withDeposit();
+
+      await create();
+
+      expect(bookingCreate.mock.calls[0][0].data.payment).toEqual({
+        create: { amountCents: 6600, currency: 'pln' },
+      });
+    });
+
+    it('z zaliczką: odpowiedź niesie client_secret, kwotę i termin ważności', async () => {
+      withDeposit();
+
+      const booking = await create();
+
+      expect(booking.payment).toEqual({
+        amountCents: 6600,
+        currency: 'pln',
+        clientSecret: 'pi_1_secret',
+        // createdAt płatności + 15 min
+        expiresAt: new Date('2026-01-01T00:15:00.000Z'),
+      });
+    });
+
+    it('z zaliczką: rezerwacja zostaje PENDING, więc slot jest zablokowany od razu', async () => {
+      withDeposit();
+
+      await create();
+
+      // status nie jest ustawiany ręcznie — domyślny PENDING ze schematu jest
+      // w BLOCKING_STATUSES, więc /availability przestaje pokazywać ten termin
+      expect(bookingCreate.mock.calls[0][0].data).not.toHaveProperty('status');
+    });
+
+    it('identyfikator PaymentIntenta dopinany do płatności po odpowiedzi ze Stripe', async () => {
+      withDeposit();
+
+      await create();
+
+      expect(paymentUpdate).toHaveBeenCalledWith({
+        where: { id: PAYMENT_ID },
+        data: { stripePaymentIntentId: 'pi_1' },
+      });
+    });
+
+    it('PaymentIntent tworzony po commicie transakcji, nie w środku', async () => {
+      withDeposit();
+      const intent = vi.fn().mockImplementation(() => {
+        calls.push('stripe');
+        return Promise.resolve({
+          paymentIntentId: 'pi_1',
+          clientSecret: 'pi_1_secret',
+        });
+      });
+      payments = paymentsMock({ createDepositIntent: intent });
+      service = buildService();
+
+      await create();
+
+      // Advisory lock trzyma transakcja; round-trip do Stripe'a w jej środku blokowałby
+      // rezerwacje u tego pracownika na czas odpowiedzi z sieci.
+      expect(calls).toEqual([
+        'lock',
+        'workingHours',
+        'timeOff',
+        'booking',
+        'stripe',
+      ]);
+    });
+
+    it('mail do firmy nie wychodzi przed opłaceniem zaliczki', async () => {
+      withDeposit();
+
+      await create();
+
+      // wyśle go webhook po payment_intent.succeeded — inaczej porzucony checkout
+      // zgłaszałby firmie wizytę, która za kwadrans wygaśnie
+      expect(bookingCreated).not.toHaveBeenCalled();
+    });
+
+    it('brak konfiguracji Stripe → 503 i żadnego zapisu', async () => {
+      withDeposit();
+      payments = paymentsMock({ isEnabled: false });
+      service = buildService();
+
+      await expect(create()).rejects.toMatchObject({ status: 503 });
+      expect(bookingCreate).not.toHaveBeenCalled();
+      expect(executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('brak konfiguracji Stripe nie przeszkadza usłudze bez zaliczki', async () => {
+      payments = paymentsMock({ isEnabled: false });
+      service = buildService();
+
+      await expect(create()).resolves.toHaveProperty('id', 'booking-1');
+    });
+
+    it('błąd Stripe → slot zwolniony i 503, rezerwacja nie zostaje wisieć', async () => {
+      withDeposit();
+      const releaseUnpaid = vi.fn().mockResolvedValue(true);
+      payments = paymentsMock({
+        createDepositIntent: vi
+          .fn()
+          .mockRejectedValue(new Error('Stripe down')),
+        releaseUnpaid,
+      });
+      service = buildService();
+
+      await expect(create()).rejects.toMatchObject({ status: 503 });
+      expect(releaseUnpaid).toHaveBeenCalledWith({
+        id: PAYMENT_ID,
+        bookingId: 'booking-1',
+        stripePaymentIntentId: null,
+      });
+    });
+
+    it('błąd zapisu po utworzeniu intentu → anulowanie idzie z jego identyfikatorem', async () => {
+      withDeposit();
+      const releaseUnpaid = vi.fn().mockResolvedValue(true);
+      payments = paymentsMock({ releaseUnpaid });
+      paymentUpdate.mockRejectedValue(new Error('DB down'));
+      service = buildService();
+
+      await expect(create()).rejects.toMatchObject({ status: 503 });
+      // intent istnieje po stronie Stripe'a mimo nieudanego zapisu — bez tego id
+      // zostałby wiszący PaymentIntent, którego nikt by nie anulował
+      expect(releaseUnpaid).toHaveBeenCalledWith(
+        expect.objectContaining({ stripePaymentIntentId: 'pi_1' }),
+      );
     });
   });
 });
@@ -389,16 +631,21 @@ describe('BookingsService — decyzje firmy', () => {
   let bookingFindUnique: ReturnType<typeof vi.fn>;
   let bookingUpdate: ReturnType<typeof vi.fn>;
   let statusChanged: ReturnType<typeof vi.fn>;
+  let releaseUnpaid: ReturnType<typeof vi.fn>;
   let service: BookingsService;
 
   // rezerwacja właściciela OWNER_ID w podanym statusie
   const existing = (status: BookingStatus) => ({
     status,
     business: { ownerId: OWNER_ID },
+    payment: null,
   });
 
   beforeEach(() => {
-    bookingFindUnique = vi.fn().mockResolvedValue(existing(BookingStatus.PENDING));
+    bookingFindUnique = vi
+      .fn()
+      .mockResolvedValue(existing(BookingStatus.PENDING));
+    releaseUnpaid = vi.fn().mockResolvedValue(true);
     bookingUpdate = vi
       .fn()
       .mockImplementation(({ data }) =>
@@ -411,6 +658,7 @@ describe('BookingsService — decyzje firmy', () => {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
       } as unknown as PrismaService,
       { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
+      paymentsMock({ releaseUnpaid }),
     );
   });
 
@@ -447,8 +695,13 @@ describe('BookingsService — decyzje firmy', () => {
       await service.confirm(OWNER_ID, BOOKING_ID);
 
       // clientNote jest w select, ownerId firmy — nie
-      expect(bookingUpdate.mock.calls[0][0].select).toHaveProperty('clientNote', true);
-      expect(bookingUpdate.mock.calls[0][0].select).not.toHaveProperty('business');
+      expect(bookingUpdate.mock.calls[0][0].select).toHaveProperty(
+        'clientNote',
+        true,
+      );
+      expect(bookingUpdate.mock.calls[0][0].select).not.toHaveProperty(
+        'business',
+      );
     });
   });
 
@@ -456,15 +709,19 @@ describe('BookingsService — decyzje firmy', () => {
     it('nieistniejąca rezerwacja → 404, bez zapisu', async () => {
       bookingFindUnique.mockResolvedValue(null);
 
-      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 404,
-      });
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 404,
+        },
+      );
       expect(bookingUpdate).not.toHaveBeenCalled();
       expect(statusChanged).not.toHaveBeenCalled();
     });
 
     it('właściciel innej firmy → 403, bez zapisu', async () => {
-      await expect(service.confirm(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+      await expect(
+        service.confirm(CLIENT_ID, BOOKING_ID),
+      ).rejects.toMatchObject({
         status: 403,
       });
       expect(bookingUpdate).not.toHaveBeenCalled();
@@ -472,7 +729,9 @@ describe('BookingsService — decyzje firmy', () => {
     });
 
     it('decline cudzej rezerwacji też → 403', async () => {
-      await expect(service.decline(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+      await expect(
+        service.decline(CLIENT_ID, BOOKING_ID),
+      ).rejects.toMatchObject({
         status: 403,
       });
       expect(bookingUpdate).not.toHaveBeenCalled();
@@ -488,31 +747,115 @@ describe('BookingsService — decyzje firmy', () => {
       BookingStatus.COMPLETED,
     ];
 
-    it.each(NON_PENDING)('confirm rezerwacji w statusie %s → 409, bez zapisu', async (status) => {
-      bookingFindUnique.mockResolvedValue(existing(status));
+    it.each(NON_PENDING)(
+      'confirm rezerwacji w statusie %s → 409, bez zapisu',
+      async (status) => {
+        bookingFindUnique.mockResolvedValue(existing(status));
 
-      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
-      expect(bookingUpdate).not.toHaveBeenCalled();
-      expect(statusChanged).not.toHaveBeenCalled();
-    });
+        await expect(
+          service.confirm(OWNER_ID, BOOKING_ID),
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+        expect(bookingUpdate).not.toHaveBeenCalled();
+        expect(statusChanged).not.toHaveBeenCalled();
+      },
+    );
 
-    it.each(NON_PENDING)('decline rezerwacji w statusie %s → 409, bez zapisu', async (status) => {
-      bookingFindUnique.mockResolvedValue(existing(status));
+    it.each(NON_PENDING)(
+      'decline rezerwacji w statusie %s → 409, bez zapisu',
+      async (status) => {
+        bookingFindUnique.mockResolvedValue(existing(status));
 
-      await expect(service.decline(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
-      expect(bookingUpdate).not.toHaveBeenCalled();
-    });
+        await expect(
+          service.decline(OWNER_ID, BOOKING_ID),
+        ).rejects.toMatchObject({
+          status: 409,
+        });
+        expect(bookingUpdate).not.toHaveBeenCalled();
+      },
+    );
 
     it('komunikat 409 mówi po polsku, w jakim stanie jest rezerwacja', async () => {
       bookingFindUnique.mockResolvedValue(existing(BookingStatus.CONFIRMED));
 
-      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
-        message: expect.stringContaining('potwierdzona'),
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          message: expect.stringContaining('potwierdzona'),
+        },
+      );
+    });
+  });
+
+  // AC #51: nieopłacona zaliczka nie może trafić do kalendarza jako potwierdzona wizyta.
+  describe('nieopłacona zaliczka (#51)', () => {
+    const unpaid = {
+      id: PAYMENT_ID,
+      status: PaymentStatus.PENDING,
+      stripePaymentIntentId: 'pi_1',
+    };
+
+    it('confirm rezerwacji z nieopłaconą zaliczką → 409, bez zapisu', async () => {
+      bookingFindUnique.mockResolvedValue({
+        ...existing(BookingStatus.PENDING),
+        payment: unpaid,
       });
+
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+          message: 'Rezerwacja czeka na opłacenie zaliczki',
+        },
+      );
+      expect(bookingUpdate).not.toHaveBeenCalled();
+    });
+
+    it('confirm przechodzi, gdy zaliczka jest już opłacona', async () => {
+      bookingFindUnique.mockResolvedValue({
+        ...existing(BookingStatus.PENDING),
+        payment: { ...unpaid, status: PaymentStatus.SUCCEEDED },
+      });
+
+      await expect(
+        service.confirm(OWNER_ID, BOOKING_ID),
+      ).resolves.toHaveProperty('status', BookingStatus.CONFIRMED);
+      expect(releaseUnpaid).not.toHaveBeenCalled();
+    });
+
+    it('decline rezerwacji z nieopłaconą zaliczką unieważnia PaymentIntent', async () => {
+      bookingFindUnique.mockResolvedValue({
+        ...existing(BookingStatus.PENDING),
+        payment: unpaid,
+      });
+
+      await service.decline(OWNER_ID, BOOKING_ID);
+
+      // inaczej klient mógłby dokończyć płatność w otwartym formularzu i zapłacić
+      // za odrzuconą wizytę
+      expect(releaseUnpaid).toHaveBeenCalledWith({
+        id: PAYMENT_ID,
+        bookingId: BOOKING_ID,
+        stripePaymentIntentId: 'pi_1',
+      });
+    });
+
+    it('błąd unieważnienia nie przewraca już zapisanej decyzji', async () => {
+      bookingFindUnique.mockResolvedValue({
+        ...existing(BookingStatus.PENDING),
+        payment: unpaid,
+      });
+      releaseUnpaid.mockRejectedValue(new Error('Stripe down'));
+      const logError = vi
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      // status jest już w bazie, więc padnięty Stripe ma trafić do logu, a nie w 500;
+      // płatność zostaje w PENDING i spróbuje ponownie cron wygaszania
+      await expect(
+        service.decline(OWNER_ID, BOOKING_ID),
+      ).resolves.toHaveProperty('status', BookingStatus.DECLINED);
+      expect(logError).toHaveBeenCalled();
+      logError.mockRestore();
     });
 
     it('wyścig: status zmieniony między odczytem a zapisem → 409, nie 500', async () => {
@@ -523,9 +866,11 @@ describe('BookingsService — decyzje firmy', () => {
         }),
       );
 
-      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
+      await expect(service.confirm(OWNER_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+        },
+      );
       expect(statusChanged).not.toHaveBeenCalled();
     });
 
@@ -585,14 +930,16 @@ describe('BookingsService — odwołania', () => {
   let bookingFindUnique: ReturnType<typeof vi.fn>;
   let bookingUpdate: ReturnType<typeof vi.fn>;
   let statusChanged: ReturnType<typeof vi.fn>;
+  let releaseUnpaid: ReturnType<typeof vi.fn>;
   let service: BookingsService;
 
   // rezerwacja klienta CLIENT_ID w firmie właściciela OWNER_ID
-  const existing = (status: BookingStatus) => ({
+  const existing = (status: BookingStatus, payment: unknown = null) => ({
     status,
     clientId: CLIENT_ID,
     startsAt: VISIT_STARTS_AT,
     business: { ownerId: OWNER_ID, cancellationHours: CANCELLATION_HOURS },
+    payment,
   });
 
   beforeEach(() => {
@@ -600,7 +947,10 @@ describe('BookingsService — odwołania', () => {
     // domyślnie długo przed granicą polityki
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
-    bookingFindUnique = vi.fn().mockResolvedValue(existing(BookingStatus.CONFIRMED));
+    bookingFindUnique = vi
+      .fn()
+      .mockResolvedValue(existing(BookingStatus.CONFIRMED));
+    releaseUnpaid = vi.fn().mockResolvedValue(true);
     bookingUpdate = vi
       .fn()
       .mockImplementation(({ data }) =>
@@ -613,6 +963,7 @@ describe('BookingsService — odwołania', () => {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
       } as unknown as PrismaService,
       { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
+      paymentsMock({ releaseUnpaid }),
     );
   });
 
@@ -629,7 +980,10 @@ describe('BookingsService — odwołania', () => {
       expect(bookingUpdate.mock.calls[0][0].data).toEqual({
         status: BookingStatus.CANCELLED_BY_CLIENT,
       });
-      expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_CLIENT);
+      expect(booking).toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
     });
 
     it('CONFIRMED przed granicą polityki → CANCELLED_BY_CLIENT', async () => {
@@ -637,7 +991,10 @@ describe('BookingsService — odwołania', () => {
 
       const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
 
-      expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_CLIENT);
+      expect(booking).toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
     });
 
     it('zapis zawężony statusem odczytanym wcześniej (ochrona przed wyścigiem)', async () => {
@@ -666,9 +1023,11 @@ describe('BookingsService — odwołania', () => {
     it('dokładnie X godzin przed startem → 409, bez zapisu', async () => {
       vi.setSystemTime(DEADLINE);
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+        },
+      );
       expect(bookingUpdate).not.toHaveBeenCalled();
       expect(statusChanged).not.toHaveBeenCalled();
     });
@@ -676,29 +1035,29 @@ describe('BookingsService — odwołania', () => {
     it('po granicy → 409 z komunikatem o limicie godzin', async () => {
       vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-        message: expect.stringContaining('24'),
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+          message: expect.stringContaining('24'),
+        },
+      );
     });
 
     it('PENDING po granicy i tak przechodzi — okno dotyczy tylko CONFIRMED', async () => {
       bookingFindUnique.mockResolvedValue(existing(BookingStatus.PENDING));
       vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).resolves.toHaveProperty(
-        'status',
-        BookingStatus.CANCELLED_BY_CLIENT,
-      );
+      await expect(
+        service.cancel(CLIENT_ID, BOOKING_ID),
+      ).resolves.toHaveProperty('status', BookingStatus.CANCELLED_BY_CLIENT);
     });
 
     it('firma odwołuje po granicy klienta bez przeszkód', async () => {
       vi.setSystemTime(new Date('2026-01-14T11:00:00.000Z')); // godzina przed wizytą
 
-      await expect(service.cancelByBusiness(OWNER_ID, BOOKING_ID)).resolves.toHaveProperty(
-        'status',
-        BookingStatus.CANCELLED_BY_BUSINESS,
-      );
+      await expect(
+        service.cancelByBusiness(OWNER_ID, BOOKING_ID),
+      ).resolves.toHaveProperty('status', BookingStatus.CANCELLED_BY_BUSINESS);
     });
   });
 
@@ -714,7 +1073,10 @@ describe('BookingsService — odwołania', () => {
         expect(bookingUpdate.mock.calls[0][0].data).toEqual({
           status: BookingStatus.CANCELLED_BY_BUSINESS,
         });
-        expect(booking).toHaveProperty('status', BookingStatus.CANCELLED_BY_BUSINESS);
+        expect(booking).toHaveProperty(
+          'status',
+          BookingStatus.CANCELLED_BY_BUSINESS,
+        );
       },
     );
 
@@ -733,9 +1095,11 @@ describe('BookingsService — odwołania', () => {
     it('nieistniejąca rezerwacja → 404, bez zapisu', async () => {
       bookingFindUnique.mockResolvedValue(null);
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 404,
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 404,
+        },
+      );
       expect(bookingUpdate).not.toHaveBeenCalled();
     });
 
@@ -756,7 +1120,9 @@ describe('BookingsService — odwołania', () => {
     });
 
     it('klient nie odwoła wizyty przez cancel-by-business — tam liczy się właściciel', async () => {
-      await expect(service.cancelByBusiness(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
+      await expect(
+        service.cancelByBusiness(CLIENT_ID, BOOKING_ID),
+      ).rejects.toMatchObject({
         status: 403,
       });
       expect(bookingUpdate).not.toHaveBeenCalled();
@@ -775,9 +1141,11 @@ describe('BookingsService — odwołania', () => {
     it.each(TERMINAL)('klient: %s → 409, bez zapisu', async (status) => {
       bookingFindUnique.mockResolvedValue(existing(status));
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+        },
+      );
       expect(bookingUpdate).not.toHaveBeenCalled();
       expect(statusChanged).not.toHaveBeenCalled();
     });
@@ -785,7 +1153,9 @@ describe('BookingsService — odwołania', () => {
     it.each(TERMINAL)('firma: %s → 409, bez zapisu', async (status) => {
       bookingFindUnique.mockResolvedValue(existing(status));
 
-      await expect(service.cancelByBusiness(OWNER_ID, BOOKING_ID)).rejects.toMatchObject({
+      await expect(
+        service.cancelByBusiness(OWNER_ID, BOOKING_ID),
+      ).rejects.toMatchObject({
         status: 409,
       });
       expect(bookingUpdate).not.toHaveBeenCalled();
@@ -796,9 +1166,11 @@ describe('BookingsService — odwołania', () => {
     it('komunikat 409 dla stanu terminalnego mówi o stanie, nie o godzinach', async () => {
       bookingFindUnique.mockResolvedValue(existing(BookingStatus.COMPLETED));
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        message: expect.stringContaining('zakończona'),
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          message: expect.stringContaining('zakończona'),
+        },
+      );
     });
   });
 
@@ -811,9 +1183,11 @@ describe('BookingsService — odwołania', () => {
         }),
       );
 
-      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject({
-        status: 409,
-      });
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        {
+          status: 409,
+        },
+      );
       expect(statusChanged).not.toHaveBeenCalled();
     });
   });
@@ -843,7 +1217,11 @@ describe('BookingsService — moje wizyty', () => {
   };
   const employee = { id: EMPLOYEE_ID, name: 'Ala' };
 
-  const booking = (startsAt: string, status: BookingStatus, id = BOOKING_ID) => ({
+  const booking = (
+    startsAt: string,
+    status: BookingStatus,
+    id = BOOKING_ID,
+  ) => ({
     id,
     startsAt: new Date(startsAt),
     endsAt: addMinutes(new Date(startsAt), serviceData.durationMin),
@@ -875,6 +1253,7 @@ describe('BookingsService — moje wizyty', () => {
     service = new BookingsService(
       { booking: { findMany } } as unknown as PrismaService,
       eventsMock(),
+      paymentsMock(),
     );
   });
 
@@ -886,7 +1265,9 @@ describe('BookingsService — moje wizyty', () => {
   const argsFor = (group: 'upcoming' | 'past') =>
     findMany.mock.calls
       .map((call) => call[0] as FindManyArgs)
-      .find((args) => (group === 'upcoming' ? args.where.endsAt.gt : args.where.endsAt.lte));
+      .find((args) =>
+        group === 'upcoming' ? args.where.endsAt.gt : args.where.endsAt.lte,
+      );
 
   describe('zakres i sortowanie', () => {
     // AC: „sortowanie: nadchodzące rosnąco, minione malejąco"
@@ -912,7 +1293,9 @@ describe('BookingsService — moje wizyty', () => {
       await service.findMine(CLIENT_ID);
 
       expect(findMany).toHaveBeenCalledTimes(2);
-      expect(argsFor('past')?.where.endsAt.lte).toEqual(argsFor('upcoming')?.where.endsAt.gt);
+      expect(argsFor('past')?.where.endsAt.lte).toEqual(
+        argsFor('upcoming')?.where.endsAt.gt,
+      );
     });
 
     // AC #41: „istniejące rezerwacje zablokowanej firmy pozostają widoczne dla klientów
@@ -993,7 +1376,10 @@ describe('BookingsService — moje wizyty', () => {
     // Musi zgadzać się z tym, co zrobi POST /bookings/:id/cancel (#27).
     it('CONFIRMED przed granicą polityki → true', async () => {
       // start 2026-01-20 09:00Z, polityka 24 h → granica 2026-01-19 09:00Z, czyli po NOW
-      respond([booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED)], []);
+      respond(
+        [booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED)],
+        [],
+      );
 
       const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
 
@@ -1002,7 +1388,10 @@ describe('BookingsService — moje wizyty', () => {
 
     it('CONFIRMED dokładnie X godzin przed startem → false', async () => {
       // granica należy do firmy: o tej samej sekundzie /cancel zwraca 409
-      respond([booking('2026-01-11T10:00:00.000Z', BookingStatus.CONFIRMED)], []);
+      respond(
+        [booking('2026-01-11T10:00:00.000Z', BookingStatus.CONFIRMED)],
+        [],
+      );
 
       const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
 
@@ -1047,7 +1436,11 @@ describe('BookingsService — moje wizyty', () => {
 });
 
 describe('BookingsService — kalendarz firmy (#31)', () => {
-  const ownerUser: AuthUser = { sub: OWNER_ID, email: 'owner@example.com', role: UserRole.OWNER };
+  const ownerUser: AuthUser = {
+    sub: OWNER_ID,
+    email: 'owner@example.com',
+    role: UserRole.OWNER,
+  };
   const employeeUser: AuthUser = {
     sub: EMPLOYEE_USER_ID,
     email: 'pracownik@example.com',
@@ -1055,7 +1448,9 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
   };
 
   // zimowa środa — spójna ze strefą Europe/Warsaw użytą w innych testach tego pliku
-  const query = (overrides: Partial<{ from: string; to: string; employeeId: string }> = {}) => ({
+  const query = (
+    overrides: Partial<{ from: string; to: string; employeeId: string }> = {},
+  ) => ({
     from: '2026-01-14',
     to: '2026-01-14',
     ...overrides,
@@ -1080,6 +1475,7 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
         booking: { findMany: bookingFindMany },
       } as unknown as PrismaService,
       eventsMock(),
+      paymentsMock(),
     );
   });
 
@@ -1104,7 +1500,10 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
   });
 
   it('OWNER + employeeId: zawęża where do wskazanego pracownika', async () => {
-    await service.findForBusiness(ownerUser, query({ employeeId: OTHER_EMPLOYEE_ID }));
+    await service.findForBusiness(
+      ownerUser,
+      query({ employeeId: OTHER_EMPLOYEE_ID }),
+    );
 
     expect(bookingFindMany.mock.calls[0][0].where).toMatchObject({
       businessId: BUSINESS_ID,
@@ -1115,11 +1514,16 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
   it('OWNER bez employeeId: where nie zawiera filtra pracownika', async () => {
     await service.findForBusiness(ownerUser, query());
 
-    expect(bookingFindMany.mock.calls[0][0].where).not.toHaveProperty('employeeId');
+    expect(bookingFindMany.mock.calls[0][0].where).not.toHaveProperty(
+      'employeeId',
+    );
   });
 
   it('EMPLOYEE: filtr employeeId wymuszony serwerowo na własnym pracowniku, query ignorowane', async () => {
-    await service.findForBusiness(employeeUser, query({ employeeId: OTHER_EMPLOYEE_ID }));
+    await service.findForBusiness(
+      employeeUser,
+      query({ employeeId: OTHER_EMPLOYEE_ID }),
+    );
 
     expect(employeeFindUnique).toHaveBeenCalledWith({
       where: { userId: EMPLOYEE_USER_ID },
@@ -1134,7 +1538,10 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
 
   it('to przed from → 400, bez zapytań do bazy', async () => {
     await expect(
-      service.findForBusiness(ownerUser, query({ from: '2026-01-15', to: '2026-01-14' })),
+      service.findForBusiness(
+        ownerUser,
+        query({ from: '2026-01-15', to: '2026-01-14' }),
+      ),
     ).rejects.toMatchObject({ status: 400 });
     expect(bookingFindMany).not.toHaveBeenCalled();
   });
@@ -1142,7 +1549,9 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
   it('OWNER bez firmy → 404', async () => {
     businessFindUnique.mockResolvedValue(null);
 
-    await expect(service.findForBusiness(ownerUser, query())).rejects.toMatchObject({
+    await expect(
+      service.findForBusiness(ownerUser, query()),
+    ).rejects.toMatchObject({
       status: 404,
     });
   });
@@ -1150,7 +1559,9 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
   it('EMPLOYEE bez powiązanego rekordu pracownika → 404', async () => {
     employeeFindUnique.mockResolvedValue(null);
 
-    await expect(service.findForBusiness(employeeUser, query())).rejects.toMatchObject({
+    await expect(
+      service.findForBusiness(employeeUser, query()),
+    ).rejects.toMatchObject({
       status: 404,
     });
   });

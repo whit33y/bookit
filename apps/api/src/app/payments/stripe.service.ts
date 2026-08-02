@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
@@ -36,5 +40,46 @@ export class StripeService {
     // gubiłaby keep-alive
     this.cached ??= new Stripe(secretKey);
     return this.cached;
+  }
+
+  /**
+   * Zweryfikowane zdarzenie webhooka (#51) albo wyjątek. Uwierzytelnieniem trasy
+   * `POST /api/payments/webhook` jest wyłącznie ten podpis — Stripe nie ma tokena JWT,
+   * więc bez tej metody endpoint przyjmowałby dowolny JSON od kogokolwiek.
+   *
+   * `payload` musi być **surowymi bajtami** żądania: HMAC liczy się ze znaków sprzed
+   * parsowania, więc `JSON.stringify(req.body)` nie przejdzie weryfikacji (kolejność kluczy
+   * i białe znaki). Stąd `rawBody: true` w main.ts.
+   *
+   * Rozróżnienie kodów jest celowe: 503 to nasza niedokonfigurowana instancja (pusty
+   * `STRIPE_WEBHOOK_SECRET`), 400 to niepoprawne żądanie. Oba są spoza 2xx, więc Stripe
+   * i tak ponowi dostarczenie — a lokalnie 400 jest zwykłym objawem nieodświeżonego
+   * sekretu po restarcie `stripe listen`.
+   */
+  constructEvent(
+    payload: Buffer | undefined,
+    signature: string | undefined,
+  ): Stripe.Event {
+    const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (!webhookSecret) {
+      throw new ServiceUnavailableException(
+        'Płatności online są chwilowo niedostępne',
+      );
+    }
+    if (!payload || !signature) {
+      throw new BadRequestException('Brak podpisu zdarzenia Stripe');
+    }
+
+    try {
+      return this.client.webhooks.constructEvent(
+        payload,
+        signature,
+        webhookSecret,
+      );
+    } catch {
+      // Treść błędu z SDK nie idzie dalej: przy sfałszowanym żądaniu nie ma po co
+      // podpowiadać nadawcy, co dokładnie się nie zgadza.
+      throw new BadRequestException('Nieprawidłowy podpis zdarzenia Stripe');
+    }
   }
 }
