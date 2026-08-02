@@ -27,6 +27,16 @@
   --shadow-raised: var(--shadow-raised);
 }
 
+/* Przeglądarka centruje otwarty <dialog> przez `margin: auto` z własnego arkusza, ale
+   preflight Tailwinda zeruje marginesy na `*` i jako styl autora wygrywa — bez tego każdy
+   modal (design system §9) siada przy górnej krawędzi. W @layer base, więc utility marginesów
+   nadal je nadpisze, gdy któryś dialog będzie chciał inaczej. */
+@layer base {
+  dialog:modal {
+    margin: auto;
+  }
+}
+
 /* Wspólne klocki stron auth — jedna definicja zamiast kopii ściany utility w każdym szablonie. */
 @layer components {
   .btn-primary {
