@@ -9,6 +9,7 @@ import { parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessReviewsQueryDto } from './dto/business-reviews-query.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { countRatings, toRatingDistribution } from './rating-distribution';
 import { maskAuthor } from './review-author';
 import { ReviewStats, toReviewStats } from './review-stats';
 
@@ -92,7 +93,7 @@ export class ReviewsService {
 
     const where: Prisma.ReviewWhereInput = { businessId: business.id };
 
-    const [rows, total] = await Promise.all([
+    const [rows, byRating] = await Promise.all([
       this.prisma.review.findMany({
         where,
         select: publicReviewSelect,
@@ -102,14 +103,22 @@ export class ReviewsService {
         skip,
         take: limit,
       }),
-      this.prisma.review.count({ where }),
+      // Rozkład liczy baza, a nie front: to samo `where` co lista, ale bez skip/take, więc
+      // histogram opisuje całą firmę niezależnie od numeru strony. Policzony na froncie
+      // z jednej strony recenzji, a podpisany jako rozkład całości, kłamałby.
+      this.prisma.review.groupBy({ by: ['rating'], where, _count: { _all: true } }),
     ]);
+
+    const ratingDistribution = toRatingDistribution(byRating);
 
     return {
       items: rows.map(({ client, ...review }) => ({ ...review, author: maskAuthor(client) })),
-      total,
+      // suma słupków zamiast osobnego `count`: jedno zapytanie mniej, a przy równoległym
+      // zapisie total i histogram nie rozjadą się na tyle, żeby udziały nie sumowały się do 100%
+      total: countRatings(ratingDistribution),
       page,
       limit,
+      ratingDistribution,
     };
   }
 
