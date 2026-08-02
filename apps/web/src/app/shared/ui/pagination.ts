@@ -5,16 +5,17 @@ import { Component, computed, input, output } from '@angular/core';
 const WINDOW_SIZE = 5;
 
 /**
- * Paginacja pod tabelą admina (design system §8): zakres pozycji + okno numerów stron.
+ * Paginacja listy (design system §8): zakres pozycji + okno numerów stron.
  * Komponent czysto prezentacyjny — nie zna URL-a ani API, o zmianie strony informuje rodzica.
  */
 @Component({
-  selector: 'app-admin-pagination',
+  selector: 'app-pagination',
   template: `
     @if (total() > limit()) {
       <nav
         aria-label="Paginacja"
-        class="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-4 py-3 text-[13px] font-medium sm:px-6"
+        class="flex flex-wrap items-center justify-between gap-3 text-[13px] font-medium"
+        [class]="frameClass()"
       >
         <p class="text-stone-500">
           {{ rangeStart() }}–{{ rangeEnd() }} z {{ total() }} {{ itemsLabel() }}
@@ -57,12 +58,15 @@ const WINDOW_SIZE = 5;
     }
   `,
 })
-export default class AdminPagination {
+export default class Pagination {
   readonly page = input.required<number>();
   readonly limit = input.required<number>();
   readonly total = input.required<number>();
-  /** Dopełniacz liczby mnogiej — „firm", „użytkowników" (konstrukcja „z 24 …"). */
+  /** Dopełniacz liczby mnogiej — „firm", „użytkowników", „opinii" (konstrukcja „z 24 …"). */
   readonly itemsLabel = input.required<string>();
+  /** Osadzenie paska: domyślnie stopka tabeli (kreska u góry + padding karty), ale sekcja
+   *  bez obramowania podaje własne klasy — ten sam zabieg co `paddingClass` w LoadingState. */
+  readonly frameClass = input('border-t border-stone-200 px-4 py-3 sm:px-6');
 
   readonly pageChange = output<number>();
 

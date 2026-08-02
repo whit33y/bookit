@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import AdminPagination from './admin-pagination';
+import Pagination from './pagination';
 
 async function setup(inputs: { page: number; limit: number; total: number }) {
-  await TestBed.configureTestingModule({ imports: [AdminPagination] }).compileComponents();
-  const fixture = TestBed.createComponent(AdminPagination);
+  await TestBed.configureTestingModule({ imports: [Pagination] }).compileComponents();
+  const fixture = TestBed.createComponent(Pagination);
   fixture.componentRef.setInput('page', inputs.page);
   fixture.componentRef.setInput('limit', inputs.limit);
   fixture.componentRef.setInput('total', inputs.total);
@@ -12,15 +12,15 @@ async function setup(inputs: { page: number; limit: number; total: number }) {
   return fixture;
 }
 
-const text = (fixture: ComponentFixture<AdminPagination>) =>
+const text = (fixture: ComponentFixture<Pagination>) =>
   ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/g, ' ').trim();
 
-const buttonWith = (fixture: ComponentFixture<AdminPagination>, label: string) =>
+const buttonWith = (fixture: ComponentFixture<Pagination>, label: string) =>
   Array.from(
     (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
   ).find((b) => (b.textContent ?? '').trim() === label);
 
-describe('AdminPagination', () => {
+describe('Pagination', () => {
   it('nie renderuje nawigacji, gdy wszystko mieści się na jednej stronie', async () => {
     const fixture = await setup({ page: 1, limit: 20, total: 20 });
     expect(
@@ -66,6 +66,21 @@ describe('AdminPagination', () => {
       ),
     ).map((b) => (b.textContent ?? '').trim());
     expect(numbers).toEqual(['8', '9', '10', '11', '12']);
+  });
+
+  it('domyślnie osadza się jak stopka tabeli, ale ramkę da się podmienić', async () => {
+    const fixture = await setup({ page: 1, limit: 20, total: 47 });
+    const nav = () => (fixture.nativeElement as HTMLElement).querySelector('nav');
+
+    expect(nav()?.className).toContain('border-t');
+
+    fixture.componentRef.setInput('frameClass', 'mt-6');
+    fixture.detectChanges();
+
+    expect(nav()?.className).not.toContain('border-t');
+    expect(nav()?.className).toContain('mt-6');
+    // klasy własne paska (układ, typografia) zostają niezależnie od ramki
+    expect(nav()?.className).toContain('justify-between');
   });
 
   it('klik numeru zgłasza zmianę strony rodzicowi', async () => {

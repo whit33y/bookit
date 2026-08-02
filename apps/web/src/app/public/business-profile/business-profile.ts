@@ -9,7 +9,9 @@ import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import RatingStars from '../../shared/ui/rating-stars';
 import NotFound from '../not-found/not-found';
+import BusinessReviews from './business-reviews';
 
 interface PublicBusiness {
   id: string;
@@ -33,6 +35,9 @@ interface PublicBusiness {
     employees: { id: string; name: string }[];
   }[];
   employees: { id: string; name: string }[];
+  // agregat recenzji (#47); null to „brak ocen", nigdy 0 — AC #49 zakazuje atrapy „0.0"
+  avgRating: number | null;
+  reviewCount: number;
 }
 
 /** Inicjały do monogramu — pierwsze litery max dwóch pierwszych słów nazwy. */
@@ -55,6 +60,8 @@ function initials(name: string): string {
     LoadingState,
     ErrorState,
     EmptyState,
+    RatingStars,
+    BusinessReviews,
   ],
   template: `
     @if (loading()) {
@@ -82,6 +89,14 @@ function initials(name: string): string {
                 <p class="text-sm font-medium text-stone-500">
                   {{ b.category.name }} · {{ b.city }}
                 </p>
+                <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
+                @if (b.avgRating !== null) {
+                  <app-rating-stars
+                    class="mt-1.5"
+                    [value]="b.avgRating"
+                    [count]="b.reviewCount"
+                  />
+                }
               </div>
             </div>
 
@@ -168,6 +183,8 @@ function initials(name: string): string {
                 }
               </ul>
             }
+
+            <app-business-reviews [slug]="b.slug" />
           </div>
         </article>
       </div>

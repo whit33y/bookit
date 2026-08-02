@@ -7,6 +7,7 @@ import AppMap, { MapPin } from '../../shared/map/map';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import RatingStars from '../../shared/ui/rating-stars';
 
 interface SearchResultItem {
   id: string;
@@ -18,6 +19,9 @@ interface SearchResultItem {
   lng: number;
   category: { id: string; name: string; slug: string };
   distanceKm?: number;
+  // agregat recenzji (#47); null to „brak ocen", nigdy 0 — AC #49 zakazuje atrapy „0.0"
+  avgRating: number | null;
+  reviewCount: number;
 }
 
 interface SearchResponse {
@@ -46,7 +50,7 @@ function businessCountLabel(n: number): string {
 
 @Component({
   selector: 'app-search',
-  imports: [AppMap, RouterLink, LoadingState, ErrorState, EmptyState],
+  imports: [AppMap, RouterLink, LoadingState, ErrorState, EmptyState, RatingStars],
   template: `
     <div class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
       <section class="lg:w-3/5">
@@ -87,6 +91,14 @@ function businessCountLabel(n: number): string {
               >
                 <a [routerLink]="'/' + item.slug" class="block">
                   <h2 class="font-bold">{{ item.name }}</h2>
+                  <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
+                  @if (item.avgRating !== null) {
+                    <app-rating-stars
+                      class="mt-1"
+                      [value]="item.avgRating"
+                      [count]="item.reviewCount"
+                    />
+                  }
                   <p class="mt-1 text-sm text-stone-500">
                     {{ item.category.name }} · {{ item.city }}, {{ item.street }}
                     @if (item.distanceKm !== undefined) {

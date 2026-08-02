@@ -587,6 +587,26 @@ Sekcja recenzji na publicznym profilu firmy (średnia, rozkład, lista z paginac
 - [ ] Profil: średnia + liczba ocen + lista recenzji z paginacją
 - [ ] Karta w wynikach: gwiazdki + liczba ocen; firmy bez recenzji bez atrapy „0.0"
 
+### #111 — Backend: rozkład ocen w API recenzji
+**Milestone:** M9 · **Labele:** `backend`, `epik:recenzje`, `faza-2` · **Zależy od:** #47
+
+Rozkład ocen 1–5 w odpowiedzi publicznej listy recenzji. Wydzielone z #49: opis tamtego issue wspominał o rozkładzie, ale API daje wyłącznie `avgRating` i `reviewCount`, a histogram policzony na froncie z jednej strony recenzji podpisany jako rozkład całości pokazywałby nieprawdę.
+
+**Kryteria akceptacji:**
+- [ ] Publiczna lista recenzji firmy zwraca rozkład ocen 1–5 dla całej firmy, niezależny od numeru strony
+- [ ] Firma bez recenzji: zera na każdym stopniu, bez pomijania kluczy
+- [ ] Rozkład nie wchodzi do wyników wyszukiwania (#34)
+
+### #112 — Frontend: rozkład ocen na profilu firmy
+**Milestone:** M9 · **Labele:** `frontend`, `epik:recenzje`, `faza-2` · **Zależy od:** #111
+
+Histogram ocen 5→1 w sekcji recenzji na profilu, obok średniej i liczby ocen z #49. Dane z agregatu dokładanego w #111 — front nie liczy rozkładu z pobranej strony recenzji.
+
+**Kryteria akceptacji:**
+- [ ] Rozkład 5→1 przy sekcji recenzji: liczba ocen na każdym stopniu i jej udział w całości
+- [ ] Firma bez recenzji nie pokazuje pustego histogramu
+- [ ] Sam pasek nie niesie informacji — liczba stoi obok, całość opisana dla czytnika ekranu
+
 ---
 
 ## M10 — Faza 2: Płatności
