@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
@@ -28,6 +29,20 @@ export class PaymentsController {
     private readonly stripe: StripeService,
     private readonly payments: PaymentsService,
   ) {}
+
+  /**
+   * Konfiguracja płatności dla przeglądarki (#53). Bez guarda i celowo — kreator rezerwacji
+   * ładuje Stripe.js zanim ktokolwiek się zaloguje, a `pk_*` jest kluczem publicznym.
+   *
+   * `null` znaczy „płatności online wyłączone w tym środowisku" (tak stoi lokalny setup i CI
+   * wg README) — front ma wtedy nie montować Payment Elementu zamiast pokazywać pusty
+   * formularz. Rozróżnienie robi się po wartości, nie po 404: brak konfiguracji jest
+   * poprawnym stanem, nie błędem.
+   */
+  @Get('config')
+  config() {
+    return { publishableKey: this.stripe.publishableKey };
+  }
 
   /**
    * 200 zamiast domyślnego dla POST 201: Stripe czyta wyłącznie kod, a 2xx znaczy

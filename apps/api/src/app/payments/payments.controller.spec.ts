@@ -17,12 +17,13 @@ const PAYLOAD = JSON.stringify({
 
 // Prawdziwy StripeService z atrapą ConfigService — weryfikacja podpisu ma być realna,
 // bo to ona jest jedynym uwierzytelnieniem tej trasy.
-const stripe = () =>
+const stripe = (env: Record<string, string> = {}) =>
   new StripeService({
     get: (key: string) =>
       ({
         STRIPE_SECRET_KEY: 'sk_test_x',
         STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+        ...env,
       })[key],
   } as unknown as ConfigService);
 
@@ -43,6 +44,38 @@ describe('PaymentsController', () => {
     controller = new PaymentsController(stripe(), {
       handleEvent,
     } as unknown as PaymentsService);
+  });
+
+  // #53: front pyta o ten klucz, zanim zamontuje Payment Element
+  describe('GET config', () => {
+    const controllerWith = (env: Record<string, string>) =>
+      new PaymentsController(stripe(env), {
+        handleEvent,
+      } as unknown as PaymentsService);
+
+    it('skonfigurowany Stripe → klucz publishable', () => {
+      expect(
+        controllerWith({ STRIPE_PUBLISHABLE_KEY: 'pk_test_x' }).config(),
+      ).toEqual({ publishableKey: 'pk_test_x' });
+    });
+
+    it('środowisko bez kluczy → null, a nie 404 — brak płatności to poprawny stan', () => {
+      expect(
+        controllerWith({
+          STRIPE_SECRET_KEY: '',
+          STRIPE_PUBLISHABLE_KEY: '',
+        }).config(),
+      ).toEqual({ publishableKey: null });
+    });
+
+    it('odpowiedź nie niesie żadnego sekretu', () => {
+      const body = JSON.stringify(
+        controllerWith({ STRIPE_PUBLISHABLE_KEY: 'pk_test_x' }).config(),
+      );
+
+      expect(body).not.toContain('sk_test_x');
+      expect(body).not.toContain(WEBHOOK_SECRET);
+    });
   });
 
   it('poprawnie podpisane zdarzenie trafia do serwisu', async () => {

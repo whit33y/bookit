@@ -20,6 +20,21 @@ type BookingStatus =
   | 'CANCELLED_BY_BUSINESS'
   | 'COMPLETED';
 
+/** Lustro `PaymentStatus` z apps/api/prisma/schema.prisma. `REFUNDED` dokłada dopiero #52 —
+ *  jest tu już teraz, żeby zwrócona zaliczka od razu dostała etykietę, a nie pustą komórkę. */
+type PaymentStatus =
+  | 'PENDING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED';
+
+/** Zaliczka wizyty (#51). Bez `clientSecret` — ten wychodzi wyłącznie z POST /bookings. */
+interface BookingPayment {
+  status: PaymentStatus;
+  amountCents: number;
+}
+
 /** Wystawiona recenzja albo null — GET /bookings/mine i POST /bookings/:id/review (#47).
  *  Backend dokłada to pole wprost po to, by odróżnić odbytą wizytę bez oceny od ocenionej. */
 interface BookingReview {
@@ -57,6 +72,8 @@ interface ClientBooking {
   // liczy backend wg polityki firmy — front nie powtarza tej reguły u siebie (AC #28)
   canCancel: boolean;
   review: BookingReview | null;
+  /** null = usługa bez zaliczki, cała płatność na miejscu. */
+  payment: BookingPayment | null;
 }
 
 interface MyBookingsResponse {
@@ -93,6 +110,27 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
   CANCELLED_BY_CLIENT: 'bg-stone-100 text-stone-600',
   CANCELLED_BY_BUSINESS: 'bg-rose-50 text-rose-700',
   COMPLETED: 'bg-stone-100 text-stone-600',
+};
+
+// Stan zaliczki (#53). Etykiety nazywają rzecz z punktu widzenia klienta („zaliczka
+// niepobrana"), a nie stanem PaymentIntenta — `CANCELLED` na płatności znaczy tyle, że
+// rezerwacja wygasła nieopłacona i nikt nic nie pobrał.
+const PAYMENT_LABELS: Record<PaymentStatus, string> = {
+  PENDING: 'oczekuje na opłacenie',
+  SUCCEEDED: 'opłacona',
+  FAILED: 'płatność nieudana',
+  CANCELLED: 'niepobrana — rezerwacja wygasła',
+  REFUNDED: 'zwrócona',
+};
+
+// Te same odcienie 700 na tłach 50/100 co przy statusie wizyty — kontrast ponad 4.5:1,
+// a kolor wyłącznie dubluje etykietę, nigdy nie niesie informacji sam (WCAG 1.4.1).
+const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
+  PENDING: 'bg-amber-50 text-amber-700',
+  SUCCEEDED: 'bg-emerald-50 text-emerald-700',
+  FAILED: 'bg-rose-50 text-rose-700',
+  CANCELLED: 'bg-stone-100 text-stone-600',
+  REFUNDED: 'bg-sky-50 text-sky-700',
 };
 
 @Component({
@@ -196,6 +234,17 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
                     @if (b.business.phone; as phone) {
                       <dt class="font-semibold text-stone-600">Telefon</dt>
                       <dd class="font-medium">{{ phone }}</dd>
+                    }
+                    @if (b.payment; as payment) {
+                      <dt class="font-semibold text-stone-600">Zaliczka</dt>
+                      <dd class="font-medium">
+                        {{ payment.amountCents | pricePln }}
+                        <span
+                          class="ml-1 rounded-full px-2.5 py-0.5 text-[13px] font-semibold"
+                          [class]="paymentClass(payment.status)"
+                          >{{ paymentLabel(payment.status) }}</span
+                        >
+                      </dd>
                     }
                     @if (b.clientNote; as note) {
                       <dt class="font-semibold text-stone-600">Twoja notatka</dt>
@@ -339,6 +388,14 @@ export default class MyBookings {
 
   protected statusClass(status: BookingStatus): string {
     return STATUS_CLASSES[status];
+  }
+
+  protected paymentLabel(status: PaymentStatus): string {
+    return PAYMENT_LABELS[status];
+  }
+
+  protected paymentClass(status: PaymentStatus): string {
+    return PAYMENT_CLASSES[status];
   }
 
   protected cancellationNote(hours: number): string {

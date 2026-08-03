@@ -7,6 +7,7 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { StripeLoader } from '../../shared/payments/stripe-loader';
 import { settle } from '../testing-helpers';
 import BookingWizard, { groupSlotsByStart } from './booking-wizard';
 
@@ -27,17 +28,22 @@ const MOCK = {
       description: null,
       durationMin: 30,
       priceCents: 7000,
+      depositType: null,
+      depositValue: null,
       employees: [
         { id: 'e1', name: 'Anna Kowalska' },
         { id: 'e2', name: 'Bartosz Nowak' },
       ],
     },
     {
+      // usługa z zaliczką (#50): 30% z 200 zł = 60 zł, jak „Koloryzacja" w danych demo
       id: 's2',
       name: 'Koloryzacja',
       description: null,
       durationMin: 90,
       priceCents: 20000,
+      depositType: 'PERCENT',
+      depositValue: 30,
       employees: [{ id: 'e3', name: 'Celina Wiśniewska' }],
     },
   ],
@@ -63,7 +69,24 @@ const setDate = (input: HTMLInputElement, value: string) => {
   input.dispatchEvent(new Event('change'));
 };
 
-async function setup(query = '?serviceId=s1', loggedIn = false) {
+/** Atrapa Stripe.js — kreator z zaliczką montuje krok płatności, a prawdziwe SDK
+ *  ładuje skrypt z js.stripe.com, którego jsdom nigdy nie doczeka. */
+function fakeStripe() {
+  const confirmPayment = vi
+    .fn()
+    .mockResolvedValue({ paymentIntent: { status: 'succeeded' } });
+  const retrievePaymentIntent = vi
+    .fn()
+    .mockResolvedValue({ paymentIntent: { status: 'succeeded' } });
+  const stripe = {
+    elements: vi.fn(() => ({ create: vi.fn(() => ({ mount: vi.fn() })) })),
+    confirmPayment,
+    retrievePaymentIntent,
+  };
+  return { stripe, confirmPayment, retrievePaymentIntent };
+}
+
+async function setup(query = '?serviceId=s1', loggedIn = false, stripe = fakeStripe()) {
   localStorage.clear();
   if (loggedIn) {
     localStorage.setItem(
@@ -86,6 +109,10 @@ async function setup(query = '?serviceId=s1', loggedIn = false) {
       ]),
       provideHttpClient(),
       provideHttpClientTesting(),
+      {
+        provide: StripeLoader,
+        useValue: { load: vi.fn().mockResolvedValue(stripe.stripe) },
+      },
     ],
   });
 
@@ -97,13 +124,14 @@ async function setup(query = '?serviceId=s1', loggedIn = false) {
   harness.detectChanges();
 
   const el = () => harness.fixture.nativeElement as HTMLElement;
-  const text = () => el().textContent ?? '';
+  // Intl wstawia w „60 zł" twardą spację — normalizacja jak w business-profile.spec.ts
+  const text = () => (el().textContent ?? '').replace(/\s/g, ' ');
   const availability = () =>
     http.expectOne((r) =>
       r.url.startsWith('/api/businesses/test-slug/availability'),
     );
 
-  return { harness, http, el, text, availability };
+  return { harness, http, el, text, availability, stripe };
 }
 
 /** Wybiera „Dowolny pracownik" + dzień i zwraca zapytanie o sloty. */
@@ -255,6 +283,7 @@ describe('BookingWizard', () => {
       startsAt: SLOT_A,
       endsAt: SLOT_B,
       status: 'PENDING',
+      payment: null,
     });
     await settle(ctx.harness.fixture);
     ctx.harness.detectChanges();
@@ -405,6 +434,194 @@ describe('BookingWizard', () => {
     // wybrany termin przetrwał logowanie → od razu widać podsumowanie
     expect(ctx.text()).toContain('Podsumowanie');
     expect(ctx.text()).toContain('Anna Kowalska');
+  });
+
+  // ── #53: zaliczka ──────────────────────────────────────────────────────
+  describe('usługa z zaliczką', () => {
+    const SLOT_C = '2026-08-03T08:00:00.000Z';
+
+    /** Doprowadza kreator do wysłania POST /bookings dla usługi s2 (zaliczka 60 zł). */
+    async function bookWithDeposit(ctx: Awaited<ReturnType<typeof setup>>) {
+      await flushSlots(ctx, await pickAnyEmployeeAndDate(ctx), [
+        { employeeId: 'e3', startsAt: SLOT_C },
+      ]);
+
+      slotButtons(ctx.el())[0].click();
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      must<HTMLButtonElement>(ctx.el(), '.btn-primary').click();
+      await settle(ctx.harness.fixture);
+      return ctx.http.expectOne('/api/bookings');
+    }
+
+    const paymentBody = {
+      id: 'bk2',
+      employeeId: 'e3',
+      serviceId: 's2',
+      startsAt: SLOT_C,
+      endsAt: SLOT_C,
+      status: 'PENDING',
+      payment: {
+        amountCents: 6000,
+        currency: 'pln',
+        clientSecret: 'pi_2_secret_x',
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      },
+    };
+
+    it('kwota zaliczki widoczna już przy wyborze usługi', async () => {
+      const { text } = await setup('?serviceId=s1');
+
+      // s2 ma 30% z 200 zł; s1 bez zaliczki nie dostaje żadnej etykiety
+      expect(text()).toContain('Zaliczka 60 zł online');
+      expect(text()).not.toContain('Zaliczka 0 zł');
+    });
+
+    it('licznik kroków rośnie do czterech, a podsumowanie rozbija kwotę', async () => {
+      const ctx = await setup('?serviceId=s2', true);
+      await flushSlots(ctx, await pickAnyEmployeeAndDate(ctx), [
+        { employeeId: 'e3', startsAt: SLOT_C },
+      ]);
+
+      expect(ctx.text()).toContain('Krok 3 z 4');
+
+      slotButtons(ctx.el())[0].click();
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Zaliczka (online)');
+      expect(ctx.text()).toContain('60 zł');
+      expect(ctx.text()).toContain('Do zapłaty na miejscu');
+      expect(ctx.text()).toContain('140 zł');
+      expect(ctx.text()).toContain('Zarezerwuj i zapłać zaliczkę');
+    });
+
+    it('usługa bez zaliczki zostaje przy trzech krokach', async () => {
+      const { text } = await setup('?serviceId=s1');
+
+      expect(text()).toContain('Krok 2 z 3');
+    });
+
+    it('client_secret z odpowiedzi trafia do kroku płatności, bez wychodzenia z kreatora', async () => {
+      const ctx = await setup('?serviceId=s2', true);
+      (await bookWithDeposit(ctx)).flush(paymentBody);
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Termin zarezerwowany');
+      expect(ctx.text()).toContain('Czeka na opłacenie zaliczki');
+      expect(ctx.text()).toContain('4. Zapłać zaliczkę');
+      expect(ctx.stripe.stripe.elements).toHaveBeenCalledWith(
+        expect.objectContaining({ clientSecret: 'pi_2_secret_x' }),
+      );
+      // dopóki zaliczka nie jest opłacona, nie zapraszamy do wyjścia z kreatora
+      expect(ctx.text()).not.toContain('Wróć do profilu firmy');
+    });
+
+    it('opłacenie zaliczki zamienia krok płatności w potwierdzenie', async () => {
+      const ctx = await setup('?serviceId=s2', true);
+      (await bookWithDeposit(ctx)).flush(paymentBody);
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      must<HTMLButtonElement>(
+        ctx.el(),
+        'app-deposit-payment .btn-primary',
+      ).click();
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Rezerwacja przyjęta');
+      expect(ctx.text()).toContain('60 zł — opłacona');
+      expect(ctx.text()).toContain('Moje wizyty');
+      expect(ctx.el().querySelector('app-deposit-payment')).toBeNull();
+    });
+
+    // powrót z BLIK-a/Przelewów24: rezerwacji nie ma już w pamięci kreatora, więc stan
+    // płatności czytamy ze Stripe'a, a nie z parametru `redirect_status` w adresie
+    it('powrót z przekierowania pokazuje wynik płatności zamiast pustego kroku 3', async () => {
+      const ctx = await setup(
+        '?serviceId=s2&payment_intent_client_secret=pi_2_secret_x',
+        true,
+      );
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.stripe.retrievePaymentIntent).toHaveBeenCalledWith(
+        'pi_2_secret_x',
+      );
+      expect(ctx.text()).toContain('Zaliczka opłacona');
+    });
+
+    it('powrót z nieudanej płatności tłumaczy, co dalej', async () => {
+      const stripe = fakeStripe();
+      stripe.retrievePaymentIntent.mockResolvedValue({
+        paymentIntent: { status: 'requires_payment_method' },
+      });
+      const ctx = await setup(
+        '?serviceId=s2&payment_intent_client_secret=pi_2_secret_x',
+        true,
+        stripe,
+      );
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Płatność niedokończona');
+      const alert = ctx.el().querySelector('[role="alert"]')?.textContent ?? '';
+      expect(alert).toContain('Nie otrzymaliśmy zaliczki');
+      expect(alert).toContain('Zarezerwuj go jeszcze raz');
+      // ponowienie żyje tylko w kreatorze — „Moje wizyty" nie mają czym zapłacić,
+      // więc komunikat nie może tam odsyłać po płatność
+      expect(alert).not.toContain('opłacić');
+    });
+
+    // nieodczytany status ≠ brak płatności: klient, który właśnie zapłacił BLIK-iem,
+    // nie może dostać komunikatu wypychającego go w drugą płatność
+    it('gdy nie da się odpytać Stripe’a, kreator nie twierdzi, że zaliczki nie było', async () => {
+      const stripe = fakeStripe();
+      stripe.retrievePaymentIntent.mockResolvedValue({
+        error: { message: 'network error' },
+      });
+      const ctx = await setup(
+        '?serviceId=s2&payment_intent_client_secret=pi_2_secret_x',
+        true,
+        stripe,
+      );
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      const alert = ctx.el().querySelector('[role="alert"]')?.textContent ?? '';
+      expect(ctx.text()).toContain('Nie znamy statusu płatności');
+      expect(alert).toContain('Nie płać drugi raz');
+      expect(alert).not.toContain('Nie otrzymaliśmy zaliczki');
+    });
+
+    it('niedostępny Stripe po powrocie też daje „nie wiemy", nie „nie zapłacono"', async () => {
+      const ctx = await setup(
+        '?serviceId=s2&payment_intent_client_secret=pi_2_secret_x',
+        true,
+        { stripe: null } as unknown as ReturnType<typeof fakeStripe>,
+      );
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Nie znamy statusu płatności');
+    });
+
+    it('gdy formularz płatności nie wstaje, klient dostaje wyjście z ekranu', async () => {
+      const ctx = await setup('?serviceId=s2', true, {
+        stripe: null,
+      } as unknown as ReturnType<typeof fakeStripe>);
+      (await bookWithDeposit(ctx)).flush(paymentBody);
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(ctx.text()).toContain('Nie udało się załadować formularza płatności');
+      // bez „odśwież stronę": przeładowanie gubi client_secret bezpowrotnie
+      expect(ctx.text()).not.toContain('Odśwież stronę');
+      expect(ctx.text()).toContain('Wróć do profilu firmy');
+    });
   });
 
   it('404: pokazuje stronę „nie znaleziono"', async () => {

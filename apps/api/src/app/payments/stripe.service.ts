@@ -29,6 +29,23 @@ export class StripeService {
     return Boolean(this.config.get<string>('STRIPE_SECRET_KEY'));
   }
 
+  /**
+   * Klucz `pk_*` dla Stripe.js w przeglądarce (#53) albo null, gdy płatności w tym
+   * środowisku nie działają. Jawność klucza jest zamierzona — publishable key służy
+   * wyłącznie do tokenizacji danych karty i Stripe publikuje go we własnej dokumentacji;
+   * sekret zostaje po tej stronie i nigdy nie wychodzi z tego pliku.
+   *
+   * Warunek na `isConfigured`, a nie na sam publishable: bez `STRIPE_SECRET_KEY` żaden
+   * PaymentIntent i tak nie powstanie, więc oddanie klucza pokazałoby klientowi Payment
+   * Element, który nie ma czego potwierdzić.
+   */
+  get publishableKey(): string | null {
+    if (!this.isConfigured) {
+      return null;
+    }
+    return this.config.get<string>('STRIPE_PUBLISHABLE_KEY') || null;
+  }
+
   get client(): Stripe {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
     if (!secretKey) {

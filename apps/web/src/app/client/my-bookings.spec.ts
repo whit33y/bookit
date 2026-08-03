@@ -47,12 +47,19 @@ const review = {
   createdAt: '2026-08-04T09:00:00.000Z',
 };
 
+/** Zaliczka wizyty (#51) — null przy usłudze płatnej w całości na miejscu. */
+const deposit = (status: string, amountCents = 6000) => ({
+  status,
+  amountCents,
+});
+
 const booking = (
   id: string,
   status: string,
   canCancel: boolean,
   serviceName: string,
   bookingReview: typeof review | null = null,
+  payment: ReturnType<typeof deposit> | null = null,
 ) => ({
   id,
   startsAt: '2026-08-03T07:00:00.000Z',
@@ -71,6 +78,7 @@ const booking = (
   employee: { id: 'e1', name: 'Anna Kowalska' },
   canCancel,
   review: bookingReview,
+  payment,
 });
 
 const MOCK = {
@@ -474,6 +482,64 @@ describe('MyBookings', () => {
     expect((harness.fixture.nativeElement as HTMLElement).textContent).toContain(
       'Nie masz zaplanowanych wizyt',
     );
+  });
+
+  // ── #53: stan zaliczki na karcie wizyty ────────────────────────────────
+  describe('zaliczka', () => {
+    /** Karta jednej wizyty z zaliczką w podanym stanie, ze znormalizowaną twardą spacją. */
+    const cardWith = async (paymentStatus: string) => {
+      const ctx = await setup({
+        upcoming: [
+          booking(
+            'b1',
+            'PENDING',
+            true,
+            'Koloryzacja',
+            null,
+            deposit(paymentStatus),
+          ),
+        ],
+        past: [],
+      });
+      return (ctx.text() ?? '').replace(/\s/g, ' ');
+    };
+
+    it('opłacona zaliczka: kwota i stan przy wizycie', async () => {
+      const card = await cardWith('SUCCEEDED');
+
+      expect(card).toContain('Zaliczka');
+      expect(card).toContain('60 zł');
+      expect(card).toContain('opłacona');
+    });
+
+    it('nieopłacona zaliczka mówi, że czeka na płatność', async () => {
+      expect(await cardWith('PENDING')).toContain('oczekuje na opłacenie');
+    });
+
+    it('nieudana płatność nazywa rzecz po imieniu', async () => {
+      expect(await cardWith('FAILED')).toContain('płatność nieudana');
+    });
+
+    it('wygasła rezerwacja: zaliczka niepobrana, nie „nieudana"', async () => {
+      expect(await cardWith('CANCELLED')).toContain(
+        'niepobrana — rezerwacja wygasła',
+      );
+    });
+
+    // REFUNDED zacznie zwracać backend dopiero w #52 — etykieta czeka gotowa, żeby zwrot
+    // nie wylądował wtedy w pustej komórce
+    it('zwrócona zaliczka ma etykietę gotową na #52', async () => {
+      expect(await cardWith('REFUNDED')).toContain('zwrócona');
+    });
+
+    it('usługa bez zaliczki nie dokłada wiersza', async () => {
+      const ctx = await setup({
+        upcoming: [booking('b1', 'PENDING', true, 'Strzyżenie męskie')],
+        past: [],
+      });
+
+      expect(ctx.text()).not.toContain('Zaliczka');
+    });
   });
 
   it('authGuard: niezalogowany trafia na /login z returnUrl', async () => {

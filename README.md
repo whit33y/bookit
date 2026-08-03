@@ -183,6 +183,12 @@ przy braku klucza kończy się błędem `503`, a nie wywaleniem startu jak przy 
 | `STRIPE_PUBLISHABLE_KEY` | ten sam ekran, _Publishable key_ (`pk_test_…`)               | front, Payment Element (#53)       |
 | `STRIPE_WEBHOOK_SECRET`  | `stripe listen` — patrz niżej, **nie** dashboard             | weryfikacja podpisu webhooka (#51) |
 
+Wszystkie trzy siedzą w `apps/api/.env`, również ta „frontowa": klucz publishable front pobiera
+z `GET /api/payments/config` (#53), więc po podmianie kluczy wystarczy restart backendu — nic
+nie jest wkompilowane w bundle `apps/web`. Endpoint zwraca `{"publishableKey": null}`, dopóki
+komplet `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` nie jest ustawiony; kreator rezerwacji
+nie montuje wtedy formularza płatności.
+
 Sprawdzenie, że klucz testowy działa — utworzenie i anulowanie PaymentIntenta na 10 zł:
 
 ```sh
