@@ -1,20 +1,38 @@
+import { ConfigService } from '@nestjs/config';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import Stripe from 'stripe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaymentsService, UnpaidPayment } from './payments.service';
+import { PaidDeposit, PaymentsService, UnpaidPayment } from './payments.service';
 import { StripeService } from './stripe.service';
 
 const PAYMENT_ID = '77777777-7777-4777-8777-777777777777';
 const BOOKING_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const INTENT_ID = 'pi_1';
+const REFUND_ID = 're_1';
 
 const unpaid: UnpaidPayment = {
   id: PAYMENT_ID,
   bookingId: BOOKING_ID,
   stripePaymentIntentId: INTENT_ID,
 };
+
+const paid: PaidDeposit = {
+  id: PAYMENT_ID,
+  amountCents: 6600,
+  stripePaymentIntentId: INTENT_ID,
+};
+
+// Minimalne obciążenie dla webhooka charge.refunded — serwis czyta payment_intent,
+// amount_refunded i (gdy jest) id pierwszego refundu.
+const charge = (overrides: Partial<Stripe.Charge> = {}) =>
+  ({
+    id: 'ch_1',
+    payment_intent: INTENT_ID,
+    amount_refunded: 6600,
+    ...overrides,
+  }) as Stripe.Charge;
 
 // Minimalny PaymentIntent — serwis czyta z niego tylko id, latest_charge i (przy retrieve) status.
 const intent = (overrides: Partial<Stripe.PaymentIntent> = {}) =>
@@ -35,6 +53,7 @@ describe('PaymentsService', () => {
   let create: ReturnType<typeof vi.fn>;
   let cancel: ReturnType<typeof vi.fn>;
   let retrieve: ReturnType<typeof vi.fn>;
+  let refundCreate: ReturnType<typeof vi.fn>;
   let service: PaymentsService;
 
   beforeEach(() => {
@@ -51,6 +70,7 @@ describe('PaymentsService', () => {
       .mockResolvedValue({ id: INTENT_ID, client_secret: 'pi_1_secret' });
     cancel = vi.fn().mockResolvedValue(intent());
     retrieve = vi.fn().mockResolvedValue(intent({ status: 'canceled' }));
+    refundCreate = vi.fn().mockResolvedValue({ id: REFUND_ID, amount: 6600 });
 
     const tx = {
       payment: { updateMany: paymentUpdateMany, findUnique: paymentFindUnique },
@@ -68,9 +88,14 @@ describe('PaymentsService', () => {
       } as unknown as PrismaService,
       {
         isConfigured: true,
-        client: { paymentIntents: { create, cancel, retrieve } },
+        client: {
+          paymentIntents: { create, cancel, retrieve },
+          refunds: { create: refundCreate },
+        },
       } as unknown as StripeService,
       { bookingCreated } as unknown as NotificationsService,
+      // stawka prowizji jak w domyślnej konfiguracji — parsowanie stawki ma własny spec
+      { get: () => '10' } as unknown as ConfigService,
     );
   });
 
@@ -308,6 +333,155 @@ describe('PaymentsService', () => {
 
       await expect(service.releaseUnpaid(unpaid)).resolves.toBe(false);
       expect(bookingUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // AC #52: „Refund automatyczny przy odwołaniu w terminie i każdym odwołaniu przez firmę".
+  describe('refundDeposit', () => {
+    it('zwraca pieniądze w Stripie PRZED zapisem w bazie', async () => {
+      const order: string[] = [];
+      refundCreate.mockImplementation(() => {
+        order.push('stripe');
+        return Promise.resolve({ id: REFUND_ID, amount: 6600 });
+      });
+      paymentUpdateMany.mockImplementation(() => {
+        order.push('db');
+        return Promise.resolve({ count: 1 });
+      });
+
+      await service.refundDeposit(paid);
+
+      // odwrotnie niż w releaseUnpaid: wcześniejszy zapis pokazałby „zwrócono",
+      // zanim pieniądze faktycznie wyjdą
+      expect(order).toEqual(['stripe', 'db']);
+    });
+
+    it('idempotencyKey wywodzi się z id płatności — retry nie zwraca dwa razy', async () => {
+      await service.refundDeposit(paid);
+
+      expect(refundCreate.mock.calls[0][0]).toEqual({
+        payment_intent: INTENT_ID,
+      });
+      expect(refundCreate.mock.calls[0][1]).toEqual({
+        idempotencyKey: `refund_${PAYMENT_ID}`,
+      });
+    });
+
+    it('zapisuje kwotę zwrotu i zeruje prowizję, nie ruszając kwoty pobranej', async () => {
+      await service.refundDeposit(paid);
+
+      const { where, data } = paymentUpdateMany.mock.calls[0][0];
+      expect(where).toEqual({
+        id: PAYMENT_ID,
+        status: PaymentStatus.SUCCEEDED,
+      });
+      expect(data).toMatchObject({
+        status: PaymentStatus.REFUNDED,
+        refundedAmountCents: 6600,
+        platformFeeCents: 0,
+        stripeRefundId: REFUND_ID,
+      });
+      expect(data).not.toHaveProperty('amountCents');
+    });
+
+    it('powtórny zwrot tej samej płatności trafia w warunek statusu → false', async () => {
+      paymentUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refundDeposit(paid)).resolves.toBe(false);
+    });
+
+    it('obciążenie zwrócone wcześniej z dashboardu → dopisujemy zwrot bez id refundu', async () => {
+      refundCreate.mockRejectedValue({ code: 'charge_already_refunded' });
+
+      await expect(service.refundDeposit(paid)).resolves.toBe(true);
+      expect(paymentUpdateMany.mock.calls[0][0].data).toMatchObject({
+        status: PaymentStatus.REFUNDED,
+        refundedAmountCents: 6600,
+        stripeRefundId: null,
+      });
+    });
+
+    it('inny błąd Stripe leci dalej — nie udajemy, że pieniądze wróciły', async () => {
+      refundCreate.mockRejectedValue({ code: 'api_connection_error' });
+
+      await expect(service.refundDeposit(paid)).rejects.toMatchObject({
+        code: 'api_connection_error',
+      });
+      expect(paymentUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('opłacona zaliczka bez PaymentIntentu → false, bez wołania Stripe', async () => {
+      await expect(
+        service.refundDeposit({ ...paid, stripePaymentIntentId: null }),
+      ).resolves.toBe(false);
+      expect(refundCreate).not.toHaveBeenCalled();
+      expect(paymentUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // AC #52: „Odwołanie po terminie bez refundu — stan płatności jasno oznaczony".
+  describe('forfeitDeposit', () => {
+    it('oznacza zaliczkę jako przepadłą, bez ruszania Stripe', async () => {
+      await expect(service.forfeitDeposit(PAYMENT_ID)).resolves.toBe(true);
+
+      expect(refundCreate).not.toHaveBeenCalled();
+      expect(paymentUpdateMany.mock.calls[0][0]).toEqual({
+        where: { id: PAYMENT_ID, status: PaymentStatus.SUCCEEDED },
+        data: { status: PaymentStatus.FORFEITED },
+      });
+    });
+
+    // pieniądze zostają, więc jest z czego wziąć prowizję — inaczej niż przy zwrocie
+    it('nie zeruje prowizji platformy', async () => {
+      await service.forfeitDeposit(PAYMENT_ID);
+
+      expect(paymentUpdateMany.mock.calls[0][0].data).not.toHaveProperty(
+        'platformFeeCents',
+      );
+    });
+
+    it('płatność nie w SUCCEEDED → false', async () => {
+      paymentUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.forfeitDeposit(PAYMENT_ID)).resolves.toBe(false);
+    });
+  });
+
+  describe('charge.refunded', () => {
+    it('zwrot z dashboardu dogania bazę', async () => {
+      await service.handleEvent(
+        event('charge.refunded', charge({ amount_refunded: 6600 })),
+      );
+
+      expect(paymentUpdateMany.mock.calls[0][0]).toMatchObject({
+        where: {
+          stripePaymentIntentId: INTENT_ID,
+          status: PaymentStatus.SUCCEEDED,
+        },
+      });
+    });
+
+    it('powtórzone zdarzenie nic nie zmienia (idempotencja po statusie)', async () => {
+      paymentUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.handleEvent(event('charge.refunded', charge())),
+      ).resolves.toBeUndefined();
+    });
+
+    it('obciążenie bez PaymentIntentu pomijamy zamiast wywalać handler', async () => {
+      await expect(
+        service.handleEvent(
+          event('charge.refunded', charge({ payment_intent: null })),
+        ),
+      ).resolves.toBeUndefined();
+      expect(paymentUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('platformFeeFor', () => {
+    it('liczy prowizję ze stawki z konfiguracji', () => {
+      expect(service.platformFeeFor(6600)).toBe(660);
     });
   });
 

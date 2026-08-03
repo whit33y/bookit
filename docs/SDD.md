@@ -147,6 +147,8 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   CANCELLED
+  REFUNDED // zaliczka zwrócona klientowi (#52)
+  FORFEITED // zaliczka przepadła na rzecz firmy (#52)
 }
 
 enum BookingStatus {
@@ -322,8 +324,14 @@ model Payment {
   stripePaymentIntentId String?       @unique // idempotentny lookup w webhooku (#51)
   stripeChargeId        String? // potrzebne do refundu (#52)
   paidAt                DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+
+  platformFeeCents    Int       @default(0) // prowizja platformy, naliczana raz przy tworzeniu (#52)
+  refundedAmountCents Int? // kwota zwrotu; amountCents zostaje kwotą pobraną (#52)
+  refundedAt          DateTime?
+  stripeRefundId      String?   @unique // idempotentny lookup w webhooku charge.refunded (#52)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -473,6 +481,24 @@ Rezerwacja z zaliczką nie ma osobnego stanu — powstaje jako `PENDING`, tak sa
 
 Trzeci job (co 5 minut): `Payment` w `PENDING` starszy niż 15 minut → anuluj `PaymentIntent` w Stripie, ustaw `CANCELLED`, przestaw rezerwację na `CANCELLED_BY_CLIENT`. Anulowanie w Stripie idzie **przed** zapisem, żeby zwolniony slot nie mógł zostać opłacony po fakcie.
 
+### Zwroty i prowizja platformy (Faza 2, #52)
+
+Polityka zwrotów jest funkcją polityki odwołań powyżej — nie ma osobnych progów ani osobnej konfiguracji:
+
+| Zdarzenie                                         | Zaliczka   | `Payment.status` |
+| ------------------------------------------------- | ---------- | ---------------- |
+| Klient odwołuje **w terminie** (`now < startsAt − cancellationHours`) | pełny zwrot | `REFUNDED`       |
+| Firma odwołuje (`cancel-by-business`) lub odrzuca (`decline`)         | pełny zwrot | `REFUNDED`       |
+| Klient odwołuje **po terminie**                                       | przepada    | `FORFEITED`      |
+
+Opłacona zaliczka **odblokowuje późne odwołanie**: rezerwacji bez zaliczki klient po terminie nie odwoła (`409`, jak dotąd), ale jeśli zaliczka jest w `SUCCEEDED`, odwołanie przechodzi, a zaliczka zostaje u firmy jako rekompensata za nieobsadzony termin. Wyjątek kończy się na `startsAt` — znosi limit z polityki firmy, a nie prawo do odwołania wizyty, która już trwa; inaczej klient zamieniałby odbytą wizytę w „odwołaną przez klienta", dopóki cron auto-COMPLETED jej nie domknie, a przy okazji odbierałby sobie możliwość jej ocenienia. Tę samą regułę liczy flaga `canCancel` w `GET /bookings/mine`, więc UI nigdy nie pokaże przycisku, którego API odrzuci; obok niej idzie `depositForfeitOnCancel`, żeby front mógł ostrzec przed utratą zaliczki.
+
+O tym, czy zaliczkę zwrócić, czy tylko unieważnić `PaymentIntent`, decyduje status płatności **doczytany po zapisie** statusu rezerwacji, a nie ten sprzed. Webhook `payment_intent.succeeded` bywa szybszy niż odwołanie i wchodzi między odczyt a zapis; decyzja z nieaktualnego odczytu kończyła się odwołaniem w terminie bez zwrotu, bo anulowanie intentu odbijało się od `succeeded`, a płatność zostawała w `SUCCEEDED` poza zasięgiem crona wygaszania (ten wybiera wyłącznie `PENDING`).
+
+Refund idzie do Stripe'a z `idempotencyKey` opartym o `Payment.id`, a zapis w bazie jest warunkowy po `status = SUCCEEDED` — ponowienie nie zwróci pieniędzy dwa razy. Kolejność jest odwrotna niż przy anulowaniu nieopłaconej zaliczki: **najpierw Stripe, potem baza**, bo wcześniejszy zapis pokazywałby „zwrócono", zanim pieniądze faktycznie wyjdą. Zwrot zrobiony ręcznie z dashboardu dogania nas webhookiem `charge.refunded`, obsługiwanym tą samą ścieżką.
+
+Prowizja platformy (`PLATFORM_FEE_PERCENT`, domyślnie 10%) naliczana jest od kwoty zaliczki w chwili tworzenia `Payment` i zapisywana w `platformFeeCents` — kwota zostaje przypięta do wiersza, więc zmiana stawki nie rusza rozliczeń już odbytych płatności. To zapis do rozliczeń, nie `application_fee_amount` ze Stripe'a: ten wymaga Connect i konta firmy po tamtej stronie, czego model `Business` nie przewiduje. Przy zwrocie prowizja schodzi do zera (wizyta się nie odbyła, nie ma od czego jej brać); przy `FORFEITED` zostaje.
+
 ---
 
 ## 8. Środowisko deweloperskie i monorepo
@@ -524,6 +550,8 @@ STRIPE_PUBLISHABLE_KEY=…
 # lokalnie z `stripe listen` (Stripe CLI) — Stripe nie dostarcza zdarzeń na localhost,
 # a sekret CLI jest ważny tylko przez czas sesji; z dashboardu dopiero po deployu
 STRIPE_WEBHOOK_SECRET=…
+# prowizja platformy od zaliczki w % (#52); puste = 10, wartość spoza 0–100 zatrzymuje start
+PLATFORM_FEE_PERCENT=10
 ```
 
 ---

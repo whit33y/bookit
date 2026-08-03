@@ -43,6 +43,7 @@ const eventsMock = () =>
 
 // PaymentsService widziany od strony bookings (#51): rozgałęzienie po isEnabled, PaymentIntent
 // przy rezerwacji z zaliczką i unieważnienie nieopłaconej zaliczki przy odwołaniu.
+// Od #52 dochodzi rozliczenie zaliczki już pobranej: zwrot albo przepadek.
 const paymentsMock = (overrides: Record<string, unknown> = {}) =>
   ({
     isEnabled: true,
@@ -51,6 +52,10 @@ const paymentsMock = (overrides: Record<string, unknown> = {}) =>
       clientSecret: 'pi_1_secret',
     }),
     releaseUnpaid: vi.fn().mockResolvedValue(true),
+    refundDeposit: vi.fn().mockResolvedValue(true),
+    forfeitDeposit: vi.fn().mockResolvedValue(true),
+    // 10% — stawka domyślna; jej wyliczanie ma własny spec (platform-fee.spec.ts)
+    platformFeeFor: vi.fn((amountCents: number) => Math.round(amountCents / 10)),
     ...overrides,
   }) as unknown as PaymentsService;
 
@@ -500,8 +505,17 @@ describe('BookingsService', () => {
       await create();
 
       expect(bookingCreate.mock.calls[0][0].data.payment).toEqual({
-        create: { amountCents: 6600, currency: 'pln' },
+        // prowizja platformy naliczana razem z płatnością i przypięta do wiersza (#52)
+        create: { amountCents: 6600, currency: 'pln', platformFeeCents: 660 },
       });
+    });
+
+    it('prowizja platformy liczona z kwoty zaliczki, nie z ceny usługi', async () => {
+      withDeposit();
+
+      await create();
+
+      expect(payments.platformFeeFor).toHaveBeenCalledWith(6600);
     });
 
     it('z zaliczką: odpowiedź niesie client_secret, kwotę i termin ważności', async () => {
@@ -632,6 +646,7 @@ describe('BookingsService — decyzje firmy', () => {
   let bookingUpdate: ReturnType<typeof vi.fn>;
   let statusChanged: ReturnType<typeof vi.fn>;
   let releaseUnpaid: ReturnType<typeof vi.fn>;
+  let paymentFindUnique: ReturnType<typeof vi.fn>;
   let service: BookingsService;
 
   // rezerwacja właściciela OWNER_ID w podanym statusie
@@ -646,6 +661,15 @@ describe('BookingsService — decyzje firmy', () => {
       .fn()
       .mockResolvedValue(existing(BookingStatus.PENDING));
     releaseUnpaid = vi.fn().mockResolvedValue(true);
+    // Status płatności doczytywany po zapisie. Domyślnie ten sam, który niesie odczytana
+    // rezerwacja — czyli przypadek bez wyścigu; testy wyścigu nadpisują ten mock.
+    paymentFindUnique = vi.fn(async () => {
+      const readBooking = bookingFindUnique as unknown as () => Promise<{
+        payment?: { status: PaymentStatus } | null;
+      } | null>;
+      const booking = await readBooking();
+      return booking?.payment ? { status: booking.payment.status } : null;
+    });
     bookingUpdate = vi
       .fn()
       .mockImplementation(({ data }) =>
@@ -656,6 +680,7 @@ describe('BookingsService — decyzje firmy', () => {
     service = new BookingsService(
       {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
+        payment: { findUnique: paymentFindUnique },
       } as unknown as PrismaService,
       { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
       paymentsMock({ releaseUnpaid }),
@@ -931,6 +956,9 @@ describe('BookingsService — odwołania', () => {
   let bookingUpdate: ReturnType<typeof vi.fn>;
   let statusChanged: ReturnType<typeof vi.fn>;
   let releaseUnpaid: ReturnType<typeof vi.fn>;
+  let paymentFindUnique: ReturnType<typeof vi.fn>;
+  let refundDeposit: ReturnType<typeof vi.fn>;
+  let forfeitDeposit: ReturnType<typeof vi.fn>;
   let service: BookingsService;
 
   // rezerwacja klienta CLIENT_ID w firmie właściciela OWNER_ID
@@ -951,6 +979,17 @@ describe('BookingsService — odwołania', () => {
       .fn()
       .mockResolvedValue(existing(BookingStatus.CONFIRMED));
     releaseUnpaid = vi.fn().mockResolvedValue(true);
+    // Status płatności doczytywany po zapisie. Domyślnie ten sam, który niesie odczytana
+    // rezerwacja — czyli przypadek bez wyścigu; testy wyścigu nadpisują ten mock.
+    paymentFindUnique = vi.fn(async () => {
+      const readBooking = bookingFindUnique as unknown as () => Promise<{
+        payment?: { status: PaymentStatus } | null;
+      } | null>;
+      const booking = await readBooking();
+      return booking?.payment ? { status: booking.payment.status } : null;
+    });
+    refundDeposit = vi.fn().mockResolvedValue(true);
+    forfeitDeposit = vi.fn().mockResolvedValue(true);
     bookingUpdate = vi
       .fn()
       .mockImplementation(({ data }) =>
@@ -961,9 +1000,10 @@ describe('BookingsService — odwołania', () => {
     service = new BookingsService(
       {
         booking: { findUnique: bookingFindUnique, update: bookingUpdate },
+        payment: { findUnique: paymentFindUnique },
       } as unknown as PrismaService,
       { statusChanged, created: vi.fn() } as unknown as BookingEventsService,
-      paymentsMock({ releaseUnpaid }),
+      paymentsMock({ releaseUnpaid, refundDeposit, forfeitDeposit }),
     );
   });
 
@@ -1191,6 +1231,207 @@ describe('BookingsService — odwołania', () => {
       expect(statusChanged).not.toHaveBeenCalled();
     });
   });
+
+  // AC #52: refund w terminie i przy każdym odwołaniu przez firmę, przepadek po terminie.
+  describe('rozliczenie opłaconej zaliczki (#52)', () => {
+    const PAYMENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const paidPayment = {
+      id: PAYMENT_ID,
+      status: PaymentStatus.SUCCEEDED,
+      stripePaymentIntentId: 'pi_1',
+      amountCents: 6600,
+    };
+    const withPaidDeposit = (status: BookingStatus = BookingStatus.CONFIRMED) =>
+      bookingFindUnique.mockResolvedValue(existing(status, paidPayment));
+
+    it('klient odwołuje w terminie → zwrot', async () => {
+      withPaidDeposit();
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(refundDeposit).toHaveBeenCalledWith({
+        id: PAYMENT_ID,
+        bookingId: BOOKING_ID,
+        stripePaymentIntentId: 'pi_1',
+        amountCents: 6600,
+      });
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('klient odwołuje po terminie → odwołanie przechodzi, ale zaliczka przepada', async () => {
+      withPaidDeposit();
+      vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
+
+      const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(booking).toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
+      expect(forfeitDeposit).toHaveBeenCalledWith(PAYMENT_ID);
+      expect(refundDeposit).not.toHaveBeenCalled();
+    });
+
+    // bez zaliczki firma nie ma czym pokryć pustego okienka — polityka #27 zostaje
+    it('bez opłaconej zaliczki odwołanie po terminie nadal daje 409', async () => {
+      vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        { status: 409 },
+      );
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('firma odwołuje po terminie → i tak zwrot, bo to nie klient się rozmyślił', async () => {
+      withPaidDeposit();
+      vi.setSystemTime(new Date(DEADLINE.getTime() + 1));
+
+      await service.cancelByBusiness(OWNER_ID, BOOKING_ID);
+
+      expect(refundDeposit).toHaveBeenCalled();
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('firma odrzuca opłaconą rezerwację → zwrot', async () => {
+      withPaidDeposit(BookingStatus.PENDING);
+
+      await service.decline(OWNER_ID, BOOKING_ID);
+
+      expect(refundDeposit).toHaveBeenCalled();
+    });
+
+    it('potwierdzenie nie rusza pieniędzy', async () => {
+      withPaidDeposit(BookingStatus.PENDING);
+
+      await service.confirm(OWNER_ID, BOOKING_ID);
+
+      expect(refundDeposit).not.toHaveBeenCalled();
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('nieopłacona zaliczka idzie starą ścieżką — unieważnienie intentu, nie zwrot', async () => {
+      bookingFindUnique.mockResolvedValue(
+        existing(BookingStatus.PENDING, {
+          ...paidPayment,
+          status: PaymentStatus.PENDING,
+        }),
+      );
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(releaseUnpaid).toHaveBeenCalled();
+      expect(refundDeposit).not.toHaveBeenCalled();
+    });
+
+    // Zaliczka znosi limit z polityki firmy, ale nie prawo do odwołania wizyty, która już
+    // trwa — inaczej klient zamieniłby odbytą wizytę w „odwołaną", blokując COMPLETED (#39)
+    // i ocenę (#47).
+    it('rozpoczętej wizyty nie odwoła nawet klient z opłaconą zaliczką', async () => {
+      withPaidDeposit();
+      vi.setSystemTime(new Date(VISIT_STARTS_AT.getTime() + 1));
+
+      await expect(service.cancel(CLIENT_ID, BOOKING_ID)).rejects.toMatchObject(
+        { status: 409 },
+      );
+      expect(bookingUpdate).not.toHaveBeenCalled();
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('tuż przed startem wizyty odwołanie jeszcze przechodzi, zaliczka przepada', async () => {
+      withPaidDeposit();
+      vi.setSystemTime(new Date(VISIT_STARTS_AT.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(forfeitDeposit).toHaveBeenCalledWith(PAYMENT_ID);
+    });
+
+    // Webhook payment_intent.succeeded wchodzi między odczytem rezerwacji a zapisem statusu.
+    // Decyzja podjęta na nieaktualnym odczycie zostawiała pobraną zaliczkę bez zwrotu.
+    it('zaliczka opłacona w trakcie odwołania i tak zostaje zwrócona', async () => {
+      bookingFindUnique.mockResolvedValue(
+        existing(BookingStatus.CONFIRMED, {
+          ...paidPayment,
+          status: PaymentStatus.PENDING,
+        }),
+      );
+      // stan po zapisie: webhook zdążył zaksięgować wpłatę
+      paymentFindUnique.mockResolvedValue({
+        status: PaymentStatus.SUCCEEDED,
+      });
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(refundDeposit).toHaveBeenCalled();
+      expect(releaseUnpaid).not.toHaveBeenCalled();
+    });
+
+    // Ten sam wyścig, tylko webhook jest wolniejszy: anulowanie intentu odbija się od
+    // `succeeded`, a wpłata jest już w bazie, zanim zdążymy dopytać drugi raz.
+    it('gdy anulowanie intentu odbije się od opłaconej płatności, wchodzi zwrot', async () => {
+      bookingFindUnique.mockResolvedValue(
+        existing(BookingStatus.CONFIRMED, {
+          ...paidPayment,
+          status: PaymentStatus.PENDING,
+        }),
+      );
+      paymentFindUnique
+        .mockResolvedValueOnce({ status: PaymentStatus.PENDING })
+        .mockResolvedValueOnce({ status: PaymentStatus.SUCCEEDED });
+      releaseUnpaid.mockResolvedValue(false);
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(releaseUnpaid).toHaveBeenCalled();
+      expect(refundDeposit).toHaveBeenCalled();
+    });
+
+    // …a gdy pieniądze są dopiero w drodze (Stripe: `processing`), nie zwracamy niczego
+    it('nieudane anulowanie bez potwierdzonej wpłaty nie uruchamia zwrotu', async () => {
+      bookingFindUnique.mockResolvedValue(
+        existing(BookingStatus.CONFIRMED, {
+          ...paidPayment,
+          status: PaymentStatus.PENDING,
+        }),
+      );
+      paymentFindUnique.mockResolvedValue({ status: PaymentStatus.PENDING });
+      releaseUnpaid.mockResolvedValue(false);
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(refundDeposit).not.toHaveBeenCalled();
+      expect(forfeitDeposit).not.toHaveBeenCalled();
+    });
+
+    it('płatność rozliczona przez równoległy przebieg nie jest zwracana drugi raz', async () => {
+      withPaidDeposit();
+      paymentFindUnique.mockResolvedValue({ status: PaymentStatus.REFUNDED });
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(refundDeposit).not.toHaveBeenCalled();
+    });
+
+    // rezerwacja jest już odwołana w bazie — błąd Stripe'a nie może zamienić tego w 500
+    it('padnięty zwrot nie wywraca odwołania, tylko trafia do logu', async () => {
+      withPaidDeposit();
+      refundDeposit.mockRejectedValue(new Error('Stripe padł'));
+      vi.setSystemTime(new Date(DEADLINE.getTime() - 1));
+
+      const booking = await service.cancel(CLIENT_ID, BOOKING_ID);
+
+      expect(booking).toHaveProperty(
+        'status',
+        BookingStatus.CANCELLED_BY_CLIENT,
+      );
+      expect(statusChanged).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('BookingsService — moje wizyty', () => {
@@ -1221,6 +1462,7 @@ describe('BookingsService — moje wizyty', () => {
     startsAt: string,
     status: BookingStatus,
     id = BOOKING_ID,
+    payment: { status: PaymentStatus } | null = null,
   ) => ({
     id,
     startsAt: new Date(startsAt),
@@ -1231,6 +1473,7 @@ describe('BookingsService — moje wizyty', () => {
     business,
     service: serviceData,
     employee,
+    payment,
   });
 
   type BookingRow = ReturnType<typeof booking>;
@@ -1431,6 +1674,63 @@ describe('BookingsService — moje wizyty', () => {
       const { upcoming } = await service.findMine(CLIENT_ID);
 
       expect(upcoming.map((b) => b.canCancel)).toEqual([true, false]);
+    });
+  });
+
+  // #52: flaga musi mówić dokładnie to, co zrobi /cancel — inaczej UI ukryłby przycisk,
+  // który API by przyjęło (albo odwrotnie).
+  describe('flagi przy opłaconej zaliczce (#52)', () => {
+    const paid = { status: PaymentStatus.SUCCEEDED };
+    // start 2026-01-11 10:00Z, polityka 24 h → granica minęła przed NOW
+    const AFTER_DEADLINE = '2026-01-11T10:00:00.000Z';
+    const BEFORE_DEADLINE = '2026-01-20T09:00:00.000Z';
+
+    it('po terminie z opłaconą zaliczką → canCancel true, ale zaliczka przepadnie', async () => {
+      respond(
+        [booking(AFTER_DEADLINE, BookingStatus.CONFIRMED, BOOKING_ID, paid)],
+        [],
+      );
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(true);
+      expect(visit.depositForfeitOnCancel).toBe(true);
+    });
+
+    it('w terminie z opłaconą zaliczką → odwołanie bez straty', async () => {
+      respond(
+        [booking(BEFORE_DEADLINE, BookingStatus.CONFIRMED, BOOKING_ID, paid)],
+        [],
+      );
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(true);
+      expect(visit.depositForfeitOnCancel).toBe(false);
+    });
+
+    it('bez zaliczki nie ma czego stracić, a po terminie i tak nie wolno odwołać', async () => {
+      respond([booking(AFTER_DEADLINE, BookingStatus.CONFIRMED)], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(false);
+      expect(visit.depositForfeitOnCancel).toBe(false);
+    });
+
+    it('nieopłacona zaliczka nie znosi okna', async () => {
+      respond(
+        [
+          booking(AFTER_DEADLINE, BookingStatus.CONFIRMED, BOOKING_ID, {
+            status: PaymentStatus.PENDING,
+          }),
+        ],
+        [],
+      );
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canCancel).toBe(false);
     });
   });
 });

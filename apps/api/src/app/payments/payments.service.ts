@@ -3,17 +3,26 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import Stripe from 'stripe';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_CURRENCY } from './payment-window';
+import { parsePlatformFeePercent, platformFeeCents } from './platform-fee';
 import { StripeService } from './stripe.service';
 
 /** Płatność w stanie „utworzona, nieopłacona" — tyle, ile potrzeba, żeby zwolnić slot. */
 export interface UnpaidPayment {
   id: string;
   bookingId: string;
+  stripePaymentIntentId: string | null;
+}
+
+/** Zaliczka już pobrana — tyle, ile potrzeba, żeby ją zwrócić albo zapisać jako przepadłą (#52). */
+export interface PaidDeposit {
+  id: string;
+  amountCents: number;
   stripePaymentIntentId: string | null;
 }
 
@@ -24,6 +33,12 @@ export interface UnpaidPayment {
  * a `code` jest częścią publicznego API Stripe'a.
  */
 const UNEXPECTED_STATE = 'payment_intent_unexpected_state';
+
+/**
+ * Kod Stripe'a dla „to obciążenie już zwrócono" (#52). Dla nas to nie błąd, tylko stan
+ * docelowy osiągnięty cudzą ręką — np. zwrotem z dashboardu.
+ */
+const ALREADY_REFUNDED = 'charge_already_refunded';
 
 const errorCode = (e: unknown): string | undefined =>
   typeof e === 'object' && e !== null && 'code' in e
@@ -45,11 +60,32 @@ const errorCode = (e: unknown): string | undefined =>
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
+  /**
+   * Stawka prowizji czytana raz, przy starcie. Nie per żądanie: niepoprawna wartość ma
+   * przewrócić bootstrap, a nie pierwszą rezerwację z zaliczką — literówka w konfiguracji
+   * jest wtedy widoczna od razu, a nie dopiero u klienta w kasie.
+   */
+  private readonly feePercent: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripe: StripeService,
     private readonly notifications: NotificationsService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.feePercent = parsePlatformFeePercent(
+      config.get<string>('PLATFORM_FEE_PERCENT'),
+    );
+  }
+
+  /**
+   * Prowizja platformy od zaliczki (#52). BookingsService woła to przy tworzeniu wiersza
+   * Payment i zapisuje wynik na stałe — dzięki temu nie zna ani stawki, ani nazwy zmiennej
+   * środowiskowej, a zmiana stawki nie rusza płatności, które już się odbyły.
+   */
+  platformFeeFor(amountCents: number): number {
+    return platformFeeCents(amountCents, this.feePercent);
+  }
 
   /**
    * Czy w tym środowisku da się w ogóle pobrać zaliczkę. Po tym rozgałęzia się BookingsService
@@ -96,6 +132,9 @@ export class PaymentsService {
         break;
       case 'payment_intent.canceled':
         await this.settleCanceled(event.data.object);
+        break;
+      case 'charge.refunded':
+        await this.settleRefunded(event.data.object);
         break;
       case 'payment_intent.payment_failed':
         // Tylko log: po odrzuconej karcie PaymentIntent wraca do `requires_payment_method`,
@@ -175,6 +214,133 @@ export class PaymentsService {
       return;
     }
     await this.releaseInDb(payment.id, payment.bookingId);
+  }
+
+  /**
+   * Zwrot pobranej zaliczki (#52) — odwołanie w terminie albo każde odwołanie przez firmę.
+   * Zwraca `true`, gdy to wywołanie faktycznie zwróciło pieniądze.
+   *
+   * Kolejność jest **odwrotna niż w `releaseUnpaid`** i to jest celowe. Tam wcześniejszy zapis
+   * oddałby slot, który wciąż da się opłacić; tu wcześniejszy zapis pokazałby klientowi
+   * „zwrócono", zanim pieniądze faktycznie wyjdą ze Stripe'a — a zwrot, który nie przeszedł,
+   * wyglądałby na zrobiony i nikt by go nie ponowił. Więc: najpierw Stripe, potem baza.
+   *
+   * Przed podwójnym zwrotem chronią dwie niezależne warstwy: `idempotencyKey` po stronie
+   * Stripe'a (ponowienie po timeoucie sieciowym trafia w ten sam refund, nie tworzy drugiego)
+   * i status w WHERE po naszej (wzorzec „claim then act" z `settleSucceeded`).
+   */
+  async refundDeposit(payment: PaidDeposit): Promise<boolean> {
+    if (!payment.stripePaymentIntentId) {
+      // Zaliczka w SUCCEEDED bez intentu nie powinna istnieć — status ustawia webhook,
+      // który znajduje wiersz właśnie po tym polu.
+      this.logger.error(
+        `Płatność ${payment.id} jest opłacona, ale nie ma PaymentIntentu — nie mam czego zwrócić`,
+      );
+      return false;
+    }
+
+    const refund = await this.createRefund(
+      payment.stripePaymentIntentId,
+      payment.id,
+    );
+    return this.markRefunded(
+      { id: payment.id },
+      refund?.id ?? null,
+      refund?.amount ?? payment.amountCents,
+    );
+  }
+
+  /**
+   * Refund w Stripie albo `null`, gdy obciążenie było już zwrócone (ktoś ubiegł nas
+   * z dashboardu). `null` nie jest błędem: pieniądze u klienta są, więc zostaje dopisać to
+   * w bazie — tylko bez identyfikatora refundu, bo Stripe przy tym błędzie go nie podaje.
+   */
+  private async createRefund(
+    intentId: string,
+    paymentId: string,
+  ): Promise<Stripe.Refund | null> {
+    try {
+      return await this.stripe.client.refunds.create(
+        { payment_intent: intentId },
+        { idempotencyKey: `refund_${paymentId}` },
+      );
+    } catch (e) {
+      if (errorCode(e) !== ALREADY_REFUNDED) {
+        throw e;
+      }
+      this.logger.log(
+        `Obciążenie dla ${intentId} było już zwrócone — dopisuję zwrot w bazie`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Zaliczka przepadła: klient odwołał po terminie z polityki firmy (#52). Stripe'a tu nie ma
+   * — pieniądze zostają tam, gdzie są, zmienia się tylko to, jak je opisujemy. Naliczona
+   * prowizja platformy zostaje nietknięta, bo przy przepadku jest z czego ją wziąć.
+   */
+  async forfeitDeposit(paymentId: string): Promise<boolean> {
+    const { count } = await this.prisma.payment.updateMany({
+      where: { id: paymentId, status: PaymentStatus.SUCCEEDED },
+      data: { status: PaymentStatus.FORFEITED },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Warunkowy zapis zwrotu. `status: SUCCEEDED` w WHERE daje idempotencję: drugie wywołanie
+   * — czy to retry Stripe'a, czy webhook `charge.refunded` goniący nasz własny refund —
+   * trafia w `count === 0` i nic nie nadpisuje.
+   *
+   * `amountCents` zostaje nietknięte: to kwota **pobrana**, a ile z niej wróciło, mówi
+   * `refundedAmountCents`. Prowizja schodzi do zera — wizyta się nie odbyła, więc platforma
+   * nie ma od czego jej naliczać (decyzja produktowa z #52).
+   */
+  private async markRefunded(
+    where: { id: string } | { stripePaymentIntentId: string },
+    stripeRefundId: string | null,
+    refundedAmountCents: number,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.payment.updateMany({
+      where: { ...where, status: PaymentStatus.SUCCEEDED },
+      data: {
+        status: PaymentStatus.REFUNDED,
+        refundedAmountCents,
+        refundedAt: new Date(),
+        platformFeeCents: 0,
+        stripeRefundId,
+      },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Zwrot zrobiony poza aplikacją (dashboard Stripe'a) albo taki, przy którym padł nasz zapis
+   * po udanym refundzie. Siatka bezpieczeństwa dla `refundDeposit` — ta sama ścieżka zapisu,
+   * więc powtórzone zdarzenie nic nie zmienia.
+   */
+  private async settleRefunded(charge: Stripe.Charge): Promise<void> {
+    const intentId =
+      typeof charge.payment_intent === 'string'
+        ? charge.payment_intent
+        : charge.payment_intent?.id;
+    if (!intentId) {
+      this.logger.debug(
+        `Zwrócone obciążenie ${charge.id} bez PaymentIntentu — pomijam`,
+      );
+      return;
+    }
+
+    const updated = await this.markRefunded(
+      { stripePaymentIntentId: intentId },
+      // lista refundów bywa nierozwinięta, zależnie od `expand` — bierzemy id, gdy jest
+      charge.refunds?.data[0]?.id ?? null,
+      charge.amount_refunded,
+    );
+    if (updated) {
+      this.logger.log(`Zaliczka zwrócona poza aplikacją: ${intentId}`);
+    }
   }
 
   /**

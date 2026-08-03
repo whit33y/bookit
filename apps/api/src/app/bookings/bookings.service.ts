@@ -26,7 +26,11 @@ import {
 import { AuthUser } from '../common/types/auth-user';
 import { depositAmountCents } from '../payments/deposit';
 import { PAYMENT_CURRENCY, paymentDeadline } from '../payments/payment-window';
-import { PaymentsService, UnpaidPayment } from '../payments/payments.service';
+import {
+  PaidDeposit,
+  PaymentsService,
+  UnpaidPayment,
+} from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { serviceClientFields } from '../services/services.service';
 import { BookingEventsService } from './booking-events.service';
@@ -34,7 +38,10 @@ import { STATUS_LABELS, canTransition } from './booking-status';
 import {
   canClientCancel,
   cancellationWindowMessage,
+  isWithinCancellationWindow,
+  willForfeitDeposit,
 } from './cancellation-policy';
+import { DepositOutcome, depositOutcome } from './refund-policy';
 import { BusinessBookingsQueryDto } from './dto/business-bookings-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
@@ -62,11 +69,22 @@ const createdBookingSelect = {
   payment: { select: { id: true, createdAt: true } },
 } satisfies Prisma.BookingSelect;
 
-// Zaliczka pokazywana na listach rezerwacji. Bez client_secret — ten wychodzi wyłącznie
+// Zaliczka pokazywana na liście klienta. Bez client_secret — ten wychodzi wyłącznie
 // z odpowiedzi na POST /bookings, bo jest jednorazowym poświadczeniem do zapłaty i nie ma
-// prawa wyciec z listy, którą ogląda też firma.
-const paymentListSelect = {
-  select: { status: true, amountCents: true },
+// prawa wyciec z listy, którą ogląda też firma. `refundedAmountCents` (#52) mówi klientowi,
+// ile mu wróciło — sam status nie niesie kwoty, a przy REFUNDED to pierwsze pytanie.
+const clientPaymentSelect = {
+  select: { status: true, amountCents: true, refundedAmountCents: true },
+} as const;
+
+// To samo dla firmy plus prowizja platformy (#52): to firma jest adresatem informacji, ile
+// z zaliczki zostaje u nas. Klient jej nie widzi — dla niego zaliczka jest jedną kwotą,
+// a podział między firmę a platformę to nie jego rozliczenie.
+const businessPaymentSelect = {
+  select: {
+    ...clientPaymentSelect.select,
+    platformFeeCents: true,
+  },
 } as const;
 
 // Karta wizyty na liście klienta (#28) — komplet danych do wyświetlenia bez dopytywania
@@ -101,8 +119,8 @@ const clientBookingSelect = {
     select: { id: true, rating: true, comment: true, createdAt: true },
   },
   // null = usługa bez zaliczki; PENDING = czeka na opłacenie (#53 pokazuje po tym stan
-  // płatności i przycisk „zapłać")
-  payment: paymentListSelect,
+  // płatności i przycisk „zapłać"), REFUNDED/FORFEITED = rozliczona po odwołaniu (#52)
+  payment: clientPaymentSelect,
 } satisfies Prisma.BookingSelect;
 
 type ClientBooking = Prisma.BookingGetPayload<{
@@ -122,25 +140,56 @@ const businessBookingSelect = {
   service: { select: serviceClientFields },
   employee: { select: { id: true, name: true } },
   // firma widzi w kalendarzu, czy zaliczka wpłynęła — nieopłaconej rezerwacji i tak
-  // nie potwierdzi (409 w transition)
-  payment: paymentListSelect,
+  // nie potwierdzi (409 w transition) — oraz ile z niej bierze platforma (#52)
+  payment: businessPaymentSelect,
 } satisfies Prisma.BookingSelect;
+
+/** Zaliczka pobrana i nierozliczona — po niej liczy się okno odwołania i skutek dla pieniędzy. */
+const hasPaidDeposit = (payment: { status: PaymentStatus } | null): boolean =>
+  payment?.status === PaymentStatus.SUCCEEDED;
+
+/**
+ * Zaliczka widziana przez `transition()`. Przy zmianie statusu nie wiadomo z góry, czy trzeba
+ * będzie unieważnić intent (#51), czy zwrócić pieniądze (#52) — decyduje o tym dopiero status
+ * doczytany po zapisie — więc obie ścieżki dostają komplet pól, którego potrzebują.
+ */
+type TransitionPayment = UnpaidPayment & PaidDeposit;
 
 /**
  * AC #28: „flaga per rezerwacja, czy odwołanie jest jeszcze możliwe wg polityki (front nie
  * liczy tego sam)". Ta sama funkcja, której używa transition(), więc flaga mówi dokładnie
  * to, co zrobi POST /bookings/:id/cancel — łącznie z przypadkami, które wyglądają na
  * wyjątki (zaległy PENDING nadal da się odwołać, bo maszyna stanów na to pozwala).
+ *
+ * `depositForfeitOnCancel` (#52) niesie drugą połowę tej informacji: odwołanie jest możliwe,
+ * ale kosztuje zaliczkę. Bez tego front musiałby odtworzyć u siebie regułę okna, żeby wiedzieć,
+ * czy ostrzec klienta przed kliknięciem — a to dokładnie ten duplikat, którego #28 zabrania.
  */
-const withCancelFlag = (booking: ClientBooking, now: Date) => ({
-  ...booking,
-  canCancel: canClientCancel(
+const withCancelFlag = (booking: ClientBooking, now: Date) => {
+  const paidDeposit = hasPaidDeposit(booking.payment);
+  const canCancel = canClientCancel(
     booking.status,
     booking.startsAt,
     booking.business.cancellationHours,
     now,
-  ),
-});
+    paidDeposit,
+  );
+  return {
+    ...booking,
+    canCancel,
+    // Tylko dla odwołania, które faktycznie przejdzie: ostrzeżenie „zaliczka przepadnie"
+    // przy nieaktywnym przycisku mówiłoby o koszcie akcji, której i tak nie da się wykonać.
+    depositForfeitOnCancel:
+      canCancel &&
+      willForfeitDeposit(
+        booking.status,
+        booking.startsAt,
+        booking.business.cancellationHours,
+        now,
+        paidDeposit,
+      ),
+  };
+};
 
 // Kto żąda przejścia — decyduje, czym jest „własna rezerwacja" (403) i czy obowiązuje
 // polityka czasowa. Firma odwołuje zawsze, klient tylko w oknie (SDD §7).
@@ -311,7 +360,12 @@ export class BookingsService {
         startsAt: true,
         business: { select: { ownerId: true, cancellationHours: true } },
         payment: {
-          select: { id: true, status: true, stripePaymentIntentId: true },
+          select: {
+            id: true,
+            status: true,
+            stripePaymentIntentId: true,
+            amountCents: true, // kwota zwrotu przy odwołaniu (#52)
+          },
         },
       },
     });
@@ -342,14 +396,32 @@ export class BookingsService {
       throw new ConflictException('Rezerwacja czeka na opłacenie zaliczki');
     }
 
+    // Jeden znacznik czasu na całe przejście: tym samym mierzymy okno przy walidacji i skutek
+    // dla zaliczki niżej, więc odwołanie tuż przy granicy nie może wyjść „w terminie" dla
+    // jednej reguły, a „po terminie" dla drugiej.
+    const now = new Date();
+    const paidDeposit = hasPaidDeposit(booking.payment);
+    // Czy odwołanie mieści się w polityce firmy — od tego zależy los zaliczki (#52).
+    // Liczone **przed** zapisem: po nim rezerwacja jest w stanie terminalnym i ta sama
+    // funkcja odpowiedziałaby już tylko „nie", niezależnie od terminu.
+    const withinWindow = isWithinCancellationWindow(
+      from,
+      booking.startsAt,
+      booking.business.cancellationHours,
+      now,
+    );
+
     // Okno odwołania dotyczy wyłącznie klienta — firma odwołuje zawsze (SDD §7).
+    // Opłacona zaliczka znosi limit czasowy: klient odwoła po terminie, ale straci
+    // zaliczkę (#52) — bez niej firma nie ma czym pokryć pustego okienka, więc zostaje 409.
     if (
       actor === 'CLIENT' &&
       !canClientCancel(
         from,
         booking.startsAt,
         booking.business.cancellationHours,
-        new Date(),
+        now,
+        paidDeposit,
       )
     ) {
       throw new ConflictException(
@@ -378,16 +450,18 @@ export class BookingsService {
         throw e;
       });
 
-    // Rezerwacja przestała istnieć jako termin, a zaliczka wciąż czeka na zapłatę —
-    // trzeba unieważnić PaymentIntent. Inaczej klient mógłby odwołać wizytę i zaraz potem
-    // dokończyć płatność w otwartym formularzu Stripe'a, a my mielibyśmy pieniądze
-    // za zwolniony slot. Zwroty już pobranych zaliczek to osobny temat (#52).
-    if (unpaidDeposit && booking.payment) {
-      await this.releaseDeposit({
-        id: booking.payment.id,
-        bookingId,
-        stripePaymentIntentId: booking.payment.stripePaymentIntentId,
-      });
+    // Rezerwacja przestała istnieć jako termin — zostaje rozliczyć zaliczkę: unieważnić
+    // nieopłacony PaymentIntent (#51) albo zwrócić/przepaść pobraną (#52).
+    if (booking.payment) {
+      await this.settleDeposit(
+        {
+          id: booking.payment.id,
+          bookingId,
+          stripePaymentIntentId: booking.payment.stripePaymentIntentId,
+          amountCents: booking.payment.amountCents,
+        },
+        depositOutcome(to, withinWindow),
+      );
     }
 
     // Dopiero po zatwierdzonym zapisie — stąd wychodzą maile z #37. Powiadomienie jest
@@ -399,19 +473,98 @@ export class BookingsService {
   }
 
   /**
-   * Unieważnienie nieopłaconej zaliczki przy okazji innej, już zapisanej operacji.
-   * Best-effort z tego samego powodu, co notify(): zmiana statusu jest w bazie, więc błąd
-   * Stripe'a ma trafić do logu, a nie zamienić udane odwołanie w 500. Nic się nie gubi —
-   * płatność zostaje w PENDING, a cron wygaszania spróbuje ponownie.
+   * Rozliczenie zaliczki po zmianie statusu rezerwacji: unieważnienie nieopłaconego
+   * PaymentIntenta (#51) albo zwrot/przepadek zaliczki już pobranej (#52).
+   *
+   * O tym, którą ścieżką iść, decyduje status **doczytany po zapisie**, a nie ten sprzed.
+   * Webhook `payment_intent.succeeded` bywa szybszy niż nasze odwołanie i wchodzi między
+   * `findUnique` a `update`; decyzja podjęta na nieaktualnym odczycie kończyła się wtedy
+   * odwołaniem w terminie bez zwrotu — anulowanie intentu odbijało się od `succeeded`,
+   * a zaliczka zostawała w `SUCCEEDED` przy odwołanej rezerwacji, poza zasięgiem crona
+   * wygaszania (ten wybiera wyłącznie `PENDING`).
    */
-  private async releaseDeposit(payment: UnpaidPayment): Promise<void> {
+  private async settleDeposit(
+    payment: TransitionPayment,
+    outcome: DepositOutcome,
+  ): Promise<void> {
+    if (outcome === 'NONE') {
+      return;
+    }
+
+    const status = await this.paymentStatus(payment.id);
+    if (status === PaymentStatus.PENDING) {
+      // Nieopłacona: unieważniamy intent, żeby klient nie dokończył płatności za zwolniony slot.
+      if (await this.releaseDeposit(payment)) {
+        return;
+      }
+      // Stripe odmówił anulowania — pieniądze wpłynęły albo są w drodze. Gdy webhook zdążył je
+      // już zaksięgować, rozliczamy je jak zaliczkę opłaconą; gdy nie, płatność zostaje
+      // w PENDING dla crona wygaszania, który spróbuje ponownie przy następnym ticku.
+      if ((await this.paymentStatus(payment.id)) !== PaymentStatus.SUCCEEDED) {
+        return;
+      }
+    } else if (status !== PaymentStatus.SUCCEEDED) {
+      // CANCELLED, FAILED, a także REFUNDED/FORFEITED z równoległego przebiegu — nie ma
+      // czego rozliczać, a powtórny zwrot byłby groźniejszy niż jego brak.
+      return;
+    }
+
+    await this.applyDepositOutcome(outcome, payment);
+  }
+
+  private async paymentStatus(
+    paymentId: string,
+  ): Promise<PaymentStatus | undefined> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { status: true },
+    });
+    return payment?.status;
+  }
+
+  /**
+   * Zwrot albo przepadek pobranej zaliczki (#52).
+   *
+   * Best-effort z tego samego powodu, co `releaseDeposit` i `notify()`: rezerwacja jest już
+   * odwołana w bazie, więc padnięty Stripe ma trafić do logu, a nie zamienić udane odwołanie
+   * w 500 — klient dostałby wtedy błąd przy operacji, która się powiodła, i próbowałby jeszcze
+   * raz. Świadome ograniczenie: nieudany zwrot zostawia płatność w `SUCCEEDED` i wymaga
+   * ręcznej interwencji (log z poziomem error). Automatyczny retry byłby czwartym cronem
+   * i osobnym tematem; zwrot wykonany wtedy z dashboardu Stripe'a dogoni bazę webhookiem
+   * `charge.refunded`, który PaymentsService obsługuje tą samą ścieżką zapisu.
+   */
+  private async applyDepositOutcome(
+    outcome: Exclude<DepositOutcome, 'NONE'>,
+    payment: PaidDeposit,
+  ): Promise<void> {
     try {
-      await this.payments.releaseUnpaid(payment);
+      if (outcome === 'REFUND') {
+        await this.payments.refundDeposit(payment);
+      } else {
+        await this.payments.forfeitDeposit(payment.id);
+      }
+    } catch (e) {
+      this.logger.error(
+        `Nie udało się rozliczyć zaliczki ${payment.id} (${outcome})`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+  }
+
+  /**
+   * Unieważnienie nieopłaconej zaliczki przy okazji innej, już zapisanej operacji. Zwraca
+   * `true`, gdy slot faktycznie został zwolniony. Best-effort jak wyżej: błąd Stripe'a idzie
+   * do logu, a płatność zostaje w PENDING dla crona wygaszania.
+   */
+  private async releaseDeposit(payment: UnpaidPayment): Promise<boolean> {
+    try {
+      return await this.payments.releaseUnpaid(payment);
     } catch (e) {
       this.logger.error(
         `Nie udało się unieważnić zaliczki ${payment.id}`,
         e instanceof Error ? e.stack : String(e),
       );
+      return false;
     }
   }
 
@@ -565,6 +718,11 @@ export class BookingsService {
                   create: {
                     amountCents: depositCents,
                     currency: PAYMENT_CURRENCY,
+                    // Prowizja naliczana w chwili powstania płatności i przypięta do wiersza
+                    // na stałe (#52) — późniejsza zmiana stawki nie może ruszyć rozliczeń
+                    // płatności, które już się odbyły.
+                    platformFeeCents:
+                      this.payments.platformFeeFor(depositCents),
                   },
                 },
               }),
