@@ -20,6 +20,8 @@ interface Service {
   durationMin: number;
   priceCents: number;
   isActive: boolean;
+  depositType: 'FIXED' | 'PERCENT' | null;
+  depositValue: number | null;
   employees: ServiceEmployee[];
 }
 
@@ -30,6 +32,8 @@ const ACTIVE: Service = {
   durationMin: 30,
   priceCents: 5000,
   isActive: true,
+  depositType: null,
+  depositValue: null,
   employees: [],
 };
 const INACTIVE: Service = {
@@ -39,6 +43,19 @@ const INACTIVE: Service = {
   durationMin: 60,
   priceCents: 12000,
   isActive: false,
+  depositType: null,
+  depositValue: null,
+  employees: [],
+};
+const WITH_PERCENT: Service = {
+  id: 's3',
+  name: 'Masaż relaksacyjny',
+  description: null,
+  durationMin: 60,
+  priceCents: 18000,
+  isActive: true,
+  depositType: 'PERCENT',
+  depositValue: 20,
   employees: [],
 };
 const EMPLOYEES = [
@@ -51,7 +68,21 @@ interface Model {
   description: string;
   durationMin: number;
   priceZl: number;
+  depositEnabled: boolean;
+  depositKind: 'FIXED' | 'PERCENT';
+  depositAmountZl: number;
+  depositPercent: number;
 }
+
+const NO_DEPOSIT = {
+  depositEnabled: false,
+  depositKind: 'FIXED',
+  depositAmountZl: 0,
+  depositPercent: 10,
+} satisfies Pick<
+  Model,
+  'depositEnabled' | 'depositKind' | 'depositAmountZl' | 'depositPercent'
+>;
 
 // dostęp do protected pól/metod komponentu w teście, bez `any`
 interface TestAccess {
@@ -119,6 +150,7 @@ describe('BusinessServices', () => {
       description: '',
       durationMin: 45,
       priceZl: 45.5,
+      ...NO_DEPOSIT,
     });
     fixture.detectChanges();
     submitForm(fixture);
@@ -206,5 +238,245 @@ describe('BusinessServices', () => {
     await tick();
 
     expect(comp.services()[0].employees).toEqual([{ id: 'e1', name: 'Ala' }]);
+  });
+
+  describe('zaliczka (#114)', () => {
+    it('create z zaliczką kwotową: POST wysyła FIXED i kwotę w groszach', async () => {
+      const { fixture, http, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.set({
+        name: 'Masaż',
+        description: '',
+        durationMin: 60,
+        priceZl: 180,
+        ...NO_DEPOSIT,
+        depositEnabled: true,
+        depositKind: 'FIXED',
+        depositAmountZl: 50,
+      });
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      const req = http.expectOne('/api/businesses/mine/services');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body.depositType).toBe('FIXED');
+      expect(req.request.body.depositValue).toBe(5000);
+      req.flush({ ...WITH_PERCENT, depositType: 'FIXED', depositValue: 5000 });
+      await fixture.whenStable();
+    });
+
+    it('create z zaliczką procentową: POST wysyła PERCENT i sam procent', async () => {
+      const { fixture, http, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.set({
+        name: 'Masaż',
+        description: '',
+        durationMin: 60,
+        priceZl: 180,
+        ...NO_DEPOSIT,
+        depositEnabled: true,
+        depositKind: 'PERCENT',
+        depositPercent: 20,
+      });
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      const req = http.expectOne('/api/businesses/mine/services');
+      expect(req.request.body.depositType).toBe('PERCENT');
+      expect(req.request.body.depositValue).toBe(20);
+      req.flush(WITH_PERCENT);
+      await fixture.whenStable();
+    });
+
+    it('wyłączenie zaliczki: PATCH czyści oba pola jawnym null', async () => {
+      const { fixture, http, comp } = setup([WITH_PERCENT]);
+      await fixture.whenStable();
+
+      comp.openEdit(WITH_PERCENT);
+      // prefill z usługi, wyłączamy sam toggle
+      comp.model.update((m) => ({ ...m, depositEnabled: false }));
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      const req = http.expectOne('/api/businesses/mine/services/s3');
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body.depositType).toBeNull();
+      expect(req.request.body.depositValue).toBeNull();
+      req.flush({ ...WITH_PERCENT, depositType: null, depositValue: null });
+      await fixture.whenStable();
+    });
+
+    it('edycja prefilluje typ i wartość zaliczki z usługi', async () => {
+      const { fixture, comp } = setup([WITH_PERCENT]);
+      await fixture.whenStable();
+
+      comp.openEdit(WITH_PERCENT);
+
+      expect(comp.model().depositEnabled).toBe(true);
+      expect(comp.model().depositKind).toBe('PERCENT');
+      expect(comp.model().depositPercent).toBe(20);
+    });
+
+    it('procent poza zakresem 1–100 blokuje zapis — żądanie nie wychodzi', async () => {
+      const { fixture, http, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.set({
+        name: 'Masaż',
+        description: '',
+        durationMin: 60,
+        priceZl: 180,
+        ...NO_DEPOSIT,
+        depositEnabled: true,
+        depositKind: 'PERCENT',
+        depositPercent: 150,
+      });
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      http.expectNone('/api/businesses/mine/services');
+    });
+
+    it('kwota wyższa niż cena blokuje zapis — żądanie nie wychodzi', async () => {
+      const { fixture, http, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.set({
+        name: 'Masaż',
+        description: '',
+        durationMin: 60,
+        priceZl: 180,
+        ...NO_DEPOSIT,
+        depositEnabled: true,
+        depositKind: 'FIXED',
+        depositAmountZl: 200,
+      });
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      http.expectNone('/api/businesses/mine/services');
+    });
+
+    it('wyłączona zaliczka nie blokuje zapisu mimo zerowej kwoty w modelu', async () => {
+      const { fixture, http, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.set({
+        name: 'Masaż',
+        description: '',
+        durationMin: 60,
+        priceZl: 180,
+        ...NO_DEPOSIT,
+      });
+      fixture.detectChanges();
+      submitForm(fixture);
+      await tick();
+
+      const req = http.expectOne('/api/businesses/mine/services');
+      expect(req.request.body.depositType).toBeNull();
+      req.flush({ ...ACTIVE, id: 's9' });
+      await fixture.whenStable();
+    });
+
+    it('podgląd kwoty pokazuje się dla poprawnego procentu', async () => {
+      const { fixture, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.update((m) => ({
+        ...m,
+        priceZl: 180,
+        depositEnabled: true,
+        depositKind: 'PERCENT',
+        depositPercent: 20,
+      }));
+      fixture.detectChanges();
+      await tick();
+      fixture.detectChanges();
+
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Zaliczka wyniesie');
+      expect(text).toContain('36');
+    });
+
+    it('podgląd nie liczy kwoty dla procentu spoza zakresu, nawet zanim pole zostanie dotknięte', async () => {
+      const { fixture, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      comp.model.update((m) => ({
+        ...m,
+        priceZl: 180,
+        depositEnabled: true,
+        depositKind: 'PERCENT',
+        depositPercent: 150,
+      }));
+      fixture.detectChanges();
+      await tick();
+      fixture.detectChanges();
+
+      // 150% ze 180 zł = 270 zł — kwota wyższa niż cena, której zapis i tak nie przyjmie
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).not.toContain('Zaliczka wyniesie');
+      expect(text).not.toContain('270');
+    });
+
+    it('aria-describedby pola procentu zawsze wskazuje na istniejący element', async () => {
+      const { fixture, comp } = setup([]);
+      await fixture.whenStable();
+
+      comp.openCreate();
+      // cena 0 zł: podgląd nie ma czego pokazać (10% z 0 = 0 gr), więc hint nie istnieje
+      comp.model.update((m) => ({
+        ...m,
+        priceZl: 0,
+        depositEnabled: true,
+        depositKind: 'PERCENT',
+        depositPercent: 10,
+      }));
+      fixture.detectChanges();
+      await tick();
+      fixture.detectChanges();
+
+      const el = fixture.nativeElement as HTMLElement;
+      const describedBy = el
+        .querySelector('#depositPercent')
+        ?.getAttribute('aria-describedby');
+      // wiszący IDREF to błąd AXE — atrybut albo nie istnieje, albo wskazuje na realny element
+      expect(describedBy).toBeNull();
+    });
+
+    it('lista pokazuje kwotę zaliczki procentowej wyliczoną z ceny', async () => {
+      const { fixture } = setup([WITH_PERCENT]);
+      await tick();
+      fixture.detectChanges();
+
+      // 20% ze 180 zł = 36 zł
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Zaliczka:');
+      expect(text).toContain('36');
+      expect(text).toContain('20% ceny');
+    });
+
+    it('usługa bez zaliczki nie renderuje wiersza z zaliczką', async () => {
+      const { fixture } = setup([ACTIVE]);
+      await tick();
+      fixture.detectChanges();
+
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).not.toContain('Zaliczka:');
+    });
   });
 });

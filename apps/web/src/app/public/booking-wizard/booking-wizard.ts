@@ -18,11 +18,14 @@ import {
   formatTime,
   todayInBusinessTz,
 } from '../../shared/business-time';
+import { DepositType, depositAmountCents } from '../../shared/deposit';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import { StripeLoader } from '../../shared/payments/stripe-loader';
 import NotFound from '../not-found/not-found';
+import DepositPayment from './deposit-payment';
 
 // lustrzane typy backendu — GET /businesses/:slug (#15), GET /businesses/:slug/availability (#24),
 // POST /bookings (#25). Repo nie ma wspólnej libki DTO, każdy front-owy typ jest lustrem.
@@ -36,6 +39,9 @@ interface PublicBusiness {
     description: string | null;
     durationMin: number;
     priceCents: number;
+    // zaliczka per usługa (#50) — null/null znaczy „cała płatność na miejscu"
+    depositType: DepositType | null;
+    depositValue: number | null;
     employees: { id: string; name: string }[];
   }[];
 }
@@ -45,6 +51,15 @@ export interface AvailableSlot {
   startsAt: string; // ISO 8601, UTC
 }
 
+/** Zaliczka do opłacenia — wyłącznie w odpowiedzi na POST /bookings (#51), nigdy na listach. */
+interface BookingPayment {
+  amountCents: number;
+  currency: string;
+  clientSecret: string;
+  /** ISO 8601 — koniec okna na opłacenie, liczony na backendzie przez `paymentDeadline()`. */
+  expiresAt: string;
+}
+
 interface Booking {
   id: string;
   employeeId: string;
@@ -52,6 +67,8 @@ interface Booking {
   startsAt: string;
   endsAt: string;
   status: string;
+  /** null = usługa bez zaliczki; rezerwacja jest kompletna od razu. */
+  payment: BookingPayment | null;
 }
 
 /** Wartość kroku 2 oznaczająca „bez preferencji" — do availability leci wtedy bez employeeId. */
@@ -79,6 +96,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
     LoadingState,
     ErrorState,
     EmptyState,
+    DepositPayment,
   ],
   template: `
     @if (loading()) {
@@ -93,7 +111,52 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
       </div>
     } @else if (business(); as b) {
       <div class="mx-auto w-full max-w-3xl px-4 py-8">
-        @if (createdBooking(); as booking) {
+        @if (redirectedPayment(); as result) {
+          <!-- Wróciliśmy z BLIK-a/Przelewów24: rezerwacja już istnieje, ale nie ma jej
+               w pamięci tej instancji kreatora — pokazujemy sam wynik płatności i odsyłamy
+               po szczegóły do „Moich wizyt". -->
+          <section class="rounded-2xl border border-stone-200 bg-white p-8 shadow-card">
+            <h1
+              #potwierdzenie
+              tabindex="-1"
+              class="text-xl font-bold tracking-tight outline-none sm:text-2xl"
+            >
+              {{ redirectHeading(result) }}
+            </h1>
+            @switch (result) {
+              @case ('paid') {
+                <p class="mt-3 text-sm leading-relaxed text-stone-600">
+                  Dziękujemy — termin jest opłacony. Firma potwierdzi wizytę, a status
+                  znajdziesz w sekcji „Moje wizyty".
+                </p>
+              }
+              @case ('failed') {
+                <!-- świadomie bez „zapłać ponownie w Moich wizytach": ponowienie żyje tylko
+                     w kreatorze, dopóki trzyma client_secret, a ten po przekierowaniu przepadł -->
+                <p role="alert" class="alert-danger mt-3">
+                  Nie otrzymaliśmy zaliczki, więc ta rezerwacja wygaśnie i termin wróci
+                  do puli wolnych. Zarezerwuj go jeszcze raz, jeśli nadal jest dostępny.
+                </p>
+              }
+              @default {
+                <!-- nie wiemy, czy pieniądze wyszły — najgorsze, co można tu zrobić, to
+                     wypchnąć klienta w drugą płatność za tę samą wizytę -->
+                <p role="alert" class="alert-danger mt-3">
+                  Nie udało się sprawdzić, czy płatność doszła do skutku. Nie płać
+                  drugi raz — aktualny stan zaliczki znajdziesz w sekcji „Moje wizyty".
+                </p>
+              }
+            }
+            <div class="mt-6 flex flex-wrap gap-3">
+              <a routerLink="/client" class="btn-primary w-auto">Moje wizyty</a>
+              <a
+                routerLink="../"
+                class="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                >Wróć do profilu firmy</a
+              >
+            </div>
+          </section>
+        } @else if (createdBooking(); as booking) {
           <section class="rounded-2xl border border-stone-200 bg-white p-8 shadow-card">
             <!-- focus wędruje na nagłówek: po zapisie znika cały wizard razem z aktywnym
                  przyciskiem, więc bez tego czytnik ekranu zostaje bez kontekstu (WCAG 2.4.3) -->
@@ -102,12 +165,21 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               tabindex="-1"
               class="text-xl font-bold tracking-tight outline-none sm:text-2xl"
             >
-              Rezerwacja przyjęta
+              {{ awaitingDeposit() ? 'Termin zarezerwowany' : 'Rezerwacja przyjęta' }}
             </h1>
             <p
-              class="mt-3 inline-block rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
+              class="mt-3 inline-block rounded-full px-3 py-1 text-sm font-semibold"
+              [class]="
+                awaitingDeposit()
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-emerald-50 text-emerald-700'
+              "
             >
-              Oczekuje na akceptację firmy
+              {{
+                awaitingDeposit()
+                  ? 'Czeka na opłacenie zaliczki'
+                  : 'Oczekuje na akceptację firmy'
+              }}
             </p>
 
             <dl class="mt-6 grid gap-3 text-sm sm:grid-cols-[10rem_1fr]">
@@ -119,20 +191,51 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               <dd class="font-medium">{{ employeeName(booking.employeeId) }}</dd>
               <dt class="font-semibold text-stone-600">Termin</dt>
               <dd class="font-medium">{{ dateTime(booking.startsAt) }}</dd>
+              @if (booking.payment; as payment) {
+                <dt class="font-semibold text-stone-600">Zaliczka</dt>
+                <dd class="font-medium">
+                  {{ payment.amountCents | pricePln }}
+                  {{ awaitingDeposit() ? '— do opłacenia' : '— opłacona' }}
+                </dd>
+              }
             </dl>
 
-            <p class="mt-6 text-sm text-stone-500">
-              Firma potwierdzi wizytę — status znajdziesz w sekcji „Moje wizyty".
-            </p>
+            @if (booking.payment; as payment) {
+              @if (awaitingDeposit()) {
+                <app-deposit-payment
+                  class="block"
+                  [clientSecret]="payment.clientSecret"
+                  [amountCents]="payment.amountCents"
+                  [expiresAt]="payment.expiresAt"
+                  [returnUrl]="returnUrl()"
+                  (paid)="onDepositPaid()"
+                  (unavailable)="onDepositUnavailable()"
+                />
+              } @else {
+                <p class="mt-6 text-sm text-stone-500">
+                  Zaliczka została opłacona. Firma potwierdzi wizytę — status znajdziesz
+                  w sekcji „Moje wizyty".
+                </p>
+              }
+            } @else {
+              <p class="mt-6 text-sm text-stone-500">
+                Firma potwierdzi wizytę — status znajdziesz w sekcji „Moje wizyty".
+              </p>
+            }
 
-            <div class="mt-6 flex flex-wrap gap-3">
-              <a routerLink="/client" class="btn-primary w-auto">Moje wizyty</a>
-              <a
-                routerLink="../"
-                class="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                >Wróć do profilu firmy</a
-              >
-            </div>
+            <!-- Podczas płatności nie zapraszamy do wyjścia; gdy formularz w ogóle nie
+                 wstał, jest odwrotnie — nie ma tu już nic do zrobienia i klient musi mieć
+                 czym wyjść, zamiast szukać przycisku wstecz -->
+            @if (!awaitingDeposit() || depositUnavailable()) {
+              <div class="mt-6 flex flex-wrap gap-3">
+                <a routerLink="/client" class="btn-primary w-auto">Moje wizyty</a>
+                <a
+                  routerLink="../"
+                  class="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                  >Wróć do profilu firmy</a
+                >
+              </div>
+            }
           </section>
         } @else {
           <a
@@ -144,7 +247,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
             Rezerwacja terminu
           </h1>
           <p class="mt-1 text-sm font-medium text-stone-500" role="status">
-            Krok {{ currentStep() }} z 3
+            Krok {{ currentStep() }} z {{ totalSteps() }}
           </p>
 
           <section
@@ -171,6 +274,15 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                       <span class="mt-1 block text-[13px] text-stone-500">
                         {{ s.durationMin }} min · {{ s.priceCents | pricePln }}
                       </span>
+                      <!-- AC: „kwota zaliczki widoczna przed potwierdzeniem" — już przy
+                           wyborze usługi, a nie dopiero w podsumowaniu -->
+                      @if (depositFor(s); as deposit) {
+                        <span
+                          class="mt-2 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"
+                        >
+                          Zaliczka {{ deposit | pricePln }} online
+                        </span>
+                      }
                     </button>
                   </li>
                 }
@@ -318,7 +430,22 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                   <dd class="font-medium">{{ dateTime(slot.startsAt) }}</dd>
                   <dt class="font-semibold text-stone-600">Cena</dt>
                   <dd class="font-medium">{{ svc.priceCents | pricePln }}</dd>
+                  @if (depositCents(); as deposit) {
+                    <dt class="font-semibold text-stone-600">Zaliczka (online)</dt>
+                    <dd class="font-medium">{{ deposit | pricePln }}</dd>
+                    <dt class="font-semibold text-stone-600">Do zapłaty na miejscu</dt>
+                    <dd class="font-medium">
+                      {{ svc.priceCents - deposit | pricePln }}
+                    </dd>
+                  }
                 </dl>
+
+                @if (depositCents()) {
+                  <p class="mt-4 text-[13px] leading-relaxed text-stone-500">
+                    Ta usługa wymaga zaliczki. Po kliknięciu przycisku przejdziesz do
+                    płatności — termin czeka zarezerwowany przez 15 minut.
+                  </p>
+                }
 
                 <label for="notatka" class="mb-1.5 mt-5 block text-sm font-medium"
                   >Notatka dla firmy (opcjonalnie)</label
@@ -364,6 +491,7 @@ export default class BookingWizard {
   private readonly auth = inject(AuthStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly stripeLoader = inject(StripeLoader);
 
   protected readonly anyEmployee = ANY_EMPLOYEE;
   protected readonly minDate = todayInBusinessTz();
@@ -394,9 +522,44 @@ export default class BookingWizard {
   protected readonly submitting = signal(false);
   protected readonly bookingError = signal<string | null>(null);
   protected readonly createdBooking = signal<Booking | null>(null);
+  // zaliczka opłacona w tej sesji kreatora; osobno od createdBooking, bo status samej
+  // rezerwacji nie zmienia się od razu — potwierdzenie przychodzi webhookiem (#51)
+  protected readonly depositPaid = signal(false);
+  // wynik płatności, która wyszła poza stronę (BLIK, Przelewy24) — po powrocie nie ma już
+  // ani createdBooking, ani client_secret w pamięci, więc to osobna ścieżka widoku.
+  // `unknown` = nie udało się dopytać Stripe'a; to nie to samo co `failed` (patrz niżej).
+  protected readonly redirectedPayment = signal<
+    'paid' | 'failed' | 'unknown' | null
+  >(null);
+  // Payment Element nie wstał (zablokowany skrypt, brak kluczy) — rezerwacji nie da się już
+  // opłacić, więc klient musi mieć czym wyjść z tego ekranu
+  protected readonly depositUnavailable = signal(false);
 
   protected readonly selectedService = computed(
     () => this.business()?.services.find((s) => s.id === this.serviceId()) ?? null,
+  );
+
+  /** Kwota zaliczki dla usługi albo null. Ta sama reguła zaokrąglania co na backendzie —
+   *  inaczej kwota na ekranie różniłaby się o grosz od kwoty pobranej przez Stripe. */
+  protected depositFor(service: {
+    depositType: DepositType | null;
+    depositValue: number | null;
+    priceCents: number;
+  }): number | null {
+    return depositAmountCents(service);
+  }
+
+  protected readonly depositCents = computed(() => {
+    const service = this.selectedService();
+    return service ? depositAmountCents(service) : null;
+  });
+
+  /** Usługa z zaliczką dokłada krok płatności — licznik kroków ma to odzwierciedlać. */
+  protected readonly totalSteps = computed(() => (this.depositCents() ? 4 : 3));
+
+  /** Rezerwacja stoi na kroku płatności: zaliczka jest, a jeszcze nie została opłacona. */
+  protected readonly awaitingDeposit = computed(
+    () => this.createdBooking()?.payment != null && !this.depositPaid(),
   );
 
   protected readonly groupedSlots = computed(() => groupSlotsByStart(this.slots()));
@@ -423,8 +586,29 @@ export default class BookingWizard {
 
   protected readonly submitLabel = computed(() => {
     if (this.submitting()) return 'Rezerwuję…';
-    return this.isLoggedIn() ? 'Rezerwuj' : 'Zaloguj się i zarezerwuj';
+    if (!this.isLoggedIn()) return 'Zaloguj się i zarezerwuj';
+    return this.depositCents() ? 'Zarezerwuj i zapłać zaliczkę' : 'Rezerwuj';
   });
+
+  /** Adres powrotu dla metod płatności z przekierowaniem — bezwzględny, bo trafia do Stripe'a. */
+  protected readonly returnUrl = computed(
+    () => globalThis.location.origin + this.wizardUrl(),
+  );
+
+  protected onDepositPaid(): void {
+    this.depositPaid.set(true);
+  }
+
+  protected onDepositUnavailable(): void {
+    this.depositUnavailable.set(true);
+  }
+
+  protected redirectHeading(result: 'paid' | 'failed' | 'unknown'): string {
+    if (result === 'paid') return 'Zaliczka opłacona';
+    return result === 'failed'
+      ? 'Płatność niedokończona'
+      : 'Nie znamy statusu płatności';
+  }
 
   constructor() {
     effect(() => this.confirmationHeading()?.nativeElement.focus());
@@ -439,11 +623,52 @@ export default class BookingWizard {
     this.selectedStart.set(query.get('startsAt'));
     this.clientNote.set(query.get('clientNote') ?? '');
 
+    // Powrót z metody płatności, która wymagała przekierowania (BLIK, Przelewy24). Stripe
+    // dokleja te parametry do `return_url`; bez tej gałęzi klient wracałby na krok 3
+    // z terminem zajętym przez własną rezerwację i bez słowa o tym, czy zapłacił.
+    const secret = query.get('payment_intent_client_secret');
+    if (secret) {
+      void this.resolveRedirectedPayment(secret);
+    }
+
     // slug siedzi w trasie rodzica (':slug' → dziecko 'rezerwacja'); paramMap, nie snapshot,
     // bo Angular reużywa instancję komponentu między dwoma sluga
     (this.route.parent?.paramMap ?? this.route.paramMap)
       .pipe(takeUntilDestroyed())
       .subscribe((pm) => this.load(pm.get('slug') ?? ''));
+  }
+
+  /**
+   * Stan płatności odczytany po powrocie z przekierowania — źródłem prawdy jest Stripe,
+   * nie parametr `redirect_status` w adresie, który da się dopisać ręcznie.
+   *
+   * `unknown` jest osobnym stanem, a nie odmianą `failed`: zablokowany skrypt Stripe'a albo
+   * chwilowy błąd sieci znaczy tyle, że nie wiemy, a nie że pieniądze nie wyszły. Powiedzenie
+   * komuś, kto właśnie zapłacił BLIK-iem, że zaliczka nie wpłynęła, wypycha go w drugą
+   * płatność za tę samą wizytę.
+   */
+  private async resolveRedirectedPayment(clientSecret: string): Promise<void> {
+    try {
+      const stripe = await this.stripeLoader.load();
+      if (!stripe) {
+        this.redirectedPayment.set('unknown');
+        return;
+      }
+      const { paymentIntent, error } =
+        await stripe.retrievePaymentIntent(clientSecret);
+      if (error || !paymentIntent) {
+        this.redirectedPayment.set('unknown');
+        return;
+      }
+      this.redirectedPayment.set(
+        paymentIntent.status === 'succeeded' ||
+          paymentIntent.status === 'processing'
+          ? 'paid'
+          : 'failed',
+      );
+    } catch {
+      this.redirectedPayment.set('unknown');
+    }
   }
 
   /** Odtworzony z adresu wybór mógł się zdezaktualizować (usługa wyłączona, pracownik

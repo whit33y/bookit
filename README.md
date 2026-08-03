@@ -189,6 +189,12 @@ domyślna", ale wartość **nieprawidłowa** (nieliczbowa albo spoza 0–100) za
 backendu. Prowizja liczona ze złej stawki rozjeżdża rozliczenia po cichu, a naprawa wymaga
 migracji danych — literówka ma być widoczna od razu.
 
+Wszystkie trzy siedzą w `apps/api/.env`, również ta „frontowa": klucz publishable front pobiera
+z `GET /api/payments/config` (#53), więc po podmianie kluczy wystarczy restart backendu — nic
+nie jest wkompilowane w bundle `apps/web`. Endpoint zwraca `{"publishableKey": null}`, dopóki
+komplet `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` nie jest ustawiony; kreator rezerwacji
+nie montuje wtedy formularza płatności.
+
 Sprawdzenie, że klucz testowy działa — utworzenie i anulowanie PaymentIntenta na 10 zł:
 
 ```sh

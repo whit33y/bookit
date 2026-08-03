@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { DepositType, depositAmountCents } from '../../shared/deposit';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
@@ -32,6 +33,9 @@ interface PublicBusiness {
     description: string | null;
     durationMin: number;
     priceCents: number;
+    // zaliczka per usługa (#50) — klient ma znać kwotę, zanim wejdzie w kreator (#53)
+    depositType: DepositType | null;
+    depositValue: number | null;
     employees: { id: string; name: string }[];
   }[];
   employees: { id: string; name: string }[];
@@ -138,6 +142,13 @@ function initials(name: string): string {
                     @if (s.description) {
                       <p class="mb-4 text-[13px] leading-relaxed text-stone-500">{{ s.description }}</p>
                     }
+                    <!-- zaliczka jest warunkiem rezerwacji, więc pada tu, a nie dopiero
+                         w kreatorze — klient nie ma się o niej dowiadywać po kliknięciu -->
+                    @if (depositFor(s); as deposit) {
+                      <p class="mt-2 text-[13px] font-semibold text-brand-700">
+                        Zaliczka {{ deposit | pricePln }} płatna online
+                      </p>
+                    }
                     <div class="mt-4 flex items-center justify-between">
                       <p class="text-sm font-bold">{{ s.priceCents | pricePln }}</p>
                       @if (s.employees.length) {
@@ -206,6 +217,16 @@ export default class BusinessProfile {
     return b ? initials(b.name) : '';
   });
   protected readonly employeeInitials = initials;
+
+  /** Kwota zaliczki dla usługi albo null. Wspólna reguła zaokrąglania z backendem
+   *  (`shared/deposit.ts`) — profil ma pokazywać dokładnie to, co pobierze Stripe. */
+  protected depositFor(service: {
+    depositType: DepositType | null;
+    depositValue: number | null;
+    priceCents: number;
+  }): number | null {
+    return depositAmountCents(service);
+  }
 
   protected telHref(phone: string): string {
     // tel: URI nie może zawierać spacji (RFC 3966) — wyświetlamy numer ze spacjami,

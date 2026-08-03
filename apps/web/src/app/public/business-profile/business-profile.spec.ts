@@ -47,14 +47,19 @@ const MOCK = {
       description: 'Klasyczne',
       durationMin: 30,
       priceCents: 7000,
+      depositType: null,
+      depositValue: null,
       employees: [{ id: 'e1', name: 'Anna Kowalska' }],
     },
     {
+      // zaliczka kwotowa (#50): 15 zł z 40 zł
       id: 's2',
       name: 'Broda',
       description: null,
       durationMin: 20,
       priceCents: 4000,
+      depositType: 'FIXED',
+      depositValue: 1500,
       employees: [],
     },
   ],
@@ -96,6 +101,29 @@ describe('BusinessProfile', () => {
     expect(text).toContain('Studio Fryzur');
     expect(text.replace(/\s/g, ' ')).toContain('70 zł');
     expect(text).toContain('Anna Kowalska');
+  });
+
+  // AC #53: „kwota zaliczki widoczna przed potwierdzeniem" — profil jest wcześniej niż kreator
+  it('pokazuje kwotę zaliczki tylko przy usłudze, która jej wymaga', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/businesses/test-slug').flush(MOCK);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // `article article` — kafelki usług siedzą w <article> profilu firmy, więc sam
+    // `article` złapałby też kartę zbiorczą ze wszystkimi usługami naraz
+    const cards = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+        'article article',
+      ),
+    ].map((c) => (c.textContent ?? '').replace(/\s/g, ' '));
+
+    expect(cards.find((c) => c.includes('Broda'))).toContain(
+      'Zaliczka 15 zł płatna online',
+    );
+    expect(cards.find((c) => c.includes('Strzyżenie męskie'))).not.toContain(
+      'Zaliczka',
+    );
   });
 
   it('pokazuje średnią ocenę i liczbę opinii w nagłówku', async () => {

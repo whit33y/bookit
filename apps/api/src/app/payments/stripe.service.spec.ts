@@ -24,6 +24,36 @@ describe('StripeService', () => {
     expect(withEnv({ STRIPE_SECRET_KEY: 'sk_test_x' }).isConfigured).toBe(true);
   });
 
+  // #53: klucz publishable jedzie do przeglądarki, więc `null` musi znaczyć dokładnie
+  // „nie montuj Payment Elementu", a nie „spróbuj z pustym stringiem"
+  describe('publishableKey', () => {
+    it('komplet kluczy → klucz publishable', () => {
+      const service = withEnv({
+        STRIPE_SECRET_KEY: 'sk_test_x',
+        STRIPE_PUBLISHABLE_KEY: 'pk_test_x',
+      });
+
+      expect(service.publishableKey).toBe('pk_test_x');
+    });
+
+    it('pusty STRIPE_PUBLISHABLE_KEY → null, nie pusty string', () => {
+      const service = withEnv({
+        STRIPE_SECRET_KEY: 'sk_test_x',
+        STRIPE_PUBLISHABLE_KEY: '',
+      });
+
+      expect(service.publishableKey).toBeNull();
+    });
+
+    // sam publishable bez sekretu to instancja, w której nie powstanie żaden PaymentIntent —
+    // oddanie klucza pokazałoby klientowi formularz, którego nie ma czym potwierdzić
+    it('brak STRIPE_SECRET_KEY → null, choć publishable jest ustawiony', () => {
+      const service = withEnv({ STRIPE_PUBLISHABLE_KEY: 'pk_test_x' });
+
+      expect(service.publishableKey).toBeNull();
+    });
+  });
+
   // brak kluczy nie może wywalić startu backendu, więc błąd pojawia się dopiero przy użyciu
   it('brak klucza → sięgnięcie po klienta daje 503, nie błąd przy starcie', () => {
     expect(() => withEnv({}).client).toThrowError(
