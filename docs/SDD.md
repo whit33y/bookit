@@ -115,6 +115,8 @@ erDiagram
     Service ||--o{ Booking : ""
     Employee }o--o{ Service : "wykonuje"
     Booking ||--o| Payment : "zaliczka (Faza 2)"
+    User ||--o{ Notification : "dostaje in-app (Faza 2)"
+    Booking ||--o{ Notification : "generuje (Faza 2)"
 ```
 
 ### Szkic `schema.prisma`
@@ -140,6 +142,16 @@ enum UserRole {
 enum DepositType {
   FIXED
   PERCENT
+}
+
+// Faza 2, powiadomienia in-app (#54)
+enum NotificationType {
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_DECLINED
+  BOOKING_CANCELLED_BY_CLIENT
+  BOOKING_CANCELLED_BY_BUSINESS
+  BOOKING_REMINDER
 }
 
 enum PaymentStatus {
@@ -337,6 +349,26 @@ model Payment {
 
   @@index([status, createdAt])
 }
+
+// Faza 2, powiadomienia in-app (#54): drugi kanał obok maila, zapisywany przy tych samych
+// zdarzeniach rezerwacji i dla tego samego adresata
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String // treść zdenormalizowana: powiadomienie jest zamrożoną wiadomością,
+  body      String // a lista dla dzwoneczka schodzi wtedy do jednego SELECT-a bez joinów
+  url       String // deep-link do wizyty w apps/web
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt]) // licznik nieprzeczytanych — endpoint odpytywany pollingiem
+}
 ```
 
 Uwagi:
@@ -362,7 +394,7 @@ Moduły w `apps/api/src/app/`:
 | `services`      | CRUD usług, przypisania pracownik↔usługa                                                          |
 | `availability`  | wyliczanie wolnych slotów                                                                         |
 | `bookings`      | tworzenie/akceptacja/odwoływanie rezerwacji, maszyna stanów                                       |
-| `notifications` | wysyłka emaili (Nodemailer) + cron przypomnień (`@nestjs/schedule`)                               |
+| `notifications` | wysyłka emaili (Nodemailer) + cron przypomnień (`@nestjs/schedule`) + powiadomienia in-app (Faza 2) |
 | `payments`      | zaliczki: `PaymentIntent` przy rezerwacji, webhook Stripe, cron wygaszania nieopłaconych (Faza 2) |
 | `admin`         | listy firm/użytkowników, blokowanie                                                               |
 | `prisma`        | `PrismaService` (globalny)                                                                        |
@@ -393,6 +425,9 @@ Moduły w `apps/api/src/app/`:
 | `POST /bookings/:id/confirm` / `POST /bookings/:id/decline` | właściciel           | decyzja o rezerwacji                                                               |
 | `POST /bookings/:id/cancel-by-business`                     | właściciel           | odwołanie przez firmę (zawsze możliwe)                                             |
 | `POST /payments/webhook`                                    | Stripe               | zdarzenia płatności; bez JWT, uwierzytelnia podpis `stripe-signature` (Faza 2)     |
+| `GET /notifications`                                        | zalogowany           | powiadomienia in-app z paginacją + licznik nieprzeczytanych (Faza 2)               |
+| `GET /notifications/unread-count`                           | zalogowany           | sam licznik nieprzeczytanych — endpoint odpytywany pollingiem (Faza 2)              |
+| `POST /notifications/:id/read` / `POST /notifications/read-all` | zalogowany       | oznaczenie jednego / wszystkich jako przeczytane (Faza 2)                           |
 | `GET /admin/businesses` / `GET /admin/users`                | admin                | listy z paginacją                                                                  |
 | `POST /admin/businesses/:id/block` / `unblock`              | admin                | moderacja                                                                          |
 
@@ -470,6 +505,14 @@ stateDiagram-v2
 ### Powiadomienia (cron)
 
 Co 15 minut: znajdź `CONFIRMED` z `startsAt` w oknie 24–24,25 h od teraz i `reminderSentAt = null` → wyślij email, ustaw `reminderSentAt`. Drugi job: `CONFIRMED` z `endsAt < now` → `COMPLETED`.
+
+### Kanały powiadomień (Faza 2, #54)
+
+Zdarzenie rezerwacji rozchodzi się dwoma kanałami naraz — mailem i wpisem `Notification` — z jedną tabelą routingu (`BOOKING_EVENT_RECIPIENT`), więc adresat jest zawsze ten sam: nowa i odwołana przez klienta rezerwacja idzie do firmy, decyzje firmy i przypomnienie do klienta, `PENDING` i `COMPLETED` do nikogo. Kanały są niezależne: nieudany SMTP nie blokuje wpisu in-app i odwrotnie, a żaden z nich nie może unieważnić zapisanej już operacji na rezerwacji.
+
+Jedyny wyjątek to `REMINDER`: cron cofa `reminderSentAt`, gdy mail nie poszedł, więc następny tick powtórzy zdarzenie — zapis in-app czeka tam na sukces maila, żeby padnięty SMTP nie wyprodukował po jednym powiadomieniu na tick.
+
+Front nie używa websocketów: dzwoneczek odpytuje `GET /notifications/unread-count` co minutę (i przy powrocie do karty), a listę pobiera przy otwarciu panelu.
 
 ### Zaliczki a maszyna stanów (Faza 2, #51)
 

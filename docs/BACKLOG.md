@@ -662,8 +662,8 @@ Krok 4 wizarda dla usług z zaliczką (Stripe Payment Element) + statusy płatno
 Model `Notification`, zapisywanie przy zdarzeniach rezerwacji (obok emaili), endpoint listy + oznaczania jako przeczytane, dzwoneczek z licznikiem w nawigacji (polling — bez websocketów).
 
 **Kryteria akceptacji:**
-- [ ] Zdarzenia rezerwacji tworzą powiadomienia dla właściwego odbiorcy (klient/firma)
-- [ ] Licznik nieprzeczytanych + lista; klik oznacza jako przeczytane i prowadzi do wizyty
+- [x] Zdarzenia rezerwacji tworzą powiadomienia dla właściwego odbiorcy (klient/firma)
+- [x] Licznik nieprzeczytanych + lista; klik oznacza jako przeczytane i prowadzi do wizyty
 
 ### #55 — Backend: powiadomienia SMS
 **Milestone:** M11 · **Labele:** `backend`, `faza-2` · **Zależy od:** #38

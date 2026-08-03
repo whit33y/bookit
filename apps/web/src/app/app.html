@@ -17,6 +17,7 @@
       @if (role() === 'ADMIN') {
         <a routerLink="/admin">Admin</a>
       }
+      <app-notification-bell />
       <button type="button" (click)="auth.logout()">Wyloguj</button>
     } @else {
       <a routerLink="/login">Zaloguj</a>

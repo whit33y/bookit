@@ -2,9 +2,10 @@ import { Component, computed, effect, inject } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { AuthStore } from './core/auth/auth-store';
 import { PendingCountStore } from './business/pending-count-store';
+import NotificationBell from './shared/notifications/notification-bell';
 
 @Component({
-  imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, RouterLink, NotificationBell],
   selector: 'app-root',
   templateUrl: './app.html',
   styleUrl: './app.css',

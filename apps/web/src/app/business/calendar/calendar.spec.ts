@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { Signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import BusinessCalendar from './calendar';
 import { CalendarBooking } from './booking-details-dialog';
 import { addDays, startOfWeekMonday } from './calendar-date';
@@ -299,6 +299,70 @@ describe('BusinessCalendar', () => {
     expect(cols.map((c) => c.key)).toEqual(['e1', 'e9']);
     expect(cols[1].title).toBe('Była Basia');
     expect(cols[1].bookings).toHaveLength(1);
+  });
+
+  // deep-link z powiadomienia in-app (#54): „klik prowadzi do wizyty"
+  describe('?date= i ?booking=', () => {
+    /** Komponent powstaje bez outletu, więc czyta korzeniowy ActivatedRoute — wystarczy
+     *  ustawić adres routerem przed jego utworzeniem. */
+    async function setupWithQuery(query: string, role: 'OWNER' | 'EMPLOYEE' = 'EMPLOYEE') {
+      setToken(role);
+      await TestBed.inject(Router).navigateByUrl(`/kalendarz?${query}`);
+      const fixture = TestBed.createComponent(BusinessCalendar);
+      const http = TestBed.inject(HttpTestingController);
+      fixture.detectChanges();
+      return { fixture, http, comp: fixture.componentInstance as unknown as TestAccess };
+    }
+
+    const OTHER_DAY = addDays(TODAY, 5);
+
+    it('pobiera od razu wskazany dzień i otwiera szczegóły wizyty', async () => {
+      const { http, comp } = await setupWithQuery(`date=${OTHER_DAY}&booking=b7`);
+
+      // zakres zapytania od pierwszego fetchu, bez drugiego pobrania całej siatki
+      const req = bookingsReq(http);
+      expect(req.request.url).toContain(`from=${OTHER_DAY}`);
+      expect(req.request.url).toContain(`to=${OTHER_DAY}`);
+      const target = mkBooking({ id: 'b7', startsAt: `${OTHER_DAY}T08:00:00Z` });
+      req.flush([mkBooking({ id: 'inna' }), target]);
+      await tick();
+
+      expect(comp.anchorDate()).toBe(OTHER_DAY);
+      expect(comp.viewMode()).toBe('day');
+      expect(comp.selectedBooking()).toEqual(target);
+    });
+
+    it('nieznane id zostawia dzień, ale nie otwiera dialogu', async () => {
+      const { http, comp } = await setupWithQuery(`date=${OTHER_DAY}&booking=nie-ma`);
+      bookingsReq(http).flush([mkBooking({ id: 'inna' })]);
+      await tick();
+
+      expect(comp.anchorDate()).toBe(OTHER_DAY);
+      expect(comp.selectedBooking()).toBeNull();
+    });
+
+    it('niepoprawna data jest ignorowana — kalendarz zostaje na dziś', async () => {
+      const { http, comp } = await setupWithQuery('date=2026-13-99');
+      bookingsReq(http).flush([]);
+      await tick();
+
+      expect(comp.anchorDate()).toBe(TODAY);
+    });
+
+    // dialog otwiera się raz: nawigacja po kalendarzu nie może go przywoływać przy każdym fetchu
+    it('ręczna nawigacja po otwarciu nie otwiera dialogu ponownie', async () => {
+      const { http, comp } = await setupWithQuery(`date=${OTHER_DAY}&booking=b7`);
+      const target = mkBooking({ id: 'b7', startsAt: `${OTHER_DAY}T08:00:00Z` });
+      bookingsReq(http).flush([target]);
+      await tick();
+      comp.selectedBooking.set(null);
+
+      comp.navigate(1);
+      bookingsReq(http).flush([target]);
+      await tick();
+
+      expect(comp.selectedBooking()).toBeNull();
+    });
   });
 
   it('onBookingChanged podmienia status rezerwacji i zamyka dialog (#33)', async () => {

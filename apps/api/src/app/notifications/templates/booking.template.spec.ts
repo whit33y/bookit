@@ -1,17 +1,14 @@
 import { BookingStatus } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
-import {
-  BOOKING_EMAIL_RECIPIENT,
-  BookingEmailData,
-  renderBookingEmail,
-} from './booking.template';
+import { BookingEventData } from './booking-event';
+import { renderBookingEmail } from './booking.template';
 
 const APP_URL = 'http://localhost:4200';
 
 // Intl wstawia NBSP przed „zł" i w tysiącach — porównania robimy na znormalizowanym tekście
 const normalize = (value: string) => value.replace(/\u00a0/g, ' ');
 
-const data = (overrides: Partial<BookingEmailData> = {}): BookingEmailData => ({
+const data = (overrides: Partial<BookingEventData> = {}): BookingEventData => ({
   // zimowa środa: 08:00Z = 09:00 lokalnie (CET)
   startsAt: new Date('2026-01-14T08:00:00.000Z'),
   endsAt: new Date('2026-01-14T09:00:00.000Z'),
@@ -30,26 +27,12 @@ const data = (overrides: Partial<BookingEmailData> = {}): BookingEmailData => ({
   ...overrides,
 });
 
-describe('routing odbiorców', () => {
-  it('zdarzenia klienta idą do klienta, odwołanie klienta do firmy', () => {
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.CONFIRMED]).toBe('CLIENT');
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.DECLINED]).toBe('CLIENT');
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.CANCELLED_BY_BUSINESS]).toBe('CLIENT');
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.CANCELLED_BY_CLIENT]).toBe('BUSINESS');
-    expect(BOOKING_EMAIL_RECIPIENT.CREATED).toBe('BUSINESS');
-    // przypomnienie z crona (#38) — firma ma wizytę w kalendarzu, przypomina się klientowi
-    expect(BOOKING_EMAIL_RECIPIENT.REMINDER).toBe('CLIENT');
-  });
-
-  it('COMPLETED i PENDING nie mają maila — routing i render zgodne', () => {
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.COMPLETED]).toBeNull();
-    expect(BOOKING_EMAIL_RECIPIENT[BookingStatus.PENDING]).toBeNull();
+describe('renderBookingEmail', () => {
+  it('COMPLETED i PENDING nie mają maila — render zgodny z routingiem', () => {
     expect(renderBookingEmail(BookingStatus.COMPLETED, data(), APP_URL)).toBeNull();
     expect(renderBookingEmail(BookingStatus.PENDING, data(), APP_URL)).toBeNull();
   });
-});
 
-describe('renderBookingEmail', () => {
   it('CONFIRMED: temat i treść po polsku, z danymi wizyty i firmy', () => {
     const mail = renderBookingEmail(BookingStatus.CONFIRMED, data(), APP_URL);
 

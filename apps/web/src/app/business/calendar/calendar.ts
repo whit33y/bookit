@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
@@ -21,6 +21,7 @@ import {
   addDays,
   bookingGridRow,
   formatDayLabel,
+  isCalendarDate,
   rangeForView,
   weekDays,
 } from './calendar-date';
@@ -226,6 +227,7 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
 export default class BusinessCalendar {
   private readonly api = inject(ApiClient);
   private readonly authStore = inject(AuthStore);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly viewMode = signal<CalendarViewMode>('day');
   protected readonly anchorDate = signal(todayInBusinessTz());
@@ -316,8 +318,22 @@ export default class BusinessCalendar {
   // race-guard jak w booking-wizard.ts — nawigacja może wystrzelić kolejny fetch, zanim
   // poprzedni wróci; bez tego wolniejsza odpowiedź nadpisałaby świeższe dane
   private requestId = 0;
+  /** Rezerwacja z `?booking=` (deep-link z powiadomienia in-app, #54) — do otwarcia po fetchu. */
+  private requestedBookingId: string | null = null;
 
   constructor() {
+    // Deep-link czytamy ze snapshotu i PRZED pierwszym fetchem: `date` decyduje o zakresie
+    // zapytania, więc ustawienie go później kosztowałoby drugie pobranie całej siatki.
+    // Widok dnia, bo pobiera rezerwacje wszystkich pracowników — tydzień filtruje po jednym
+    // i wskazana wizyta mogłaby w nim nie istnieć.
+    const params = this.route.snapshot.queryParamMap;
+    const date = params.get('date');
+    if (date && isCalendarDate(date)) {
+      this.anchorDate.set(date);
+      this.viewMode.set('day');
+    }
+    this.requestedBookingId = params.get('booking');
+
     if (this.isOwner()) {
       void this.loadEmployees();
     } else {
@@ -409,6 +425,23 @@ export default class BusinessCalendar {
     return `${rowStart} / ${rowEnd}`;
   }
 
+  /**
+   * Otwarcie szczegółów wizyty wskazanej deep-linkiem (AC #54 „klik prowadzi do wizyty").
+   * Jednorazowo: id zerujemy po pierwszej próbie, żeby ręczna nawigacja po kalendarzu nie
+   * otwierała tego dialogu ponownie przy każdym fetchu. Brak trafienia ignorujemy cicho —
+   * rezerwacja mogła zniknąć, a użytkownik i tak stoi na właściwym dniu.
+   */
+  private openRequestedBooking(): void {
+    const id = this.requestedBookingId;
+    if (!id) return;
+    this.requestedBookingId = null;
+
+    const booking = this.bookings().find((b) => b.id === id);
+    if (booking) {
+      this.openDetails(booking);
+    }
+  }
+
   private async loadEmployees(): Promise<void> {
     this.employeesError.set(null);
     try {
@@ -452,6 +485,7 @@ export default class BusinessCalendar {
       );
       if (requestId !== this.requestId) return;
       this.bookings.set(bookings);
+      this.openRequestedBooking();
     } catch (err) {
       if (requestId !== this.requestId) return;
       this.serverError.set(apiErrorMessage(err));

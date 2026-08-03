@@ -2,16 +2,20 @@ import { ConfigService } from '@nestjs/config';
 import { BookingStatus } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
+import { InAppNotificationsService } from './in-app.service';
 import { MailService } from './mail.service';
 import { NotificationsService } from './notifications.service';
 
 const BOOKING_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const CLIENT_ID = 'client-1';
+const OWNER_ID = 'owner-1';
 
 const booking = () => ({
   startsAt: new Date('2026-01-14T08:00:00.000Z'),
   endsAt: new Date('2026-01-14T09:00:00.000Z'),
   clientNote: null,
   client: {
+    id: CLIENT_ID,
     email: 'jan@example.com',
     firstName: 'Jan',
     lastName: 'Kowalski',
@@ -24,6 +28,7 @@ const booking = () => ({
     city: 'Warszawa',
     postalCode: '00-001',
     phone: null,
+    ownerId: OWNER_ID,
     owner: { email: 'ola@example.com' },
   },
   service: { name: 'Strzyżenie damskie', durationMin: 60, priceCents: 12000 },
@@ -33,14 +38,17 @@ const booking = () => ({
 describe('NotificationsService', () => {
   let findUnique: ReturnType<typeof vi.fn>;
   let send: ReturnType<typeof vi.fn>;
+  let createForBooking: ReturnType<typeof vi.fn>;
   let service: NotificationsService;
 
   beforeEach(() => {
     findUnique = vi.fn().mockResolvedValue(booking());
     send = vi.fn().mockResolvedValue(undefined);
+    createForBooking = vi.fn().mockResolvedValue(undefined);
     service = new NotificationsService(
       { booking: { findUnique } } as unknown as PrismaService,
       { send } as unknown as MailService,
+      { createForBooking } as unknown as InAppNotificationsService,
       new ConfigService({ APP_URL: 'http://localhost:4200' }),
     );
   });
@@ -105,6 +113,58 @@ describe('NotificationsService', () => {
       service.bookingStatusChanged(BOOKING_ID, BookingStatus.DECLINED),
     ).resolves.toBeUndefined();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // Kanał in-app (#54) — ten sam adresat co mail, ale adresowany po userId
+  describe('powiadomienia in-app', () => {
+    it('CONFIRMED → wpis dla klienta, obok maila', async () => {
+      await service.bookingStatusChanged(BOOKING_ID, BookingStatus.CONFIRMED);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(createForBooking).toHaveBeenCalledTimes(1);
+      const [event, bookingId, , userId] = createForBooking.mock.calls[0];
+      expect(event).toBe(BookingStatus.CONFIRMED);
+      expect(bookingId).toBe(BOOKING_ID);
+      expect(userId).toBe(CLIENT_ID);
+    });
+
+    it('nowa rezerwacja → wpis dla właściciela firmy', async () => {
+      await service.bookingCreated(BOOKING_ID);
+
+      expect(createForBooking.mock.calls[0][0]).toBe('CREATED');
+      expect(createForBooking.mock.calls[0][3]).toBe(OWNER_ID);
+    });
+
+    it('padnięty SMTP nie blokuje wpisu in-app — nikt tego zdarzenia nie powtórzy', async () => {
+      send.mockRejectedValue(new Error('SMTP down'));
+
+      await service.bookingStatusChanged(BOOKING_ID, BookingStatus.CANCELLED_BY_CLIENT);
+
+      expect(createForBooking).toHaveBeenCalledTimes(1);
+      expect(createForBooking.mock.calls[0][3]).toBe(OWNER_ID);
+    });
+
+    // Cron cofa `reminderSentAt`, gdy mail nie poszedł, więc następny tick powtórzy zdarzenie —
+    // bez tej bramki padnięty SMTP produkowałby po jednym powiadomieniu na tick
+    it('padnięty SMTP przy REMINDER nie zapisuje wpisu in-app', async () => {
+      send.mockRejectedValue(new Error('SMTP down'));
+
+      await expect(service.bookingReminder(BOOKING_ID)).resolves.toBe(false);
+      expect(createForBooking).not.toHaveBeenCalled();
+    });
+
+    it('udany REMINDER zapisuje wpis dla klienta', async () => {
+      await expect(service.bookingReminder(BOOKING_ID)).resolves.toBe(true);
+
+      expect(createForBooking.mock.calls[0][0]).toBe('REMINDER');
+      expect(createForBooking.mock.calls[0][3]).toBe(CLIENT_ID);
+    });
+
+    it('zdarzenie bez adresata nie zapisuje niczego', async () => {
+      await service.bookingStatusChanged(BOOKING_ID, BookingStatus.COMPLETED);
+
+      expect(createForBooking).not.toHaveBeenCalled();
+    });
   });
 
   describe('sendPasswordReset', () => {

@@ -2,11 +2,27 @@ import {
   addDays,
   bookingGridRow,
   formatDayLabel,
+  isCalendarDate,
   minutesSinceMidnight,
   rangeForView,
   startOfWeekMonday,
   weekDays,
 } from './calendar-date';
+
+describe('isCalendarDate', () => {
+  it('przepuszcza istniejące daty', () => {
+    expect(isCalendarDate('2026-08-03')).toBe(true);
+    expect(isCalendarDate('2024-02-29')).toBe(true);
+  });
+
+  // ?date= z adresu (deep-link powiadomienia, #54) nie może rozjechać kalendarza
+  it('odrzuca zły kształt i daty nieistniejące w kalendarzu', () => {
+    expect(isCalendarDate('2026-13-99')).toBe(false);
+    expect(isCalendarDate('2026-02-30')).toBe(false);
+    expect(isCalendarDate('3.08.2026')).toBe(false);
+    expect(isCalendarDate('')).toBe(false);
+  });
+});
 
 describe('addDays', () => {
   it('dodaje dni w obrębie miesiąca', () => {

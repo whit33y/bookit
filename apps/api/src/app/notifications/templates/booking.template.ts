@@ -1,80 +1,30 @@
 import { BookingStatus } from '@prisma/client';
 import { formatDateTimeRange, formatDuration, formatPrice } from '../format';
+import { BookingEvent, BookingEventData } from './booking-event';
 import { RenderedEmail, escapeHtml } from './email';
-
-/**
- * Zdarzenia rezerwacji, które mogą wygenerować maila. Poza statusami z maszyny stanów
- * (SDD §7) są dwa własne, bo żadne nie jest przejściem: 'CREATED' — świeżo złożona
- * rezerwacja (PENDING to stan początkowy, nie krawędź), i 'REMINDER' — przypomnienie
- * z crona ~24 h przed wizytą (#38), które statusu w ogóle nie zmienia.
- */
-export type BookingEmailEvent = 'CREATED' | 'REMINDER' | BookingStatus;
-
-export type BookingEmailRecipient = 'CLIENT' | 'BUSINESS';
-
-/**
- * Kto dostaje maila przy którym zdarzeniu. Routing trzymamy obok szablonów, żeby
- * NotificationsService nie miał własnego switcha, a dopisanie zdarzenia było zmianą
- * w jednym pliku. `null` = brak maila; Record po pełnym enumie sprawia, że nowy status
- * w schemacie nie skompiluje się bez świadomej decyzji.
- */
-export const BOOKING_EMAIL_RECIPIENT: Record<BookingEmailEvent, BookingEmailRecipient | null> =
-  {
-    CREATED: 'BUSINESS',
-    // przypomnienie o wizycie idzie do klienta — firma ma wizytę w kalendarzu
-    REMINDER: 'CLIENT',
-    // Rezerwacja nie wraca do PENDING, a COMPLETED domyka ją cron (#39) — w obu
-    // przypadkach mail o zmianie statusu nie ma adresata.
-    [BookingStatus.PENDING]: null,
-    [BookingStatus.COMPLETED]: null,
-    [BookingStatus.CONFIRMED]: 'CLIENT',
-    [BookingStatus.DECLINED]: 'CLIENT',
-    [BookingStatus.CANCELLED_BY_BUSINESS]: 'CLIENT',
-    // klient odwołał → informujemy firmę, że termin się zwolnił
-    [BookingStatus.CANCELLED_BY_CLIENT]: 'BUSINESS',
-  };
-
-/** Dane wizyty potrzebne szablonowi — podzbiór selecta z NotificationsService. */
-export interface BookingEmailData {
-  startsAt: Date;
-  endsAt: Date;
-  clientNote: string | null;
-  client: { firstName: string; lastName: string; phone: string | null };
-  business: {
-    name: string;
-    // slug publicznego profilu — tam prowadzi CTA po odrzuconej wizycie (wybór nowego terminu)
-    slug: string;
-    street: string;
-    city: string;
-    postalCode: string | null;
-    phone: string | null;
-  };
-  service: { name: string; durationMin: number; priceCents: number };
-  employee: { name: string };
-}
 
 type Row = [label: string, value: string];
 
-const fullAddress = ({ street, city, postalCode }: BookingEmailData['business']): string =>
+const fullAddress = ({ street, city, postalCode }: BookingEventData['business']): string =>
   postalCode ? `${street}, ${postalCode} ${city}` : `${street}, ${city}`;
 
 // wspólny opis wizyty — te same wiersze w obu wersjach, żeby treści nie rozjechały się
 // między HTML a fallbackiem tekstowym
-const bookingRows = (data: BookingEmailData): Row[] => [
+const bookingRows = (data: BookingEventData): Row[] => [
   ['Usługa', `${data.service.name} (${formatDuration(data.service.durationMin)})`],
   ['Pracownik', data.employee.name],
   ['Termin', formatDateTimeRange(data.startsAt, data.endsAt)],
   ['Cena', formatPrice(data.service.priceCents)],
 ];
 
-const clientRows = (data: BookingEmailData): Row[] => [
+const clientRows = (data: BookingEventData): Row[] => [
   ...bookingRows(data),
   ['Firma', data.business.name],
   ['Adres', fullAddress(data.business)],
   ...(data.business.phone ? ([['Telefon', data.business.phone]] as Row[]) : []),
 ];
 
-const businessRows = (data: BookingEmailData): Row[] => [
+const businessRows = (data: BookingEventData): Row[] => [
   ...bookingRows(data),
   ['Klient', `${data.client.firstName} ${data.client.lastName}`],
   ...(data.client.phone ? ([['Telefon', data.client.phone]] as Row[]) : []),
@@ -121,12 +71,12 @@ const renderHtml = (
 
 /**
  * Treść maila dla zdarzenia rezerwacji albo `null`, gdy zdarzenie nie ma adresata
- * (patrz BOOKING_EMAIL_RECIPIENT). Czysta funkcja: żadnego Nesta, Prismy ani SMTP —
+ * (patrz BOOKING_EVENT_RECIPIENT). Czysta funkcja: żadnego Nesta, Prismy ani SMTP —
  * `appUrl` przychodzi z zewnątrz, bo konfiguracja należy do serwisu.
  */
 export const renderBookingEmail = (
-  event: BookingEmailEvent,
-  data: BookingEmailData,
+  event: BookingEvent,
+  data: BookingEventData,
   appUrl: string,
 ): RenderedEmail | null => {
   const when = formatDateTimeRange(data.startsAt, data.endsAt);

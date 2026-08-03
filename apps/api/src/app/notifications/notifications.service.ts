@@ -2,22 +2,23 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { InAppNotificationsService } from './in-app.service';
 import { MailService } from './mail.service';
-import {
-  BOOKING_EMAIL_RECIPIENT,
-  BookingEmailEvent,
-  renderBookingEmail,
-} from './templates/booking.template';
+import { BOOKING_EVENT_RECIPIENT, BookingEvent } from './templates/booking-event';
+import { renderBookingEmail } from './templates/booking.template';
 import { renderPasswordResetEmail } from './templates/password-reset.template';
 
-// Komplet danych do treści maila jednym zapytaniem — email klienta i właściciela firmy
-// (Business nie ma własnego adresu, więc pisze się do ownera) plus wszystko, co pokazuje
-// szablon. Zawężony select, bo mail nie potrzebuje ani hashy haseł, ani id relacji.
-const bookingEmailSelect = {
+// Komplet danych do treści powiadomienia jednym zapytaniem — email klienta i właściciela firmy
+// (Business nie ma własnego adresu, więc pisze się do ownera) plus wszystko, co pokazują
+// szablony. Zawężony select, bo powiadomienie nie potrzebuje hashy haseł; id klienta
+// i właściciela są tu dla kanału in-app (#54), który adresuje powiadomienia po userId.
+const bookingEventSelect = {
   startsAt: true,
   endsAt: true,
   clientNote: true,
-  client: { select: { email: true, firstName: true, lastName: true, phone: true } },
+  client: {
+    select: { id: true, email: true, firstName: true, lastName: true, phone: true },
+  },
   business: {
     select: {
       name: true,
@@ -26,6 +27,7 @@ const bookingEmailSelect = {
       city: true,
       postalCode: true,
       phone: true,
+      ownerId: true,
       owner: { select: { email: true } },
     },
   },
@@ -34,8 +36,9 @@ const bookingEmailSelect = {
 } satisfies Prisma.BookingSelect;
 
 /**
- * Powiadomienia mailowe (#37). Jedyny konsument MailService — reszta aplikacji zna wyłącznie
- * ten serwis, więc szablony i adresaci mają jedno miejsce.
+ * Powiadomienia o zdarzeniach rezerwacji: mail (#37) i wpis in-app (#54). Jedyny konsument
+ * MailService i InAppNotificationsService — reszta aplikacji zna wyłącznie ten serwis, więc
+ * szablony i adresaci mają jedno miejsce, a dołożenie kanału nie rusza `bookings`.
  *
  * Kontrakt metod od rezerwacji (bookingCreated / bookingStatusChanged / bookingReminder):
  * **nigdy nie odrzucają**. Powiadomienie jest efektem ubocznym zapisanej już operacji,
@@ -52,17 +55,18 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly inApp: InAppNotificationsService,
     private readonly config: ConfigService,
   ) {}
 
   /** Nowa rezerwacja (PENDING) — informacja dla firmy, że czeka decyzja. */
   async bookingCreated(bookingId: string): Promise<void> {
-    await this.sendBookingEmail(bookingId, 'CREATED');
+    await this.dispatchBooking(bookingId, 'CREATED');
   }
 
-  /** Zmiana statusu rezerwacji — mail do klienta albo firmy, zależnie od zdarzenia. */
+  /** Zmiana statusu rezerwacji — do klienta albo firmy, zależnie od zdarzenia. */
   async bookingStatusChanged(bookingId: string, to: BookingStatus): Promise<void> {
-    await this.sendBookingEmail(bookingId, to);
+    await this.dispatchBooking(bookingId, to);
   }
 
   /**
@@ -71,31 +75,62 @@ export class NotificationsService {
    * więc musi wiedzieć, czy cofnąć znacznik. Nadal nie odrzuca — `false` zamiast wyjątku.
    */
   bookingReminder(bookingId: string): Promise<boolean> {
-    return this.sendBookingEmail(bookingId, 'REMINDER');
+    return this.dispatchBooking(bookingId, 'REMINDER');
   }
 
-  /** `true` = mail poszedł do SMTP; `false` = zdarzenie bez adresata albo błąd (zalogowany). */
-  private async sendBookingEmail(
+  /**
+   * Rozesłanie zdarzenia wszystkimi kanałami. `true` = mail poszedł do SMTP; `false` =
+   * zdarzenie bez adresata albo błąd (zalogowany). Wynik dotyczy wyłącznie maila, bo tylko
+   * na nim opiera decyzję jedyny wołający, który go czyta (cron przypomnień).
+   */
+  private async dispatchBooking(
     bookingId: string,
-    event: BookingEmailEvent,
+    event: BookingEvent,
   ): Promise<boolean> {
-    // Odbiorcę rozstrzygamy przed zapytaniem do bazy — zdarzenia bez maila (np. COMPLETED
-    // z crona #39) nie mają kosztować dodatkowego SELECT-a.
-    const recipient = BOOKING_EMAIL_RECIPIENT[event];
+    // Odbiorcę rozstrzygamy przed zapytaniem do bazy — zdarzenia bez powiadomienia
+    // (np. COMPLETED z crona #39) nie mają kosztować dodatkowego SELECT-a.
+    const recipient = BOOKING_EVENT_RECIPIENT[event];
     if (!recipient) {
       return false;
     }
 
-    try {
-      const booking = await this.prisma.booking.findUnique({
-        where: { id: bookingId },
-        select: bookingEmailSelect,
+    const booking = await this.prisma.booking
+      .findUnique({ where: { id: bookingId }, select: bookingEventSelect })
+      .catch((e: unknown) => {
+        this.logger.error(
+          `Nie udało się pobrać rezerwacji ${bookingId} dla powiadomienia ${event}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+        return null;
       });
-      if (!booking) {
-        this.logger.warn(`Rezerwacja ${bookingId} zniknęła przed wysłaniem powiadomienia`);
-        return false;
-      }
+    if (!booking) {
+      this.logger.warn(`Rezerwacja ${bookingId} zniknęła przed wysłaniem powiadomienia`);
+      return false;
+    }
 
+    const emailSent = await this.sendBookingEmail(bookingId, event, recipient, booking);
+
+    // REMINDER to jedyne zdarzenie, które cron ponawia (cofa `reminderSentAt`, gdy mail nie
+    // poszedł) — przy padniętym SMTP każdy tick zapisywałby kolejne powiadomienie in-app o tej
+    // samej wizycie. Dlatego tu i tylko tu zapis czeka na sukces maila. Pozostałe zdarzenia są
+    // fire-and-forget: nikt ich nie powtórzy, więc wpis in-app musi powstać niezależnie od SMTP.
+    if (event !== 'REMINDER' || emailSent) {
+      const userId =
+        recipient === 'CLIENT' ? booking.client.id : booking.business.ownerId;
+      await this.inApp.createForBooking(event, bookingId, booking, userId);
+    }
+
+    return emailSent;
+  }
+
+  /** Sam kanał mailowy. Nie rzuca — patrz kontrakt w docblocku klasy. */
+  private async sendBookingEmail(
+    bookingId: string,
+    event: BookingEvent,
+    recipient: 'CLIENT' | 'BUSINESS',
+    booking: Prisma.BookingGetPayload<{ select: typeof bookingEventSelect }>,
+  ): Promise<boolean> {
+    try {
       const message = renderBookingEmail(
         event,
         booking,

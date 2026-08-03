@@ -37,6 +37,18 @@ enum PaymentStatus {
   FORFEITED // zaliczka przepadła: klient odwołał po terminie z polityki firmy (#52)
 }
 
+// Rodzaj powiadomienia in-app (#54). Osobny enum, nie BookingStatus: dwa zdarzenia kanału
+// (nowa rezerwacja, przypomnienie) nie są przejściami w maszynie stanów, a statusy bez
+// adresata (PENDING, COMPLETED) nie mają tu odpowiednika.
+enum NotificationType {
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_DECLINED
+  BOOKING_CANCELLED_BY_CLIENT
+  BOOKING_CANCELLED_BY_BUSINESS
+  BOOKING_REMINDER
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -53,6 +65,7 @@ model User {
   employee      Employee?
   bookings      Booking[]
   reviews       Review[]
+  notifications Notification[]
   refreshTokens RefreshToken[]
   resetTokens   PasswordResetToken[]
 }
@@ -190,8 +203,9 @@ model Booking {
   business Business @relation(fields: [businessId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
   service  Service  @relation(fields: [serviceId], references: [id])
-  review   Review?
-  payment  Payment?
+  review        Review?
+  payment       Payment?
+  notifications Notification[]
 
   @@index([employeeId, startsAt])
   @@index([clientId])
@@ -257,4 +271,34 @@ model Payment {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt]) // cron wygaszania nieopłaconych rezerwacji (#51)
+}
+
+// Powiadomienie in-app (#54) — drugi kanał obok maila, zapisywany przy tych samych zdarzeniach
+// rezerwacji i dla tego samego adresata (BOOKING_EVENT_RECIPIENT w notifications/templates).
+model Notification {
+  id     String           @id @default(uuid())
+  userId String
+  type   NotificationType
+  // Treść zdenormalizowana, a nie renderowana przy odczycie: powiadomienie jest zamrożoną
+  // wiadomością (tak jak wysłany mail) — późniejsza zmiana terminu czy statusu wizyty nie może
+  // przepisać historii, a lista dla dzwoneczka schodzi wtedy do jednego SELECT-a bez joinów,
+  // co przy pollingu co minutę ma znaczenie.
+  title String
+  body  String
+  // Ścieżka w apps/web, na którą prowadzi klik (deep-link do wizyty). Trzymana obok treści
+  // z tego samego powodu i tym samym precedensem co CTA w szablonach maili, które też znają
+  // trasy frontu; cena: zmiana routingu nie przepisze linków w starych wierszach.
+  url       String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // bookingId nullable, bo enum powiadomień może kiedyś objąć zdarzenia bez wizyty (np. konto);
+  // Cascade jak w Review i Payment — seed kasuje i odtwarza rezerwacje firm demo, a RESTRICT
+  // wywaliłby drugie `prisma db seed` na kluczu obcym.
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt]) // lista powiadomień użytkownika, najnowsze pierwsze
+  @@index([userId, readAt]) // licznik nieprzeczytanych — endpoint odpytywany pollingiem
 }
