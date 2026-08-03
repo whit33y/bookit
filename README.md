@@ -182,6 +182,12 @@ przy braku klucza kończy się błędem `503`, a nie wywaleniem startu jak przy 
 | `STRIPE_SECRET_KEY`      | sandbox → Developers → API keys → _Secret key_ (`sk_test_…`) | backend, PaymentIntent i refund    |
 | `STRIPE_PUBLISHABLE_KEY` | ten sam ekran, _Publishable key_ (`pk_test_…`)               | front, Payment Element (#53)       |
 | `STRIPE_WEBHOOK_SECRET`  | `stripe listen` — patrz niżej, **nie** dashboard             | weryfikacja podpisu webhooka (#51) |
+| `PLATFORM_FEE_PERCENT`   | ustalasz sam; puste = 10                                     | prowizja platformy od zaliczki (#52) |
+
+`PLATFORM_FEE_PERCENT` jest opcjonalna inaczej niż trzy powyższe: brak wartości znaczy „stawka
+domyślna", ale wartość **nieprawidłowa** (nieliczbowa albo spoza 0–100) zatrzymuje start
+backendu. Prowizja liczona ze złej stawki rozjeżdża rozliczenia po cichu, a naprawa wymaga
+migracji danych — literówka ma być widoczna od razu.
 
 Sprawdzenie, że klucz testowy działa — utworzenie i anulowanie PaymentIntenta na 10 zł:
 

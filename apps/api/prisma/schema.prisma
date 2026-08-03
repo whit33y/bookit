@@ -33,7 +33,8 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   CANCELLED // rezerwacja wygasła nieopłacona (#51)
-  // REFUNDED dołoży #52 razem z prowizją platformy i kwotą zwrotu
+  REFUNDED // zaliczka zwrócona: odwołanie w terminie albo przez firmę (#52)
+  FORFEITED // zaliczka przepadła: klient odwołał po terminie z polityki firmy (#52)
 }
 
 model User {
@@ -234,8 +235,22 @@ model Payment {
   stripePaymentIntentId String?       @unique
   stripeChargeId        String? // potrzebne do refundu (#52)
   paidAt                DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+
+  // Prowizja platformy od zaliczki (#52). Naliczana raz, przy tworzeniu wiersza, i przypięta
+  // do niego na stałe — zmiana stawki w PLATFORM_FEE_PERCENT nie może ruszyć rozliczeń
+  // płatności, które już się odbyły. Zapis do rozliczeń, nie `application_fee_amount` ze
+  // Stripe'a: to wymaga Connect i konta firmy po tamtej stronie, czego model Business nie ma.
+  platformFeeCents Int @default(0)
+  // Zwrot: kwota i moment. Osobne pola zamiast samego statusu REFUNDED, bo klient ma zobaczyć
+  // ile i kiedy mu wróciło (#53), a `amountCents` musi zostać nietknięte jako kwota pobrana.
+  refundedAmountCents Int?
+  refundedAt          DateTime?
+  // @unique jak przy stripePaymentIntentId — daje webhookowi `charge.refunded` idempotentny
+  // lookup i zostawia ślad do zestawienia z dashboardem Stripe'a.
+  stripeRefundId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Cascade jak w Review: seed kasuje i odtwarza rezerwacje firm demo przy każdym przebiegu —
   // przy RESTRICT drugie `prisma db seed` wywaliłoby się na kluczu obcym.
