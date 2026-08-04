@@ -32,6 +32,20 @@ function toIsoDate(utcMs: number): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Czy „YYYY-MM-DD" jest istniejącą datą kalendarzową. Sam kształt nie wystarcza: `?from=2026-13-99`
+ * z adresu przeszłoby regexa i rozjechało zakres (Date.UTC przewinęłoby to na inny rok).
+ * Round-trip przez Date.UTC ujawnia przewinięcie — ten sam test co parseLocalDate w apps/api.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const { y, m, d } = parseIsoDate(value);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  return (
+    utc.getUTCFullYear() === y && utc.getUTCMonth() === m - 1 && utc.getUTCDate() === d
+  );
+}
+
 /** Dodaje (lub odejmuje, dla ujemnych) dni do daty kalendarzowej. */
 export function addDays(dateIso: string, days: number): string {
   const { y, m, d } = parseIsoDate(dateIso);
