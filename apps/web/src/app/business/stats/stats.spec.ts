@@ -197,6 +197,25 @@ describe('BusinessStats', () => {
     await fixture.whenStable();
   });
 
+  it('przełączenie na „Własny" nie pobiera tych samych danych po raz drugi', async () => {
+    const { fixture, http } = setup();
+    statsRequest(http).flush(stats());
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const button = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+      (b) => b as HTMLButtonElement,
+    ).find((b) => b.textContent?.trim() === 'Własny');
+    button?.click();
+    fixture.detectChanges();
+
+    http.expectNone((r) => r.url.startsWith('/api/businesses/mine/stats'));
+    // pola dat są odsłonięte, dane zostają na ekranie
+    expect(fixture.nativeElement.querySelector('#stats-from')).not.toBeNull();
+    expect(text(fixture)).toContain('210 zł');
+  });
+
   it('poprzedni okres cofa zakres o miesiąc', async () => {
     const { fixture, http } = setup();
     const first = statsRequest(http);

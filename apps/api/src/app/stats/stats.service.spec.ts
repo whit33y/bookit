@@ -218,4 +218,15 @@ describe('StatsService', () => {
     expect(params(queryRaw, 3)).toContain('2026-08-03');
     expect(params(queryRaw, 3)).toContain('2026-08-09');
   });
+
+  it('licznik obłożenia bierze rezerwacje po tym samym warunku co seria (start w zakresie)', async () => {
+    await service.findForBusiness('owner-1', query);
+
+    // ten sam zbiór rezerwacji co seria: inaczej wizyta zaczęta przed zakresem dokładała
+    // minuty i rezerwację do obłożenia, nie licząc się w KPI „Rezerwacje"
+    const bookedWhere = sqlOf(queryRaw, 3).split('booked AS (')[1].split('GROUP BY')[0];
+    expect(bookedWhere).toContain('b."startsAt" >= ');
+    expect(bookedWhere).toContain('b."startsAt" < ');
+    expect(bookedWhere).not.toContain('b."endsAt" > ');
+  });
 });

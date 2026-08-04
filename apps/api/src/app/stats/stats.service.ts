@@ -226,8 +226,11 @@ export class StatsService {
    * odwrotnym `AT TIME ZONE` niż w serii. Od każdego okna odejmujemy część nachodzącą z urlopu;
    * `GREATEST(0, …)` chroni przed ujemną pojemnością, gdy urlopy się nakładają.
    *
-   * Licznik liczy rezerwacje nachodzące na zakres (nie zaczynające się w nim) i przycina je do
-   * jego granic — inaczej wizyta z 23:30 ostatniego dnia zawyżałaby obłożenie o czas spoza okna.
+   * Licznik bierze rezerwacje po tym samym warunku co seria (start zawarty w zakresie), żeby
+   * „Rezerwacje" w KPI i liczba wizyt w opisie paska pracownika liczyły ten sam zbiór — przy
+   * warunku na nachodzenie wizyta z 31.07 23:30 nie wchodziła do serii, ale dokładała minuty
+   * i rezerwację do obłożenia sierpnia. Koniec i tak przycinamy do granicy zakresu, żeby wizyta
+   * przechodząca przez północ ostatniego dnia nie doliczyła czasu spoza okna.
    *
    * Grafik przez północ (`endTime <= startTime`) jest poza modelem, tak samo jak w generateSlots.
    * Pracownik bez rezerwacji ma wiersz z zerami; nieaktywny wchodzi tylko z rezerwacjami
@@ -283,16 +286,12 @@ export class StatsService {
         SELECT
           b."employeeId",
           COUNT(*)::int AS bookings,
-          SUM(
-            EXTRACT(EPOCH FROM (
-              LEAST(b."endsAt", ${to}) - GREATEST(b."startsAt", ${from})
-            )) / 60
-          ) AS minutes
+          SUM(EXTRACT(EPOCH FROM (LEAST(b."endsAt", ${to}) - b."startsAt")) / 60) AS minutes
         FROM "Booking" b
         WHERE b."businessId" = ${businessId}
           AND b.status IN ${OCCUPYING_STATUSES}
+          AND b."startsAt" >= ${from}
           AND b."startsAt" < ${to}
-          AND b."endsAt" > ${from}
         GROUP BY 1
       )
       SELECT

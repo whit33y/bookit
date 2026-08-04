@@ -13,6 +13,7 @@ import {
   STATUS_CLASSES,
   STATUS_LABELS,
 } from '../calendar/booking-details-dialog';
+import { buildStatsQueryParams, readStatsParams, statsPath } from './stats-params';
 import {
   STATS_PRESETS,
   StatsGranularity,
@@ -20,7 +21,6 @@ import {
   StatsRange,
   bucketLabel,
   formatMinutes,
-  isStatsPreset,
   rangeForPreset,
   rangeLabel,
   shiftAnchor,
@@ -452,11 +452,15 @@ export default class BusinessStats {
     }
     this.preset.set(preset);
     this.rangeError.set(null);
-    if (preset !== 'custom') {
-      // kotwiczymy na początku dotychczasowego zakresu, żeby przełączenie tydzień↔miesiąc
-      // zostało w okolicy oglądanego okresu, a nie skakało na „dziś"
-      this.range.set(rangeForPreset(preset, this.range().from));
+    if (preset === 'custom') {
+      // „Własny" nie zmienia zakresu, tylko odsłania pola dat — te same dane są już wczytane,
+      // więc bez refetchu (inaczej klik chowa cały dashboard za stanem ładowania bez powodu)
+      this.syncUrl();
+      return;
     }
+    // kotwiczymy na początku dotychczasowego zakresu, żeby przełączenie tydzień↔miesiąc
+    // zostało w okolicy oglądanego okresu, a nie skakało na „dziś"
+    this.range.set(rangeForPreset(preset, this.range().from));
     this.syncUrl();
     void this.load();
   }
@@ -502,31 +506,20 @@ export default class BusinessStats {
     void this.load();
   }
 
-  /** Zakres z adresu; cokolwiek nie przejdzie walidacji, ustępuje domyślnemu miesiącowi. */
+  /** Zakres z adresu; walidacja i fallback siedzą w `readStatsParams` (czysta funkcja, spec). */
   private readParamsFromUrl(): void {
-    const params = this.route.snapshot.queryParamMap;
-    const preset = params.get('preset');
-    const from = params.get('from');
-    const to = params.get('to');
-
-    if (preset && isStatsPreset(preset)) {
-      this.preset.set(preset);
-    }
-    if (from && to && isCalendarDate(from) && isCalendarDate(to) && from <= to) {
-      this.range.set({ from, to });
-      return;
-    }
-    const current = this.preset();
-    if (current !== 'custom') {
-      this.range.set(rangeForPreset(current, todayInBusinessTz()));
-    }
+    const { preset, range } = readStatsParams(
+      this.route.snapshot.queryParamMap,
+      todayInBusinessTz(),
+    );
+    this.preset.set(preset);
+    this.range.set(range);
   }
 
   private syncUrl(): void {
-    const { from, to } = this.range();
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { preset: this.preset(), from, to },
+      queryParams: buildStatsQueryParams({ preset: this.preset(), range: this.range() }),
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
@@ -537,11 +530,8 @@ export default class BusinessStats {
     this.loading.set(true);
     this.serverError.set(null);
     try {
-      const { from, to } = this.range();
       const data = await firstValueFrom(
-        this.api.get<BusinessStatsResponse>(
-          `/businesses/mine/stats?${new URLSearchParams({ from, to })}`,
-        ),
+        this.api.get<BusinessStatsResponse>(statsPath(this.range())),
       );
       if (id !== this.requestId) {
         return;
