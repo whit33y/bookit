@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { setLocale } from '../../core/i18n/locale';
 import { setValue, settle } from '../testing-helpers';
 import Login from './login';
 
@@ -68,5 +69,25 @@ describe('Login', () => {
     expect((el.querySelector('#email') as HTMLInputElement).value).toBe(
       'a@b.pl',
     );
+  });
+
+  // dowód, że ścieżka setLocale('en') → szablon faktycznie działa, a nie tylko sam słownik (#57)
+  it('po przełączeniu na angielski renderuje angielskie etykiety i błędy walidacji', async () => {
+    setLocale('en');
+    const fixture = TestBed.createComponent(Login);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe('Sign in');
+    expect(el.textContent).toContain('Forgot your password?');
+
+    el.querySelector('form')?.dispatchEvent(
+      new Event('submit', { cancelable: true }),
+    );
+    await fixture.whenStable();
+
+    expect(el.textContent).toContain('Email is required');
+    expect(el.textContent).toContain('Password is required');
+    expect(el.textContent).not.toContain('Hasło');
   });
 });

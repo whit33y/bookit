@@ -8,6 +8,9 @@ import {
   required,
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
+import { collator } from '../../core/i18n/intl';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppFormField, {
   EMAIL_WITH_TLD,
@@ -29,6 +32,9 @@ interface Employee {
   isActive: boolean;
   user: LinkedUser | null;
 }
+/** Lustro @MaxLength(100) z CreateEmployeeDto (#17). */
+const EMPLOYEE_NAME_MAX_LENGTH = 100;
+
 // DELETE zwraca deactivated: true (dezaktywacja, z pełnym pracownikiem) lub false (twarde usunięcie)
 interface DeleteResult {
   id: string;
@@ -45,12 +51,14 @@ interface DeleteResult {
       >
         <div class="flex items-center justify-between gap-4">
           <div>
-            <h1 class="text-2xl font-bold">Pracownicy</h1>
-            <p class="mt-1 text-sm text-stone-500">Zarządzaj zespołem</p>
+            <h1 class="text-2xl font-bold">{{ i18n.t('employees.title') }}</h1>
+            <p class="mt-1 text-sm text-stone-500">
+              {{ i18n.t('employees.subtitle') }}
+            </p>
           </div>
           @if (!formOpen()) {
             <button type="button" class="btn-primary w-auto" (click)="openCreate()">
-              Dodaj pracownika
+              {{ i18n.t('employees.add') }}
             </button>
           }
         </div>
@@ -66,14 +74,18 @@ interface DeleteResult {
             (submit)="onSubmit($event)"
           >
             <h2 class="text-lg font-semibold">
-              {{ editingId() ? 'Edytuj pracownika' : 'Nowy pracownik' }}
+              {{
+                editingId()
+                  ? i18n.t('employees.formTitle.edit')
+                  : i18n.t('employees.formTitle.new')
+              }}
             </h2>
 
             <app-form-field
               class="mt-4"
               [field]="employeeForm.name"
               fieldId="name"
-              label="Imię i nazwisko"
+              [label]="i18n.t('employees.field.name')"
             />
 
             <div class="mt-4">
@@ -81,11 +93,11 @@ interface DeleteResult {
                 [field]="employeeForm.email"
                 fieldId="email"
                 type="email"
-                label="E-mail konta (opcjonalnie)"
+                [label]="i18n.t('employees.field.email')"
                 autocomplete="off"
               />
               <p class="mt-1.5 text-[13px] text-stone-500">
-                Powiąże istniejące konto użytkownika i nada mu rolę pracownika.
+                {{ i18n.t('employees.accountHint') }}
               </p>
             </div>
 
@@ -95,14 +107,18 @@ interface DeleteResult {
                 [disabled]="employeeForm().submitting()"
                 class="btn-primary w-auto"
               >
-                {{ employeeForm().submitting() ? 'Zapisywanie…' : 'Zapisz' }}
+                {{
+                  employeeForm().submitting()
+                    ? i18n.t('employees.saving')
+                    : i18n.t('employees.save')
+                }}
               </button>
               <button
                 type="button"
                 class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50"
                 (click)="closeForm()"
               >
-                Anuluj
+                {{ i18n.t('employees.cancel') }}
               </button>
             </div>
           </form>
@@ -110,13 +126,13 @@ interface DeleteResult {
 
         <div class="mt-6">
           @if (loading()) {
-            <app-loading-state message="Ładowanie pracowników…" />
+            <app-loading-state [message]="i18n.t('employees.loading')" />
           } @else if (loadError(); as msg) {
             <app-error-state [message]="msg" [retryable]="true" (retry)="load()" />
           } @else if (!employees().length) {
             <app-empty-state
-              title="Nie masz jeszcze żadnych pracowników."
-              description="Dodaj pierwszego."
+              [title]="i18n.t('employees.empty')"
+              [description]="i18n.t('employees.emptyHint')"
             />
           } @else {
             <ul class="flex flex-col gap-3">
@@ -131,13 +147,17 @@ interface DeleteResult {
                       @if (!e.isActive) {
                         <span
                           class="rounded bg-stone-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-600"
-                          >Nieaktywny</span
+                          >{{ i18n.t('employees.inactive') }}</span
                         >
                       }
                     </div>
                     @if (e.user) {
                       <p class="mt-0.5 text-[13px] text-stone-500">
-                        Konto: {{ e.user.email }}
+                        {{
+                          i18n.t('employees.accountPrefix', {
+                            email: e.user.email,
+                          })
+                        }}
                       </p>
                     }
                   </div>
@@ -147,7 +167,7 @@ interface DeleteResult {
                         [routerLink]="['/business/employees', e.id, 'schedule']"
                         class="text-sm font-medium text-brand-600 hover:underline"
                       >
-                        Grafik
+                        {{ i18n.t('employees.schedule') }}
                       </a>
                       <button
                         type="button"
@@ -155,7 +175,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === e.id"
                         (click)="openEdit(e)"
                       >
-                        Edytuj
+                        {{ i18n.t('employees.edit') }}
                       </button>
                       <button
                         type="button"
@@ -163,7 +183,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === e.id"
                         (click)="onDelete(e)"
                       >
-                        Usuń
+                        {{ i18n.t('employees.delete') }}
                       </button>
                     } @else {
                       <button
@@ -172,7 +192,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === e.id"
                         (click)="onReactivate(e)"
                       >
-                        Aktywuj
+                        {{ i18n.t('employees.activate') }}
                       </button>
                     }
                   </div>
@@ -187,6 +207,7 @@ interface DeleteResult {
 })
 export default class BusinessEmployees {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly loading = signal(true);
   /** Błąd pobrania listy (retry ma sens) — osobno od serverError akcji zapisu/usuwania. */
@@ -203,14 +224,19 @@ export default class BusinessEmployees {
 
   protected readonly employeeForm = form(this.model, (p) => {
     // lustrzane do CreateEmployeeDto (#17)
-    required(p.name, { message: 'Imię i nazwisko jest wymagane' });
-    maxLength(p.name, 100, {
-      message: 'Imię i nazwisko może mieć maksymalnie 100 znaków',
+    required(p.name, {
+      message: () => translate('validation.employeeName.required'),
+    });
+    maxLength(p.name, EMPLOYEE_NAME_MAX_LENGTH, {
+      message: () =>
+        translate('validation.employeeName.tooLong', {
+          max: EMPLOYEE_NAME_MAX_LENGTH,
+        }),
     });
     // email opcjonalny (bez required) — walidujemy format tylko gdy niepusty
-    email(p.email, { message: 'Nieprawidłowy format adresu email' });
+    email(p.email, { message: () => translate('validation.email.invalid') });
     pattern(p.email, EMAIL_WITH_TLD, {
-      message: 'Nieprawidłowy format adresu email',
+      message: () => translate('validation.email.invalid'),
     });
   });
 
@@ -226,7 +252,9 @@ export default class BusinessEmployees {
     firstValueFrom(this.api.get<Employee[]>('/businesses/mine/employees'))
       .then((employees) => this.employees.set(employees))
       .catch((err: unknown) => {
-        this.loadError.set('Nie udało się wczytać pracowników. ' + apiErrorMessage(err));
+        this.loadError.set(
+          translate('employees.error.load', { detail: apiErrorMessage(err) }),
+        );
       })
       .finally(() => this.loading.set(false));
   }
@@ -270,7 +298,7 @@ export default class BusinessEmployees {
           this.api.post<Employee>('/businesses/mine/employees', payload),
         );
         this.employees.update((list) =>
-          [...list, created].sort((a, b) => a.name.localeCompare(b.name, 'pl')),
+          [...list, created].sort((a, b) => collator().compare(a.name, b.name)),
         );
       }
       this.closeForm();
@@ -280,7 +308,7 @@ export default class BusinessEmployees {
   protected async onDelete(e: Employee): Promise<void> {
     // usuwanie nieodwracalne (pracownik bez rezerwacji znika na stałe) — potwierdzenie
     const ok = globalThis.confirm(
-      `Usunąć pracownika „${e.name}"? Jeśli ma rezerwacje, zostanie dezaktywowany.`,
+      translate('employees.deleteConfirm', { name: e.name }),
     );
     if (!ok) return;
     this.serverError.set(null);

@@ -1,4 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { I18nStore } from '../core/i18n/i18n-store';
+import type { TranslationKey } from '../core/i18n/pl';
 import { formatDate } from '../shared/business-time';
 import EmptyState from '../shared/ui/empty-state';
 import ErrorState from '../shared/ui/error-state';
@@ -23,11 +25,11 @@ export interface AdminUser {
   business: { id: string; slug: string; name: string; isBlocked: boolean } | null;
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  CLIENT: 'Klient',
-  OWNER: 'Właściciel',
-  EMPLOYEE: 'Pracownik',
-  ADMIN: 'Administrator',
+const ROLE_KEYS: Record<UserRole, TranslationKey> = {
+  CLIENT: 'admin.role.client',
+  OWNER: 'admin.role.owner',
+  EMPLOYEE: 'admin.role.employee',
+  ADMIN: 'admin.role.admin',
 };
 
 /**
@@ -52,10 +54,10 @@ const ROLE_LABELS: Record<UserRole, string> = {
       class="mt-6 block"
       [q]="list.params().q"
       [blocked]="list.params().blocked"
-      searchLabel="Szukaj użytkownika"
-      searchPlaceholder="Imię, nazwisko lub e-mail"
-      activeLabel="Aktywni"
-      blockedLabel="Zablokowani"
+      [searchLabel]="i18n.t('admin.users.searchLabel')"
+      [searchPlaceholder]="i18n.t('admin.users.searchPlaceholder')"
+      [activeLabel]="i18n.t('admin.users.active')"
+      [blockedLabel]="i18n.t('admin.users.blocked')"
       (applied)="list.applyFilters($event)"
     />
 
@@ -74,7 +76,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
              strona poza zakresem byłaby ślepym zaułkiem -->
         <app-empty-state
           class="mt-6"
-          title="Ta strona nie ma już wyników."
+          [title]="i18n.t('admin.emptyPage')"
           [boxed]="true"
         >
           <button
@@ -82,18 +84,22 @@ const ROLE_LABELS: Record<UserRole, string> = {
             class="btn-primary mt-4 w-auto"
             (click)="list.goToPage(1)"
           >
-            Wróć na pierwszą stronę
+            {{ i18n.t('admin.backToFirstPage') }}
           </button>
         </app-empty-state>
       } @else if (list.filtered()) {
         <app-empty-state
           class="mt-6"
-          title="Brak użytkowników dla podanych filtrów."
-          description="Zmień frazę wyszukiwania lub filtr statusu."
+          [title]="i18n.t('admin.users.emptyFiltered')"
+          [description]="i18n.t('admin.users.emptyFilteredHint')"
           [boxed]="true"
         />
       } @else {
-        <app-empty-state class="mt-6" title="Nie ma jeszcze żadnych użytkowników." [boxed]="true" />
+        <app-empty-state
+          class="mt-6"
+          [title]="i18n.t('admin.users.empty')"
+          [boxed]="true"
+        />
       }
     } @else {
       <div
@@ -105,22 +111,34 @@ const ROLE_LABELS: Record<UserRole, string> = {
           class="overflow-x-auto"
           tabindex="0"
           role="region"
-          aria-label="Tabela użytkowników"
+          [attr.aria-label]="i18n.t('admin.users.tableLabel')"
         >
           <table class="w-full min-w-[820px] text-left text-sm">
             <caption class="sr-only">
-              Lista użytkowników zarejestrowanych w serwisie
+              {{ i18n.t('admin.users.caption') }}
             </caption>
             <thead
               class="border-b border-stone-200 bg-stone-50 text-[11px] font-semibold uppercase tracking-wider text-stone-500"
             >
               <tr>
-                <th scope="col" class="px-4 py-3 sm:px-6">Użytkownik</th>
-                <th scope="col" class="px-4 py-3">Telefon</th>
-                <th scope="col" class="px-4 py-3">Rola</th>
-                <th scope="col" class="px-4 py-3">Firma</th>
-                <th scope="col" class="px-4 py-3">Status</th>
-                <th scope="col" class="px-4 py-3 sm:px-6">Dołączył</th>
+                <th scope="col" class="px-4 py-3 sm:px-6">
+                  {{ i18n.t('admin.users.column.user') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.users.column.phone') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.users.column.role') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.users.column.business') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.users.column.status') }}
+                </th>
+                <th scope="col" class="px-4 py-3 sm:px-6">
+                  {{ i18n.t('admin.users.column.joined') }}
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-stone-100">
@@ -133,25 +151,31 @@ const ROLE_LABELS: Record<UserRole, string> = {
                     <span class="block text-[13px] text-stone-500">{{ u.email }}</span>
                   </td>
                   <td class="px-4 py-3.5 tabular-nums text-stone-600">
-                    {{ u.phone ?? '—' }}
+                    {{ u.phone ?? i18n.t('admin.noValue') }}
                   </td>
-                  <td class="px-4 py-3.5 text-stone-600">{{ roleLabels[u.role] }}</td>
+                  <td class="px-4 py-3.5 text-stone-600">
+                    {{ i18n.t(roleKeys[u.role]) }}
+                  </td>
                   <td class="px-4 py-3.5 text-stone-600">
                     @if (u.business; as business) {
                       {{ business.name }}
                       @if (business.isBlocked) {
                         <span class="block text-[13px] font-medium text-rose-600">
-                          zablokowana
+                          {{ i18n.t('admin.users.businessBlocked') }}
                         </span>
                       }
                     } @else {
-                      —
+                      {{ i18n.t('admin.noValue') }}
                     }
                   </td>
                   <td class="px-4 py-3.5">
                     <app-admin-status-badge
                       [blocked]="u.isBlocked"
-                      [label]="u.isBlocked ? 'Zablokowany' : 'Aktywny'"
+                      [label]="
+                        u.isBlocked
+                          ? i18n.t('admin.users.badge.blocked')
+                          : i18n.t('admin.users.badge.active')
+                      "
                     />
                   </td>
                   <td class="px-4 py-3.5 tabular-nums text-stone-600 sm:px-6">
@@ -167,7 +191,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
           [page]="list.page()"
           [limit]="list.limit()"
           [total]="list.total()"
-          itemsLabel="użytkowników"
+          [itemsLabel]="i18n.t('admin.users.itemsLabel')"
           (pageChange)="list.goToPage($event)"
         />
       </div>
@@ -175,7 +199,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   `,
 })
 export default class AdminUsers {
+  protected readonly i18n = inject(I18nStore);
   protected readonly list = createAdminList<AdminUser>('users');
-  protected readonly roleLabels = ROLE_LABELS;
+  protected readonly roleKeys = ROLE_KEYS;
   protected readonly formatDate = formatDate;
 }

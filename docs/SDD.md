@@ -43,7 +43,7 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 - Panel firmy: kalendarz dzień/tydzień per pracownik + lista oczekujących rezerwacji
 - Powiadomienia email: potwierdzenie, odwołanie, przypomnienie ~24 h przed wizytą
 - Panel admina: lista firm/użytkowników, blokowanie firm
-- Interfejs wyłącznie po polsku
+- Interfejs wyłącznie po polsku (angielski dochodzi w Fazie 2, §6)
 - Uruchamianie przez Docker Compose (Postgres + Mailpit) lokalnie
 
 ### Faza 2 (świadomie poza MVP)
@@ -52,7 +52,7 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 - Płatności online / zaliczki (Stripe), prowizje platformy
 - Powiadomienia in-app i SMS
 - Statystyki/dashboard dla firm
-- i18n (angielski)
+- i18n (angielski) — **zrobione** (#57), opis mechanizmu w §6
 - Deploy chmurowy + CI/CD
 - PostGIS, gdy prosty Haversine przestanie wystarczać
 
@@ -460,6 +460,20 @@ app/
 - **Stan:** signals + services (bez NgRx w MVP).
 - **Mapa:** Leaflet + kafelki OpenStreetMap; geokodowanie adresu firmy przez Nominatim przy zapisie profilu.
 - **Rezerwacja:** wizard 3 kroków na stronie firmy; wolne sloty pobierane per dzień z `GET …/availability`.
+- **i18n (#57):** własny mechanizm na sygnałach w `core/i18n/`, bez dodatkowej zależności.
+  - `locale.ts` trzyma **sygnał na poziomie modułu** (a nie w serwisie), bo z języka korzystają
+    też czyste funkcje wołane spoza DI (`apiErrorMessage`, `formatDateTime`, `depositError`).
+    Aplikacja jest zoneless, więc odczyt tego sygnału w wyrażeniu szablonu jest jedynym
+    niezawodnym wyzwalaczem ponownego renderu — dlatego `t()` jest metodą, a nie czystym pipe'em.
+  - Słowniki `pl.ts` / `en.ts` są **płaskie, z kluczami kropkowanymi**; `en: Dictionary`
+    (`Record<keyof typeof pl, string>`) wymusza komplet kluczy na etapie kompilacji.
+  - Odmiana przez liczbę: `Intl.PluralRules` (klucze `.one`/`.few`/`.many`/`.other`).
+    Daty, liczby, ceny i kolacja sortowania: `Intl.*` z cache w `core/i18n/intl.ts`.
+  - Wybór zapisany w `localStorage` pod `bookit.locale`; domyślnie polski, przełączanie
+    bez przeładowania strony, `<html lang>` aktualizowany przy każdej zmianie (WCAG 3.1.1).
+  - **Zakres:** wyłącznie UI `apps/web`. Maile, treść powiadomień in-app i `message` z koperty
+    błędu API zostają po polsku — przy EN front tłumaczy błąd po `ApiErrorCode`. Pełne
+    rozwiązanie wymaga `Accept-Language` w `apps/api`.
 
 ---
 

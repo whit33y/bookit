@@ -2,10 +2,12 @@ import {
   Component,
   ElementRef,
   effect,
+  inject,
   input,
   output,
   viewChild,
 } from '@angular/core';
+import { I18nStore } from '../core/i18n/i18n-store';
 
 /** Wariant przycisku potwierdzenia — `danger` dla akcji niszczących/odcinających dostęp. */
 export type ConfirmTone = 'danger' | 'primary';
@@ -55,7 +57,7 @@ const TONE_CLASSES: Record<ConfirmTone, string> = {
             (click)="onCancelClick()"
             class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 shadow-card transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-60"
           >
-            {{ cancelLabel() }}
+            {{ cancelLabel() || i18n.t('confirm.cancel') }}
           </button>
           <button
             type="button"
@@ -64,7 +66,7 @@ const TONE_CLASSES: Record<ConfirmTone, string> = {
             class="rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-card transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed"
             [class]="toneClasses()"
           >
-            {{ busy() ? busyLabel() : confirmLabel() }}
+            {{ busy() ? busyLabel() || i18n.t('confirm.busy') : confirmLabel() }}
           </button>
         </div>
       </div>
@@ -72,13 +74,17 @@ const TONE_CLASSES: Record<ConfirmTone, string> = {
   `,
 })
 export default class ConfirmDialog {
+  protected readonly i18n = inject(I18nStore);
+
   readonly open = input(false);
   readonly heading = input.required<string>();
   readonly message = input.required<string>();
   readonly confirmLabel = input.required<string>();
-  /** Etykieta przycisku w trakcie zapytania, np. „Blokowanie…". */
-  readonly busyLabel = input('Przetwarzanie…');
-  readonly cancelLabel = input('Wróć');
+  /** Etykieta przycisku w trakcie zapytania, np. „Blokowanie…". Pusty domyślny, bo wartość
+   *  domyślna `input()` powstaje raz i nie nadążyłaby za zmianą języka — fallback jest
+   *  w szablonie (#57). To samo dotyczy `cancelLabel`. */
+  readonly busyLabel = input('');
+  readonly cancelLabel = input('');
   readonly tone = input<ConfirmTone>('danger');
   readonly busy = input(false);
 

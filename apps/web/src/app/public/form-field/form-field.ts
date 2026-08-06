@@ -13,17 +13,24 @@ import {
   submit,
 } from '@angular/forms/signals';
 import { apiErrorMessage } from '../../core/api-client';
+import { translate } from '../../core/i18n/translate';
 
 // backendowy @IsEmail() wymaga TLD, a email() Angulara nie — bez tego 'a@b' przechodziłby
 // walidację klienta i wracał z serwera jako angielski błąd 400
 export const EMAIL_WITH_TLD = /^\S+@\S+\.\S+$/;
 
+/**
+ * `message` podajemy jako funkcję, nie string (#57). Schematy są stałymi modułowymi, tworzonymi
+ * raz przy imporcie — string zamroziłby komunikat w języku z chwili startu aplikacji. `LogicFn`
+ * (`@angular/forms/signals`) jest wołana przy odczycie błędu, więc czyta aktualne locale.
+ */
+
 /** Wspólne reguły pola email stron auth — w komponencie: apply(p.email, emailSchema). */
 export const emailSchema = schema<string>((p) => {
-  required(p, { message: 'Email jest wymagany' });
-  email(p, { message: 'Nieprawidłowy format adresu email' });
+  required(p, { message: () => translate('validation.email.required') });
+  email(p, { message: () => translate('validation.email.invalid') });
   pattern(p, EMAIL_WITH_TLD, {
-    message: 'Nieprawidłowy format adresu email',
+    message: () => translate('validation.email.invalid'),
   });
 });
 
@@ -32,21 +39,37 @@ export const emailSchema = schema<string>((p) => {
  *  nad formularzem, bez wskazania pola. */
 export const NAME_MAX_LENGTH = 50;
 
-/** Reguły imienia/nazwiska — register (i każdy przyszły formularz profilu). */
-export function personNameSchema(label: string) {
+/**
+ * Reguły imienia/nazwiska — register (i każdy przyszły formularz profilu).
+ *
+ * Bierze nazwę pola, a nie etykietę do wklejenia w zdanie: polskie „Imię jest wymagane" i
+ * „Nazwisko jest wymagane" różnią się rodzajem, więc sklejanie `${label} jest wymagane`
+ * działało tylko przypadkiem. Każde pole ma własny, pełny komunikat w słowniku.
+ */
+export function personNameSchema(field: 'firstName' | 'lastName') {
   return schema<string>((p) => {
-    required(p, { message: `${label} jest wymagane` });
+    required(p, { message: () => translate(`validation.${field}.required`) });
     maxLength(p, NAME_MAX_LENGTH, {
-      message: `${label} może mieć maksymalnie ${NAME_MAX_LENGTH} znaków`,
+      message: () =>
+        translate(`validation.${field}.tooLong`, { max: NAME_MAX_LENGTH }),
     });
   });
 }
 
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 72;
+
 /** Reguły nowego hasła zgodne z backendowym DTO (8–72 znaki) — register i reset hasła. */
 export const passwordSchema = schema<string>((p) => {
-  required(p, { message: 'Hasło jest wymagane' });
-  minLength(p, 8, { message: 'Hasło musi mieć co najmniej 8 znaków' });
-  maxLength(p, 72, { message: 'Hasło może mieć maksymalnie 72 znaki' });
+  required(p, { message: () => translate('validation.password.required') });
+  minLength(p, PASSWORD_MIN_LENGTH, {
+    message: () =>
+      translate('validation.password.tooShort', { min: PASSWORD_MIN_LENGTH }),
+  });
+  maxLength(p, PASSWORD_MAX_LENGTH, {
+    message: () =>
+      translate('validation.password.tooLong', { max: PASSWORD_MAX_LENGTH }),
+  });
 });
 
 /** Etykieta + input spięty z Signal Forms + inline błąd walidacji (wzorce z design systemu). */
@@ -94,7 +117,7 @@ export default class AppFormField {
 
 /** Wspólny submit stron auth: czyści błąd serwera, odpala akcję przez submit()
  *  (który sam oznacza pola jako touched i pomija akcję przy błędach walidacji),
- *  a błąd API zamienia na polski komunikat. */
+ *  a błąd API zamienia na komunikat w języku UI. */
 export async function submitAuthForm<T>(
   form: FieldTree<T>,
   serverError: WritableSignal<string | null>,

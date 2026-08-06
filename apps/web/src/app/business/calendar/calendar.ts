@@ -2,6 +2,8 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatTime, todayInBusinessTz } from '../../shared/business-time';
 import EmptyState from '../../shared/ui/empty-state';
@@ -55,12 +57,14 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
   ],
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 py-8">
-      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Kalendarz</h1>
+      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
+        {{ i18n.t('calendar.title') }}
+      </h1>
 
       <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
         <div
           role="group"
-          aria-label="Widok kalendarza"
+          [attr.aria-label]="i18n.t('calendar.viewGroupLabel')"
           class="flex gap-1 rounded-lg border border-stone-200 p-1"
         >
           <button
@@ -74,7 +78,7 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
             "
             (click)="setViewMode('day')"
           >
-            Dzień
+            {{ i18n.t('calendar.day') }}
           </button>
           <button
             type="button"
@@ -87,14 +91,14 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
             "
             (click)="setViewMode('week')"
           >
-            Tydzień
+            {{ i18n.t('calendar.week') }}
           </button>
         </div>
 
         <div class="flex items-center gap-2">
           <button
             type="button"
-            aria-label="Poprzedni okres"
+            [attr.aria-label]="i18n.t('calendar.previous')"
             class="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
             (click)="navigate(-1)"
           >
@@ -105,7 +109,7 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
           }}</span>
           <button
             type="button"
-            aria-label="Następny okres"
+            [attr.aria-label]="i18n.t('calendar.next')"
             class="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
             (click)="navigate(1)"
           >
@@ -116,13 +120,15 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
             class="ml-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
             (click)="navigate('today')"
           >
-            Dziś
+            {{ i18n.t('calendar.today') }}
           </button>
         </div>
 
         @if (viewMode() === 'week' && isOwner() && activeEmployees().length) {
           <div>
-            <label for="employee-picker" class="sr-only">Pracownik</label>
+            <label for="employee-picker" class="sr-only">{{
+              i18n.t('calendar.employeePicker')
+            }}</label>
             <select
               id="employee-picker"
               [value]="selectedEmployeeId()"
@@ -138,7 +144,7 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
       </div>
 
       @if (initialLoading()) {
-        <app-loading-state class="mt-6" message="Ładowanie kalendarza…" />
+        <app-loading-state class="mt-6" [message]="i18n.t('calendar.loading')" />
       } @else if (employeesError(); as msg) {
         <app-error-state
           class="mt-6"
@@ -154,11 +160,11 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
           (retry)="retry()"
         />
       } @else if (showEmptyEmployeesState()) {
-        <app-empty-state class="mt-6" title="Nie masz aktywnych pracowników.">
+        <app-empty-state class="mt-6" [title]="i18n.t('calendar.noEmployees')">
           <p class="mt-1 text-sm text-stone-500">
             <a routerLink="/business/employees" class="text-brand-600 underline"
-              >Dodaj pracownika</a
-            >, żeby zobaczyć kalendarz.
+              >{{ i18n.t('calendar.addEmployee') }}</a
+            >{{ i18n.t('calendar.noEmployeesHint') }}
           </p>
         </app-empty-state>
       } @else {
@@ -226,6 +232,7 @@ const SLOTS_PER_HOUR = 60 / CALENDAR_SLOT_MIN;
 })
 export default class BusinessCalendar {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly authStore = inject(AuthStore);
   private readonly route = inject(ActivatedRoute);
 
@@ -460,7 +467,9 @@ export default class BusinessCalendar {
         }
       }
     } catch (err) {
-      this.employeesError.set('Nie udało się wczytać pracowników. ' + apiErrorMessage(err));
+      this.employeesError.set(
+        translate('calendar.error.employees', { detail: apiErrorMessage(err) }),
+      );
     } finally {
       this.employeesLoading.set(false);
     }

@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatDateTime } from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
@@ -19,7 +20,9 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
   imports: [PricePlnPipe, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
-      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Oczekujące rezerwacje</h1>
+      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
+        {{ i18n.t('pending.title') }}
+      </h1>
 
       @if (loading()) {
         <app-loading-state class="mt-6" />
@@ -37,27 +40,44 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <h2 class="text-base font-bold">{{ b.service.name }}</h2>
                 <span class="shrink-0 rounded-full bg-amber-50 px-3 py-1 text-[13px] font-semibold text-amber-700">
-                  Oczekująca
+                  {{ i18n.t('status.pending') }}
                 </span>
               </div>
 
               <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
-                <dt class="font-semibold text-stone-600">Klient</dt>
+                <dt class="font-semibold text-stone-600">
+                  {{ i18n.t('bookingDetails.field.client') }}
+                </dt>
                 <dd class="font-medium">{{ b.client.firstName }} {{ b.client.lastName }}</dd>
                 @if (b.client.phone; as phone) {
-                  <dt class="font-semibold text-stone-600">Telefon</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('bookingDetails.field.phone') }}
+                  </dt>
                   <dd class="font-medium">{{ phone }}</dd>
                 }
-                <dt class="font-semibold text-stone-600">Termin</dt>
+                <dt class="font-semibold text-stone-600">
+                  {{ i18n.t('bookingDetails.field.slot') }}
+                </dt>
                 <dd class="font-medium">{{ formatDateTime(b.startsAt) }}</dd>
-                <dt class="font-semibold text-stone-600">Pracownik</dt>
+                <dt class="font-semibold text-stone-600">
+                  {{ i18n.t('booking.summary.employee') }}
+                </dt>
                 <dd class="font-medium">{{ b.employee.name }}</dd>
-                <dt class="font-semibold text-stone-600">Czas i cena</dt>
+                <dt class="font-semibold text-stone-600">
+                  {{ i18n.t('bookingDetails.field.durationAndPrice') }}
+                </dt>
                 <dd class="font-medium">
-                  {{ b.service.durationMin }} min · {{ b.service.priceCents | pricePln }}
+                  {{
+                    i18n.t('bookingDetails.durationAndPrice', {
+                      minutes: b.service.durationMin,
+                      price: b.service.priceCents | pricePln,
+                    })
+                  }}
                 </dd>
                 @if (b.clientNote; as note) {
-                  <dt class="font-semibold text-stone-600">Notatka klienta</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('bookingDetails.field.note') }}
+                  </dt>
                   <dd class="font-medium">{{ note }}</dd>
                 }
               </dl>
@@ -70,8 +90,12 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                 @if (confirmingCancelId() === b.id) {
                   <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
                     <p class="text-sm font-medium text-rose-800">
-                      Na pewno odwołać wizytę „{{ b.service.name }}" —
-                      {{ formatDateTime(b.startsAt) }}? Klient zostanie o tym poinformowany.
+                      {{
+                        i18n.t('bookingDetails.cancelConfirm', {
+                          service: b.service.name,
+                          when: formatDateTime(b.startsAt),
+                        })
+                      }}
                     </p>
                     <div class="mt-3 flex gap-2">
                       <button
@@ -80,7 +104,11 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                         (click)="onCancel(b)"
                         class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-rose-800 disabled:opacity-60"
                       >
-                        {{ isBusy(b.id) ? 'Odwoływanie…' : 'Tak, odwołaj' }}
+                        {{
+                          isBusy(b.id)
+                            ? i18n.t('pending.cancelling')
+                            : i18n.t('pending.cancelConfirmYes')
+                        }}
                       </button>
                       <button
                         type="button"
@@ -88,7 +116,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                         (click)="onCancelCancel()"
                         class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
                       >
-                        Anuluj
+                        {{ i18n.t('pending.cancelBack') }}
                       </button>
                     </div>
                   </div>
@@ -100,7 +128,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                       (click)="onAccept(b)"
                       class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-emerald-800 disabled:opacity-60"
                     >
-                      Zaakceptuj
+                      {{ i18n.t('pending.accept') }}
                     </button>
                     <button
                       type="button"
@@ -108,7 +136,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                       (click)="onReject(b)"
                       class="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
                     >
-                      Odrzuć
+                      {{ i18n.t('pending.reject') }}
                     </button>
                     <button
                       type="button"
@@ -116,7 +144,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
                       (click)="onRequestCancel(b.id)"
                       class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
                     >
-                      Odwołaj
+                      {{ i18n.t('pending.cancel') }}
                     </button>
                   </div>
                 }
@@ -125,13 +153,14 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
           }
         </ul>
       } @else {
-        <app-empty-state class="mt-6" title="Brak oczekujących rezerwacji." />
+        <app-empty-state class="mt-6" [title]="i18n.t('pending.empty')" />
       }
     </div>
   `,
 })
 export default class PendingBookings {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly authStore = inject(AuthStore);
   private readonly pendingCountStore = inject(PendingCountStore);
 

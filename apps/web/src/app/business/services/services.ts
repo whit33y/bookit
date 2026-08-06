@@ -10,6 +10,9 @@ import {
   validate,
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
+import { collator, numberFormat } from '../../core/i18n/intl';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import AppFormField, {
   submitAuthForm,
@@ -23,6 +26,17 @@ import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+
+// limity lustrzane do CreateServiceDto (#16)
+const NAME_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 2000;
+const DURATION_MIN = 1;
+const DURATION_MAX = 1440;
+const PRICE_MIN = 0;
+const PRICE_MAX = 1_000_000;
+
+/** „1 000 000" po polsku, „1,000,000" po angielsku — separator tysięcy wg języka UI. */
+const priceFormatter = () => numberFormat({ maximumFractionDigits: 0 });
 
 // lustrzane typy backendu (serviceSelect + employees w findAll, #16/#18/#21)
 interface ServiceEmployee {
@@ -69,14 +83,14 @@ interface DeleteResult {
       >
         <div class="flex items-center justify-between gap-4">
           <div>
-            <h1 class="text-2xl font-bold">Usługi</h1>
+            <h1 class="text-2xl font-bold">{{ i18n.t('services.title') }}</h1>
             <p class="mt-1 text-sm text-stone-500">
-              Zarządzaj ofertą i przypisaniem pracowników
+              {{ i18n.t('services.subtitle') }}
             </p>
           </div>
           @if (!formOpen()) {
             <button type="button" class="btn-primary w-auto" (click)="openCreate()">
-              Dodaj usługę
+              {{ i18n.t('services.add') }}
             </button>
           }
         </div>
@@ -92,19 +106,26 @@ interface DeleteResult {
             (submit)="onSubmit($event)"
           >
             <h2 class="text-lg font-semibold">
-              {{ editingId() ? 'Edytuj usługę' : 'Nowa usługa' }}
+              {{
+                editingId()
+                  ? i18n.t('services.formTitle.edit')
+                  : i18n.t('services.formTitle.new')
+              }}
             </h2>
 
             <app-form-field
               class="mt-4"
               [field]="serviceForm.name"
               fieldId="name"
-              label="Nazwa usługi"
+              [label]="i18n.t('services.field.name')"
             />
 
             <div class="mt-4">
               <label for="description" class="mb-1.5 block text-sm font-medium">
-                Opis <span class="text-stone-400">(opcjonalnie)</span>
+                {{ i18n.t('services.field.description') }}
+                <span class="text-stone-400">{{
+                  i18n.t('services.field.descriptionOptional')
+                }}</span>
               </label>
               <textarea
                 [formField]="serviceForm.description"
@@ -120,7 +141,7 @@ interface DeleteResult {
                   for="durationMin"
                   class="mb-1.5 block text-sm font-medium"
                 >
-                  Czas trwania (min)
+                  {{ i18n.t('services.field.duration') }}
                 </label>
                 <input
                   [formField]="serviceForm.durationMin"
@@ -143,7 +164,7 @@ interface DeleteResult {
 
               <div>
                 <label for="priceZl" class="mb-1.5 block text-sm font-medium">
-                  Cena (zł)
+                  {{ i18n.t('services.field.price') }}
                 </label>
                 <input
                   [formField]="serviceForm.priceZl"
@@ -169,7 +190,7 @@ interface DeleteResult {
             @if (employees().length) {
               <fieldset class="mt-5">
                 <legend class="mb-1.5 block text-sm font-medium">
-                  Pracownicy wykonujący usługę
+                  {{ i18n.t('services.field.staff') }}
                 </legend>
                 <div class="flex flex-col gap-2">
                   @for (emp of employees(); track emp.id) {
@@ -188,7 +209,9 @@ interface DeleteResult {
             }
 
             <fieldset class="mt-5 rounded-lg border border-stone-200 p-4">
-              <legend class="px-1 text-sm font-medium">Zaliczka</legend>
+              <legend class="px-1 text-sm font-medium">
+                {{ i18n.t('services.deposit.legend') }}
+              </legend>
 
               <label class="inline-flex cursor-pointer items-center gap-3">
                 <input
@@ -202,14 +225,14 @@ interface DeleteResult {
                   class="relative h-6 w-11 rounded-full bg-stone-300 transition after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-brand-700 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2"
                 ></span>
                 <span class="text-sm font-medium">
-                  Pobieraj zaliczkę za tę usługę
+                  {{ i18n.t('services.deposit.enable') }}
                 </span>
               </label>
 
               @if (!serviceForm.depositKind().hidden()) {
                 <fieldset class="mt-4">
                   <legend class="mb-1.5 block text-sm font-medium">
-                    Typ zaliczki
+                    {{ i18n.t('services.deposit.kindLabel') }}
                   </legend>
                   <div class="flex flex-wrap gap-x-6 gap-y-1">
                     <label class="flex items-center gap-2.5 py-1 text-sm">
@@ -221,7 +244,7 @@ interface DeleteResult {
                         [checked]="model().depositKind === 'FIXED'"
                         (change)="setDepositKind('FIXED')"
                       />
-                      <span>Kwota w zł</span>
+                      <span>{{ i18n.t('services.deposit.kindFixed') }}</span>
                     </label>
                     <label class="flex items-center gap-2.5 py-1 text-sm">
                       <input
@@ -232,7 +255,7 @@ interface DeleteResult {
                         [checked]="model().depositKind === 'PERCENT'"
                         (change)="setDepositKind('PERCENT')"
                       />
-                      <span>Procent ceny</span>
+                      <span>{{ i18n.t('services.deposit.kindPercent') }}</span>
                     </label>
                   </div>
                 </fieldset>
@@ -244,7 +267,7 @@ interface DeleteResult {
                     for="depositAmountZl"
                     class="mb-1.5 block text-sm font-medium"
                   >
-                    Kwota zaliczki (zł)
+                    {{ i18n.t('services.deposit.amountLabel') }}
                   </label>
                   <input
                     [formField]="serviceForm.depositAmountZl"
@@ -275,7 +298,7 @@ interface DeleteResult {
                     for="depositPercent"
                     class="mb-1.5 block text-sm font-medium"
                   >
-                    Procent ceny (%)
+                    {{ i18n.t('services.deposit.percentLabel') }}
                   </label>
                   <input
                     [formField]="serviceForm.depositPercent"
@@ -301,8 +324,12 @@ interface DeleteResult {
                     </p>
                   } @else if (depositPreviewCents(); as cents) {
                     <p id="depositPercent-hint" class="mt-1.5 text-[13px] text-stone-600">
-                      Zaliczka wyniesie {{ cents | pricePln }} przy cenie
-                      {{ priceCents() | pricePln }}.
+                      {{
+                        i18n.t('services.deposit.preview', {
+                          deposit: cents | pricePln,
+                          price: priceCents() | pricePln,
+                        })
+                      }}
                     </p>
                   }
                 </div>
@@ -315,14 +342,18 @@ interface DeleteResult {
                 [disabled]="serviceForm().submitting()"
                 class="btn-primary w-auto"
               >
-                {{ serviceForm().submitting() ? 'Zapisywanie…' : 'Zapisz' }}
+                {{
+                  serviceForm().submitting()
+                    ? i18n.t('services.saving')
+                    : i18n.t('services.save')
+                }}
               </button>
               <button
                 type="button"
                 class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50"
                 (click)="closeForm()"
               >
-                Anuluj
+                {{ i18n.t('services.cancel') }}
               </button>
             </div>
           </form>
@@ -330,13 +361,13 @@ interface DeleteResult {
 
         <div class="mt-6">
           @if (loading()) {
-            <app-loading-state message="Ładowanie usług…" />
+            <app-loading-state [message]="i18n.t('services.loading')" />
           } @else if (loadError(); as msg) {
             <app-error-state [message]="msg" [retryable]="true" (retry)="load()" />
           } @else if (!services().length) {
             <app-empty-state
-              title="Nie masz jeszcze żadnych usług."
-              description="Dodaj pierwszą."
+              [title]="i18n.t('services.empty')"
+              [description]="i18n.t('services.emptyHint')"
             />
           } @else {
             <ul class="flex flex-col gap-3">
@@ -351,26 +382,43 @@ interface DeleteResult {
                       @if (!s.isActive) {
                         <span
                           class="rounded bg-stone-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-600"
-                          >Nieaktywna</span
+                          >{{ i18n.t('services.inactive') }}</span
                         >
                       }
                     </div>
                     <p class="mt-0.5 text-sm text-stone-500">
-                      {{ s.durationMin }} min · {{ s.priceCents | pricePln }}
+                      {{
+                        i18n.t('services.meta', {
+                          minutes: s.durationMin,
+                          price: s.priceCents | pricePln,
+                        })
+                      }}
                     </p>
                     @if (depositCents(s); as cents) {
                       <p class="mt-0.5 text-[13px] text-stone-500">
-                        Zaliczka: {{ cents | pricePln }}@if (
-                          s.depositType === 'PERCENT'
-                        ) {
-                          ({{ s.depositValue }}% ceny)
+                        @if (s.depositType === 'PERCENT') {
+                          {{
+                            i18n.t('services.deposit.rowPercent', {
+                              amount: cents | pricePln,
+                              percent: s.depositValue ?? 0,
+                            })
+                          }}
+                        } @else {
+                          {{
+                            i18n.t('services.deposit.rowFixed', {
+                              amount: cents | pricePln,
+                            })
+                          }}
                         }
                       </p>
                     }
                     @if (s.employees.length) {
                       <p class="mt-0.5 text-[13px] text-stone-500">
-                        Pracownicy:
-                        {{ employeeNames(s) }}
+                        {{
+                          i18n.t('services.staffPrefix', {
+                            names: employeeNames(s),
+                          })
+                        }}
                       </p>
                     }
                   </div>
@@ -382,7 +430,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === s.id"
                         (click)="openEdit(s)"
                       >
-                        Edytuj
+                        {{ i18n.t('services.edit') }}
                       </button>
                       <button
                         type="button"
@@ -390,7 +438,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === s.id"
                         (click)="onDelete(s)"
                       >
-                        Usuń
+                        {{ i18n.t('services.delete') }}
                       </button>
                     } @else {
                       <button
@@ -399,7 +447,7 @@ interface DeleteResult {
                         [disabled]="rowBusy() === s.id"
                         (click)="onReactivate(s)"
                       >
-                        Aktywuj
+                        {{ i18n.t('services.activate') }}
                       </button>
                     }
                   </div>
@@ -414,6 +462,7 @@ interface DeleteResult {
 })
 export default class BusinessServices {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly loading = signal(true);
   /** Błąd pobrania listy (retry ma sens) — osobno od serverError akcji zapisu/usuwania. */
@@ -448,33 +497,81 @@ export default class BusinessServices {
   });
 
   protected readonly serviceForm = form(this.model, (p) => {
-    required(p.name, { message: 'Nazwa jest wymagana' });
+    required(p.name, {
+      message: () => translate('validation.serviceName.required'),
+    });
     maxLength(p.name, 100, {
-      message: 'Nazwa może mieć maksymalnie 100 znaków',
+      message: () =>
+        translate('validation.serviceName.tooLong', { max: NAME_MAX_LENGTH }),
     });
     maxLength(p.description, 2000, {
-      message: 'Opis może mieć maksymalnie 2000 znaków',
+      message: () =>
+        translate('validation.serviceDescription.tooLong', {
+          max: DESCRIPTION_MAX_LENGTH,
+        }),
     });
-    required(p.durationMin, { message: 'Podaj czas trwania (1–1440 min)' });
-    min(p.durationMin, 1, { message: 'Czas trwania to 1–1440 min' });
-    max(p.durationMin, 1440, { message: 'Czas trwania to 1–1440 min' });
+    required(p.durationMin, {
+      message: () =>
+        translate('validation.duration.required', {
+          min: DURATION_MIN,
+          max: DURATION_MAX,
+        }),
+    });
+    min(p.durationMin, DURATION_MIN, {
+      message: () =>
+        translate('validation.duration.range', {
+          min: DURATION_MIN,
+          max: DURATION_MAX,
+        }),
+    });
+    max(p.durationMin, DURATION_MAX, {
+      message: () =>
+        translate('validation.duration.range', {
+          min: DURATION_MIN,
+          max: DURATION_MAX,
+        }),
+    });
     // input number przepuszcza ułamki, a DTO ma @IsInt → 400; walidujemy na froncie
     validate(p.durationMin, ({ value }) => {
       const v = value();
       return v == null || Number.isInteger(v)
         ? undefined
-        : { kind: 'integer', message: 'Podaj pełną liczbę minut' };
+        : {
+            kind: 'integer',
+            message: translate('validation.duration.integer'),
+          };
     });
-    required(p.priceZl, { message: 'Podaj cenę (0–1 000 000 zł)' });
-    min(p.priceZl, 0, { message: 'Cena to 0–1 000 000 zł' });
-    max(p.priceZl, 1_000_000, { message: 'Cena to 0–1 000 000 zł' });
+    required(p.priceZl, {
+      message: () =>
+        translate('validation.price.required', {
+          min: PRICE_MIN,
+          max: priceFormatter().format(PRICE_MAX),
+        }),
+    });
+    min(p.priceZl, PRICE_MIN, {
+      message: () =>
+        translate('validation.price.range', {
+          min: PRICE_MIN,
+          max: priceFormatter().format(PRICE_MAX),
+        }),
+    });
+    max(p.priceZl, PRICE_MAX, {
+      message: () =>
+        translate('validation.price.range', {
+          min: PRICE_MIN,
+          max: priceFormatter().format(PRICE_MAX),
+        }),
+    });
     // cena w groszach musi być całkowita → max 2 miejsca po przecinku
     validate(p.priceZl, ({ value }) => {
       const v = value();
       if (v == null) return undefined;
       return Math.abs(v * 100 - Math.round(v * 100)) < 1e-6
         ? undefined
-        : { kind: 'grosze', message: 'Cena może mieć maksymalnie 2 miejsca po przecinku' };
+        : {
+            kind: 'grosze',
+            message: translate('validation.price.scale'),
+          };
     });
 
     // Pole ukryte nie wnosi walidacji do formularza — bez tego wyłączona zaliczka
@@ -489,7 +586,9 @@ export default class BusinessServices {
         !valueOf(p.depositEnabled) || valueOf(p.depositKind) !== 'PERCENT',
     });
 
-    required(p.depositAmountZl, { message: 'Podaj kwotę zaliczki' });
+    required(p.depositAmountZl, {
+      message: () => translate('validation.deposit.amountRequired'),
+    });
     // jak przy cenie: grosze muszą wyjść całkowite
     validate(p.depositAmountZl, ({ value }) => {
       const v = value();
@@ -498,7 +597,7 @@ export default class BusinessServices {
         ? undefined
         : {
             kind: 'grosze',
-            message: 'Kwota zaliczki może mieć maksymalnie 2 miejsca po przecinku',
+            message: translate('validation.deposit.amountScale'),
           };
     });
     // reguły krzyżowe (zaliczka ↔ cena) liczy lustro backendu — jeden zestaw komunikatów
@@ -513,12 +612,17 @@ export default class BusinessServices {
       return message ? { kind: 'deposit', message } : undefined;
     });
 
-    required(p.depositPercent, { message: 'Podaj procent ceny' });
+    required(p.depositPercent, {
+      message: () => translate('validation.deposit.percentRequired'),
+    });
     validate(p.depositPercent, ({ value }) => {
       const v = value();
       return v == null || Number.isInteger(v)
         ? undefined
-        : { kind: 'integer', message: 'Podaj pełny procent, bez ułamków' };
+        : {
+            kind: 'integer',
+            message: translate('validation.deposit.percentInteger'),
+          };
     });
     // pokrywa i zakres 1–100, i procent zaokrąglający się do 0 gr przy niskiej cenie
     validate(p.depositPercent, ({ value, valueOf }) => {
@@ -594,7 +698,9 @@ export default class BusinessServices {
         this.employees.set(employees.map((e) => ({ id: e.id, name: e.name })));
       })
       .catch((err: unknown) => {
-        this.loadError.set('Nie udało się wczytać usług. ' + apiErrorMessage(err));
+        this.loadError.set(
+          translate('services.error.load', { detail: apiErrorMessage(err) }),
+        );
       })
       .finally(() => this.loading.set(false));
   }
@@ -718,7 +824,7 @@ export default class BusinessServices {
         // chroni przed duplikatem, gdyby PUT pracowników poniżej zawiódł
         this.services.update((list) =>
           [...list, { ...created, employees: [] }].sort((a, b) =>
-            a.name.localeCompare(b.name, 'pl'),
+            collator().compare(a.name, b.name),
           ),
         );
         this.editingId.set(created.id);
@@ -755,7 +861,7 @@ export default class BusinessServices {
   protected async onDelete(s: Service): Promise<void> {
     // usuwanie nieodwracalne (usługa bez rezerwacji znika na stałe) — potwierdzenie
     const ok = globalThis.confirm(
-      `Usunąć usługę „${s.name}"? Jeśli ma rezerwacje, zostanie dezaktywowana.`,
+      translate('services.deleteConfirm', { name: s.name }),
     );
     if (!ok) return;
     this.serverError.set(null);

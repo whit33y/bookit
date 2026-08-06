@@ -6,6 +6,7 @@ import {
   input,
   output,
   signal,
+  inject,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -18,6 +19,8 @@ import {
   min,
   submit,
 } from '@angular/forms/signals';
+import { I18nStore } from '../core/i18n/i18n-store';
+import { translate, translatePlural } from '../core/i18n/translate';
 import { formatDateTime } from '../shared/business-time';
 
 /** Lustro @MaxLength(500) z CreateReviewDto (apps/api/src/app/reviews/dto/create-review.dto.ts).
@@ -30,13 +33,7 @@ const NO_RATING = 0;
 
 const STARS = [1, 2, 3, 4, 5] as const;
 
-const RATING_LABELS: Record<number, string> = {
-  1: '1 gwiazdka',
-  2: '2 gwiazdki',
-  3: '3 gwiazdki',
-  4: '4 gwiazdki',
-  5: '5 gwiazdek',
-};
+
 
 export interface ReviewSubmission {
   rating: number;
@@ -67,13 +64,17 @@ export interface ReviewSubmission {
       (click)="onBackdropClick($event)"
     >
       <form class="p-6 sm:p-7" (submit)="onSubmit($event)">
-        <h2 id="review-dialog-heading" class="text-lg font-bold">Oceń wizytę</h2>
+        <h2 id="review-dialog-heading" class="text-lg font-bold">
+          {{ i18n.t('reviewDialog.title') }}
+        </h2>
         @if (subtitle(); as text) {
           <p class="mt-1 text-sm text-stone-500">{{ text }}</p>
         }
 
         <fieldset class="mt-6">
-          <legend class="mb-2 text-sm font-medium">Ocena</legend>
+          <legend class="mb-2 text-sm font-medium">
+            {{ i18n.t('reviewDialog.rating') }}
+          </legend>
           <div class="flex gap-1">
             @for (star of stars; track star) {
               <label class="cursor-pointer">
@@ -109,13 +110,16 @@ export interface ReviewSubmission {
 
         <div class="mt-5">
           <label for="review-comment" class="mb-1.5 block text-sm font-medium">
-            Komentarz <span class="text-stone-400">(opcjonalnie)</span>
+            {{ i18n.t('reviewDialog.comment') }}
+            <span class="text-stone-400">{{
+              i18n.t('reviewDialog.commentOptional')
+            }}</span>
           </label>
           <textarea
             [formField]="reviewForm.comment"
             id="review-comment"
             rows="3"
-            placeholder="np. bardzo miła obsługa, polecam"
+            [placeholder]="i18n.t('reviewDialog.commentPlaceholder')"
             class="w-full rounded-lg border bg-white px-3.5 py-2 text-sm placeholder-stone-400 shadow-card transition focus:outline-none focus:ring-2"
             [class]="
               commentInvalid()
@@ -132,7 +136,12 @@ export interface ReviewSubmission {
             class="mt-1.5 text-[13px]"
             [class]="commentInvalid() ? 'font-medium text-rose-600' : 'text-stone-500'"
           >
-            {{ commentLength() }}/{{ commentMaxLength }} znaków
+            {{
+              i18n.t('reviewDialog.commentCounter', {
+                used: commentLength(),
+                max: commentMaxLength,
+              })
+            }}
           </p>
           @if (commentInvalid()) {
             <p
@@ -155,14 +164,18 @@ export interface ReviewSubmission {
             (click)="onCancelClick()"
             class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 shadow-card transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-60"
           >
-            Wróć
+            {{ i18n.t('reviewDialog.cancel') }}
           </button>
           <button
             type="submit"
             [disabled]="busy()"
             class="rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-stone-300"
           >
-            {{ busy() ? 'Wysyłanie…' : 'Wyślij ocenę' }}
+            {{
+              busy()
+                ? i18n.t('reviewDialog.submitting')
+                : i18n.t('reviewDialog.submit')
+            }}
           </button>
         </div>
       </form>
@@ -170,6 +183,8 @@ export interface ReviewSubmission {
   `,
 })
 export default class ReviewDialog {
+  protected readonly i18n = inject(I18nStore);
+
   readonly open = input(false);
   /** Puste, gdy modal jest zamknięty — rodzic trzyma wizytę w sygnale, który wraca do null. */
   readonly serviceName = input('');
@@ -189,10 +204,11 @@ export default class ReviewDialog {
   protected readonly model = signal({ rating: NO_RATING, comment: '' });
 
   protected readonly reviewForm = form(this.model, (p) => {
-    min(p.rating, 1, { message: 'Wybierz ocenę od 1 do 5' });
-    max(p.rating, 5, { message: 'Wybierz ocenę od 1 do 5' });
+    min(p.rating, 1, { message: () => translate('reviewDialog.ratingRequired') });
+    max(p.rating, 5, { message: () => translate('reviewDialog.ratingRequired') });
     maxLength(p.comment, COMMENT_MAX_LENGTH, {
-      message: `Komentarz może mieć maksymalnie ${COMMENT_MAX_LENGTH} znaków`,
+      message: () =>
+        translate('reviewDialog.commentTooLong', { max: COMMENT_MAX_LENGTH }),
     });
     // blokada w trakcie wysyłki idzie przez schemat, bo [formField] nie dopuszcza
     // własnego bindowania [disabled] na polu (NG8022)
@@ -202,7 +218,10 @@ export default class ReviewDialog {
   // formatDateTime rzuca na pustym stringu, a szablon <dialog> renderuje się także zamknięty
   protected readonly subtitle = computed(() =>
     this.startsAt()
-      ? `${this.serviceName()} · ${formatDateTime(this.startsAt())}`
+      ? translate('reviewDialog.subtitle', {
+          service: this.serviceName(),
+          when: formatDateTime(this.startsAt()),
+        })
       : '',
   );
 
@@ -241,8 +260,9 @@ export default class ReviewDialog {
     });
   }
 
+  /** Etykieta dla czytnika ekranu przy gwiazdce — odmiana przez liczbę idzie z `Intl`. */
   protected ratingLabel(star: number): string {
-    return RATING_LABELS[star];
+    return translatePlural('rating.starCount', star);
   }
 
   protected setRating(star: number): void {

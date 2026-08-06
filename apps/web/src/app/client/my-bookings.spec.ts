@@ -8,6 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { authGuard } from '../core/auth/auth.guard';
+import { setLocale } from '../core/i18n/locale';
 import { settle } from '../public/testing-helpers';
 import MyBookings from './my-bookings';
 
@@ -599,5 +600,18 @@ describe('MyBookings', () => {
     const url = TestBed.inject(Router).url;
     expect(url).toContain('/login');
     expect(decodeURIComponent(url)).toContain('returnUrl=/client');
+  });
+
+  // mapa status→etykieta i formatowanie daty muszą iść za językiem UI (#57)
+  it('po angielsku renderuje etykiety statusów, zakładki i angielską datę', async () => {
+    setLocale('en');
+    const { text, tabs } = await setup();
+
+    expect(text()).toContain('My appointments');
+    expect(tabs()[0].textContent).toContain('Upcoming (2)');
+    expect(tabs()[1].textContent).toContain('History (1)');
+    expect(text()).toContain('Pending');
+    expect(text()).toContain('Confirmed');
+    expect(text()).not.toContain('Oczekująca');
   });
 });

@@ -1,4 +1,5 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
+import { I18nStore } from '../../core/i18n/i18n-store';
 
 // ile numerów stron pokazujemy naraz — okno przesuwa się wokół bieżącej strony, żeby przy
 // kilkuset stronach pasek nie rozjechał się poza szerokość tabeli
@@ -13,12 +14,19 @@ const WINDOW_SIZE = 5;
   template: `
     @if (total() > limit()) {
       <nav
-        aria-label="Paginacja"
+        [attr.aria-label]="i18n.t('pagination.label')"
         class="flex flex-wrap items-center justify-between gap-3 text-[13px] font-medium"
         [class]="frameClass()"
       >
         <p class="text-stone-500">
-          {{ rangeStart() }}–{{ rangeEnd() }} z {{ total() }} {{ itemsLabel() }}
+          {{
+            i18n.t('pagination.range', {
+              start: rangeStart(),
+              end: rangeEnd(),
+              total: total(),
+              items: itemsLabel(),
+            })
+          }}
         </p>
         <div class="flex flex-wrap gap-1">
           <button
@@ -27,12 +35,12 @@ const WINDOW_SIZE = 5;
             (click)="pageChange.emit(page() - 1)"
             class="rounded-md px-2.5 py-1.5 transition hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
           >
-            ‹ Poprzednia
+            {{ i18n.t('pagination.previous') }}
           </button>
           @for (p of pages(); track p) {
             <button
               type="button"
-              [attr.aria-label]="'Strona ' + p"
+              [attr.aria-label]="i18n.t('pagination.page', { page: p })"
               [attr.aria-current]="p === page() ? 'page' : null"
               (click)="pageChange.emit(p)"
               class="rounded-md px-2.5 py-1.5 tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
@@ -51,7 +59,7 @@ const WINDOW_SIZE = 5;
             (click)="pageChange.emit(page() + 1)"
             class="rounded-md px-2.5 py-1.5 transition hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
           >
-            Następna ›
+            {{ i18n.t('pagination.next') }}
           </button>
         </div>
       </nav>
@@ -59,6 +67,8 @@ const WINDOW_SIZE = 5;
   `,
 })
 export default class Pagination {
+  protected readonly i18n = inject(I18nStore);
+
   readonly page = input.required<number>();
   readonly limit = input.required<number>();
   readonly total = input.required<number>();

@@ -3,6 +3,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { numberFormat } from '../../core/i18n/intl';
+import { translate } from '../../core/i18n/translate';
 import AppMap, { MapPin } from '../../shared/map/map';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
@@ -35,19 +38,6 @@ interface SearchResponse {
 // UI na tej stronie (dochodzi w #36), ale link z tymi parametrami już musi działać
 const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', 'page'];
 
-// odmiana liczebnika przy "firma": 1 → firmę, 2-4/22-24/... → firmy, reszta → firm
-function businessCountLabel(n: number): string {
-  if (n === 1) {
-    return 'firmę';
-  }
-  const lastDigit = n % 10;
-  const lastTwoDigits = n % 100;
-  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)) {
-    return 'firmy';
-  }
-  return 'firm';
-}
-
 @Component({
   selector: 'app-search',
   imports: [AppMap, RouterLink, LoadingState, ErrorState, EmptyState, RatingStars],
@@ -55,25 +45,28 @@ function businessCountLabel(n: number): string {
     <div class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
       <section class="lg:w-3/5">
         @if (loading()) {
-          <app-loading-state message="Szukam…" paddingClass="py-16 text-center" />
+          <app-loading-state
+            [message]="i18n.t('search.loading')"
+            paddingClass="py-16 text-center"
+          />
         } @else if (serverError(); as msg) {
           <app-error-state [message]="msg" [retryable]="true" (retry)="retry()" />
         } @else if (items().length === 0) {
           <app-empty-state
-            title="Brak wyników dla podanych filtrów."
-            description="Spróbuj zmienić kategorię, miasto lub frazę wyszukiwania."
+            [title]="i18n.t('search.empty.title')"
+            [description]="i18n.t('search.empty.description')"
             [boxed]="true"
           >
             <a
               routerLink="/"
               class="mt-4 inline-block text-sm font-semibold text-brand-700 hover:underline"
             >
-              Wróć do wyszukiwania
+              {{ i18n.t('search.empty.backLink') }}
             </a>
           </app-empty-state>
         } @else {
           <p class="mb-4 text-sm text-stone-500">
-            Znaleziono {{ total() }} {{ businessCountLabel(total()) }}
+            {{ i18n.plural('search.resultCount', total()) }}
           </p>
           <ul class="flex flex-col gap-4">
             @for (item of items(); track item.id) {
@@ -118,16 +111,18 @@ function businessCountLabel(n: number): string {
                 (click)="goToPage(page() - 1)"
                 class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
               >
-                Poprzednia
+                {{ i18n.t('search.previous') }}
               </button>
-              <span class="text-sm text-stone-500">Strona {{ page() }}</span>
+              <span class="text-sm text-stone-500">{{
+                i18n.t('search.page', { page: page() })
+              }}</span>
               <button
                 type="button"
                 [disabled]="!hasNextPage()"
                 (click)="goToPage(page() + 1)"
                 class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
               >
-                Następna
+                {{ i18n.t('search.next') }}
               </button>
             </div>
           }
@@ -138,7 +133,7 @@ function businessCountLabel(n: number): string {
         <app-map
           class="lg:sticky lg:top-6"
           heightClass="h-[28rem]"
-          ariaLabel="Wyniki wyszukiwania na mapie"
+          [ariaLabel]="i18n.t('search.mapLabel')"
           [pins]="mapPins()"
           [activeId]="activeId()"
           [userLocation]="userLocation()"
@@ -150,6 +145,7 @@ function businessCountLabel(n: number): string {
 })
 export default class Search {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -169,7 +165,6 @@ export default class Search {
   protected readonly hasNextPage = computed(
     () => this.page() * this.limit() < this.total(),
   );
-  protected readonly businessCountLabel = businessCountLabel;
 
   // rośnie przy każdym load() — pozwala odrzucić odpowiedź na nieaktualne już
   // zapytanie (np. dwa szybkie kliknięcia paginacji w złej kolejności sieciowej)
@@ -278,8 +273,14 @@ export default class Search {
     this.activeId.set(id);
   }
 
+  /** Jedno miejsce po przecinku, separator wg języka UI — „1,4 km" / „1.4 km". */
   protected distanceLabel(km: number): string {
-    return km.toFixed(1).replace('.', ',') + ' km';
+    return translate('search.distance', {
+      distance: numberFormat({
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(km),
+    });
   }
 
   protected goToPage(page: number): void {

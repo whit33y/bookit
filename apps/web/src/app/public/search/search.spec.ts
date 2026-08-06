@@ -12,6 +12,7 @@ import {
   provideRouter,
 } from '@angular/router';
 import { of } from 'rxjs';
+import { setLocale } from '../../core/i18n/locale';
 import AppMap, { MapPin } from '../../shared/map/map';
 import { settle } from '../testing-helpers';
 import Search from './search';
@@ -250,5 +251,32 @@ describe('Search', () => {
       By.directive(MapStub),
     ).componentInstance as MapStub;
     expect(mapStub.userLocation()).toBeNull();
+  });
+
+  // pluralizacja idzie przez Intl.PluralRules, a nie przez ręczną regułę polską (#57)
+  it('po angielsku liczy wyniki regułą one/other i formatuje dystans kropką', async () => {
+    setLocale('en');
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses?'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Found 2 businesses');
+    expect(text.replace(/\s/g, ' ')).toContain('3.1 km');
+  });
+
+  it('po angielsku pojedynczy wynik dostaje formę „business", nie „businesses"', async () => {
+    setLocale('en');
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses?'))
+      .flush({ ...RESPONSE, items: [RESPONSE.items[0]], total: 1 });
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Found 1 business',
+    );
   });
 });

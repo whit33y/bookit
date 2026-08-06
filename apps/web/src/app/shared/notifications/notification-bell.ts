@@ -1,7 +1,8 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate, translatePlural } from '../../core/i18n/translate';
 import { formatRelativeTime } from '../business-time';
-import { pluralPl } from '../plural-pl';
 import EmptyState from '../ui/empty-state';
 import ErrorState from '../ui/error-state';
 import LoadingState from '../ui/loading-state';
@@ -69,24 +70,27 @@ const BADGE_MAX = 9;
       <div
         id="notifications-panel"
         role="group"
-        aria-label="Powiadomienia"
+        [attr.aria-label]="i18n.t('notifications.title')"
         class="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-stone-200 bg-white shadow-raised"
       >
         <div class="flex items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-          <h2 class="text-sm font-bold">Powiadomienia</h2>
+          <h2 class="text-sm font-bold">{{ i18n.t('notifications.title') }}</h2>
           @if (unread() > 0) {
             <button
               type="button"
               (click)="onMarkAll()"
               class="rounded-md px-2 py-1 text-[13px] font-semibold text-brand-700 transition hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
-              Oznacz wszystkie
+              {{ i18n.t('notifications.markAll') }}
             </button>
           }
         </div>
 
         @if (loading()) {
-          <app-loading-state message="Ładowanie powiadomień…" paddingClass="p-6" />
+          <app-loading-state
+            [message]="i18n.t('notifications.loading')"
+            paddingClass="p-6"
+          />
         } @else if (error(); as msg) {
           <app-error-state
             class="p-4"
@@ -116,7 +120,9 @@ const BADGE_MAX = 9;
                       {{ n.title }}
                       @if (n.readAt === null) {
                         <!-- kolor nie może być jedynym nośnikiem informacji (WCAG 1.4.1) -->
-                        <span class="sr-only">— nieprzeczytane</span>
+                        <span class="sr-only">{{
+                          i18n.t('notifications.unreadMarker')
+                        }}</span>
                       }
                     </span>
                     <span class="mt-0.5 block text-[13px] leading-snug text-stone-600">{{
@@ -131,13 +137,14 @@ const BADGE_MAX = 9;
             }
           </ul>
         } @else {
-          <app-empty-state class="p-4" title="Brak powiadomień." />
+          <app-empty-state class="p-4" [title]="i18n.t('notifications.empty')" />
         }
       </div>
     }
   `,
 })
 export default class NotificationBell {
+  protected readonly i18n = inject(I18nStore);
   private readonly store = inject(NotificationsStore);
   private readonly router = inject(Router);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -159,14 +166,10 @@ export default class NotificationBell {
   // czego ta liczba dotyczy (plakietka „oczekujących" w nawigacji tego nie robi).
   protected readonly triggerLabel = computed(() => {
     const count = this.unread();
-    if (count === 0) return 'Powiadomienia — brak nieprzeczytanych';
-    const noun = pluralPl(
-      count,
-      'nieprzeczytane powiadomienie',
-      'nieprzeczytane powiadomienia',
-      'nieprzeczytanych powiadomień',
-    );
-    return `Powiadomienia — ${count} ${noun}`;
+    if (count === 0) return translate('notifications.trigger.none');
+    return translate('notifications.trigger.withCount', {
+      unread: translatePlural('notifications.unreadCount', count),
+    });
   });
 
   protected toggle(): void {

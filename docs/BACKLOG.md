@@ -9,7 +9,7 @@ Rozpisanie [SDD](./SDD.md) na issue GitHubowe. MVP = milestone'y **M1–M8** (zg
 - **Globalna definicja "done"** (obowiązuje każde issue, nie powtarzamy w kryteriach):
   - `npm exec nx run-many -t test lint build` przechodzi,
   - endpointy mają DTO z walidacją `class-validator` i poprawne kody HTTP,
-  - UI wyłącznie po polsku,
+  - teksty UI wyłącznie z warstwy tłumaczeń (`apps/web/src/app/core/i18n`) — komplet w PL i EN, bez hardkodów w komponentach,
   - nietrywialna logika ma przynajmniej jeden test.
 
 ## Labele
@@ -689,8 +689,12 @@ Endpoint agregatów (rezerwacje wg statusu w czasie, obłożenie pracowników, n
 Ekstrakcja tekstów UI do mechanizmu i18n, tłumaczenie na angielski, przełącznik języka. Maile pozostają po polsku (osobna decyzja przy potrzebie).
 
 **Kryteria akceptacji:**
-- [ ] Wszystkie teksty UI z tłumaczeń — bez hardkodów; daty/ceny formatowane per locale
-- [ ] Przełącznik PL/EN z zapamiętaniem wyboru
+- [x] Wszystkie teksty UI z tłumaczeń — bez hardkodów; daty/ceny formatowane per locale
+- [x] Przełącznik PL/EN z zapamiętaniem wyboru
+
+Poza zakresem (frontendowe issue): komunikaty błędów z API i treść powiadomień in-app powstają
+na serwerze i przy EN nadal są po polsku — w UI błędy są wtedy tłumaczone po `ApiErrorCode`
+kosztem szczegółowości. Docelowo `Accept-Language` po stronie `apps/api` — osobne issue.
 
 ### #58 — Infra: CI — GitHub Actions
 **Milestone:** M11 · **Labele:** `infra`, `faza-2` · **Zależy od:** #44

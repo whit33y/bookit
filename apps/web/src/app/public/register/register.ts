@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { apply, form } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import AppFormField, {
   emailSchema,
   passwordSchema,
@@ -17,8 +18,10 @@ import AppFormField, {
       <section
         class="w-full max-w-md rounded-xl border border-stone-200 bg-white p-8 shadow-card"
       >
-        <h1 class="text-2xl font-bold">Rejestracja</h1>
-        <p class="mt-1 text-sm text-stone-500">Załóż konto w BookIt</p>
+        <h1 class="text-2xl font-bold">{{ i18n.t('auth.register.title') }}</h1>
+        <p class="mt-1 text-sm text-stone-500">
+          {{ i18n.t('auth.register.subtitle') }}
+        </p>
 
         @if (serverError(); as msg) {
           <p role="alert" class="alert-danger mt-4">
@@ -31,13 +34,13 @@ import AppFormField, {
             <app-form-field
               [field]="registerForm.firstName"
               fieldId="firstName"
-              label="Imię"
+              [label]="i18n.t('auth.field.firstName')"
               autocomplete="given-name"
             />
             <app-form-field
               [field]="registerForm.lastName"
               fieldId="lastName"
-              label="Nazwisko"
+              [label]="i18n.t('auth.field.lastName')"
               autocomplete="family-name"
             />
           </div>
@@ -45,7 +48,7 @@ import AppFormField, {
             class="mt-4"
             [field]="registerForm.email"
             fieldId="email"
-            label="Email"
+            [label]="i18n.t('auth.field.email')"
             type="email"
             autocomplete="email"
           />
@@ -53,7 +56,7 @@ import AppFormField, {
             class="mt-4"
             [field]="registerForm.password"
             fieldId="password"
-            label="Hasło"
+            [label]="i18n.t('auth.field.password')"
             type="password"
             autocomplete="new-password"
           />
@@ -64,18 +67,20 @@ import AppFormField, {
             class="btn-primary mt-6"
           >
             {{
-              registerForm().submitting() ? 'Rejestracja…' : 'Zarejestruj się'
+              registerForm().submitting()
+                ? i18n.t('auth.register.submitting')
+                : i18n.t('auth.register.submit')
             }}
           </button>
         </form>
 
         <p class="mt-6 text-center text-sm text-stone-500">
-          Masz już konto?
+          {{ i18n.t('auth.register.hasAccount') }}
           <a
             routerLink="/login"
             [queryParams]="returnUrl ? { returnUrl } : {}"
             class="font-medium text-brand-700 hover:text-brand-800"
-            >Zaloguj się</a
+            >{{ i18n.t('auth.register.loginLink') }}</a
           >
         </p>
       </section>
@@ -84,6 +89,7 @@ import AppFormField, {
 })
 export default class Register {
   private readonly auth = inject(AuthStore);
+  protected readonly i18n = inject(I18nStore);
 
   /** Cel powrotu po rejestracji — przeniesiony z /login, żeby przełączenie formularza
    *  nie gubiło kontekstu (np. niedokończonej rezerwacji). */
@@ -100,8 +106,8 @@ export default class Register {
   protected readonly serverError = signal<string | null>(null);
 
   protected readonly registerForm = form(this.model, (p) => {
-    apply(p.firstName, personNameSchema('Imię'));
-    apply(p.lastName, personNameSchema('Nazwisko'));
+    apply(p.firstName, personNameSchema('firstName'));
+    apply(p.lastName, personNameSchema('lastName'));
     apply(p.email, emailSchema);
     apply(p.password, passwordSchema);
   });

@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
-import { pluralPl } from '../plural-pl';
+import { numberFormat } from '../../core/i18n/intl';
+import { translate, translatePlural } from '../../core/i18n/translate';
 
 const MAX_RATING = 5;
 const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
@@ -60,15 +61,18 @@ export default class RatingStars {
   protected readonly formattedValue = computed(() => formatRating(this.value()));
 
   protected readonly label = computed(() => {
-    const base = `Ocena ${this.formattedValue()} na ${MAX_RATING}`;
+    const base = translate('rating.stars.label', {
+      value: this.formattedValue(),
+      max: MAX_RATING,
+    });
     const total = this.count();
     return total === null
       ? base
-      : `${base}, ${total} ${pluralPl(total, 'opinia', 'opinie', 'opinii')}`;
+      : `${base}, ${translatePlural('rating.reviewCount', total)}`;
   });
 }
 
-/** Przecinek dziesiętny i maksymalnie jedno miejsce po przecinku — jak w design systemie („4,9"). */
+/** Maksymalnie jedno miejsce po przecinku, separator wg języka UI — „4,9" / „4.9". */
 function formatRating(value: number): string {
-  return value.toLocaleString('pl-PL', { maximumFractionDigits: 1 });
+  return numberFormat({ maximumFractionDigits: 1 }).format(value);
 }

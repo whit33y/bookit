@@ -2,6 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { apply, form, required } from '@angular/forms/signals';
 import { AuthStore } from '../../core/auth/auth-store';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import AppFormField, {
   emailSchema,
   submitAuthForm,
@@ -15,8 +17,10 @@ import AppFormField, {
       <section
         class="w-full max-w-md rounded-xl border border-stone-200 bg-white p-8 shadow-card"
       >
-        <h1 class="text-2xl font-bold">Logowanie</h1>
-        <p class="mt-1 text-sm text-stone-500">Zaloguj się na swoje konto</p>
+        <h1 class="text-2xl font-bold">{{ i18n.t('auth.login.title') }}</h1>
+        <p class="mt-1 text-sm text-stone-500">
+          {{ i18n.t('auth.login.subtitle') }}
+        </p>
 
         @if (serverError(); as msg) {
           <p role="alert" class="alert-danger mt-4">
@@ -28,7 +32,7 @@ import AppFormField, {
           <app-form-field
             [field]="loginForm.email"
             fieldId="email"
-            label="Email"
+            [label]="i18n.t('auth.field.email')"
             type="email"
             autocomplete="email"
           />
@@ -36,7 +40,7 @@ import AppFormField, {
             class="mt-4"
             [field]="loginForm.password"
             fieldId="password"
-            label="Hasło"
+            [label]="i18n.t('auth.field.password')"
             type="password"
             autocomplete="current-password"
           />
@@ -45,7 +49,7 @@ import AppFormField, {
             <a
               routerLink="/forgot-password"
               class="font-medium text-brand-700 hover:text-brand-800"
-              >Nie pamiętasz hasła?</a
+              >{{ i18n.t('auth.login.forgotLink') }}</a
             >
           </p>
 
@@ -54,17 +58,21 @@ import AppFormField, {
             [disabled]="loginForm().submitting()"
             class="btn-primary mt-6"
           >
-            {{ loginForm().submitting() ? 'Logowanie…' : 'Zaloguj się' }}
+            {{
+              loginForm().submitting()
+                ? i18n.t('auth.login.submitting')
+                : i18n.t('auth.login.submit')
+            }}
           </button>
         </form>
 
         <p class="mt-6 text-center text-sm text-stone-500">
-          Nie masz konta?
+          {{ i18n.t('auth.login.noAccount') }}
           <a
             routerLink="/register"
             [queryParams]="returnUrl ? { returnUrl } : {}"
             class="font-medium text-brand-700 hover:text-brand-800"
-            >Zarejestruj się</a
+            >{{ i18n.t('auth.login.registerLink') }}</a
           >
         </p>
       </section>
@@ -73,6 +81,7 @@ import AppFormField, {
 })
 export default class Login {
   private readonly auth = inject(AuthStore);
+  protected readonly i18n = inject(I18nStore);
 
   /** Cel powrotu po zalogowaniu — snapshot wystarczy, bo /login nie zmienia query paramów
    *  w trakcie życia komponentu. Walidację adresu robi AuthStore (safeReturnUrl). */
@@ -85,7 +94,9 @@ export default class Login {
 
   protected readonly loginForm = form(this.model, (p) => {
     apply(p.email, emailSchema);
-    required(p.password, { message: 'Hasło jest wymagane' });
+    required(p.password, {
+      message: () => translate('validation.password.required'),
+    });
   });
 
   protected async onSubmit(event: Event): Promise<void> {

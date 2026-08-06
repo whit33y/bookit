@@ -1,6 +1,7 @@
 import { Component, effect, inject, input, signal, untracked } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import { formatDate } from '../../shared/business-time';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
@@ -52,10 +53,10 @@ interface BusinessReviewsResponse {
     EmptyState,
   ],
   template: `
-    <h2 class="mb-4 mt-8 text-lg font-bold">Recenzje</h2>
+    <h2 class="mb-4 mt-8 text-lg font-bold">{{ i18n.t('reviews.title') }}</h2>
 
     @if (loading()) {
-      <app-loading-state message="Ładowanie opinii…" />
+      <app-loading-state [message]="i18n.t('reviews.loading')" />
     } @else if (serverError(); as msg) {
       <app-error-state [message]="msg" [retryable]="true" (retry)="onRetry()" />
     } @else if (items().length) {
@@ -80,12 +81,12 @@ interface BusinessReviewsResponse {
         [page]="page()"
         [limit]="limit()"
         [total]="total()"
-        itemsLabel="opinii"
+        [itemsLabel]="i18n.t('reviews.itemsLabel')"
         frameClass="mt-2"
         (pageChange)="goToPage($event)"
       />
     } @else {
-      <app-empty-state title="Ta firma nie ma jeszcze opinii." />
+      <app-empty-state [title]="i18n.t('reviews.empty')" />
     }
   `,
 })
@@ -93,6 +94,7 @@ export default class BusinessReviews {
   readonly slug = input.required<string>();
 
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
 
   // pełna data i godzina rozpycha wiersz opinii, a przy recenzji liczy się dzień, nie minuta
   protected readonly date = formatDate;
