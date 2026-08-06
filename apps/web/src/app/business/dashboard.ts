@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthStore } from '../core/auth/auth-store';
 import { PendingCountStore } from './pending-count-store';
 
 // ponytail: placeholder — usługi/pracownicy/ustawienia to osobne issue
@@ -18,6 +19,9 @@ import { PendingCountStore } from './pending-count-store';
           ({{ pendingCount() }})
         }
       </a>
+      @if (isOwner()) {
+        <a routerLink="/business/stats" class="text-brand-600 underline">Statystyki</a>
+      }
       <a routerLink="/business/services" class="text-brand-600 underline"
         >Usługi</a
       >
@@ -31,5 +35,11 @@ import { PendingCountStore } from './pending-count-store';
   `,
 })
 export default class BusinessDashboard {
+  private readonly authStore = inject(AuthStore);
+
   protected readonly pendingCount = inject(PendingCountStore).count;
+  // trasa /business/stats jest za roleGuard('OWNER') — EMPLOYEE nie dostaje martwego linku
+  protected readonly isOwner = computed(
+    () => this.authStore.user()?.role === 'OWNER',
+  );
 }
