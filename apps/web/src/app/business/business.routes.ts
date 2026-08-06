@@ -22,6 +22,13 @@ export default [
     loadComponent: () => import('./settings/settings'),
   },
   {
+    // dashboard statystyk tylko dla OWNER — przekrój całej firmy, w tym przychód
+    // i obłożenie wszystkich pracowników (backend @Roles(OWNER), #56)
+    path: 'stats',
+    canActivate: [roleGuard('OWNER')],
+    loadComponent: () => import('./stats/stats'),
+  },
+  {
     // panel usług tylko dla OWNER (backend @Roles(OWNER))
     path: 'services',
     canActivate: [roleGuard('OWNER')],

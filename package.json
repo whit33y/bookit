@@ -27,6 +27,7 @@
     "@prisma/client": "^6.19.3",
     "@stripe/stripe-js": "^9.12.1",
     "bcrypt": "^6.0.0",
+    "chart.js": "^4.5.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "leaflet": "^1.9.4",

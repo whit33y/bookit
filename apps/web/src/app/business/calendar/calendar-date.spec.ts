@@ -10,17 +10,21 @@ import {
 } from './calendar-date';
 
 describe('isCalendarDate', () => {
-  it('przepuszcza istniejące daty', () => {
-    expect(isCalendarDate('2026-08-03')).toBe(true);
-    expect(isCalendarDate('2024-02-29')).toBe(true);
+  it('przepuszcza istniejącą datę', () => {
+    expect(isCalendarDate('2026-08-04')).toBe(true);
+    expect(isCalendarDate('2028-02-29')).toBe(true); // rok przestępny
   });
 
-  // ?date= z adresu (deep-link powiadomienia, #54) nie może rozjechać kalendarza
-  it('odrzuca zły kształt i daty nieistniejące w kalendarzu', () => {
-    expect(isCalendarDate('2026-13-99')).toBe(false);
-    expect(isCalendarDate('2026-02-30')).toBe(false);
-    expect(isCalendarDate('3.08.2026')).toBe(false);
+  it('odrzuca zły kształt', () => {
+    expect(isCalendarDate('4.08.2026')).toBe(false);
+    expect(isCalendarDate('2026-8-4')).toBe(false);
     expect(isCalendarDate('')).toBe(false);
+  });
+
+  it('odrzuca datę nieistniejącą w kalendarzu, choć poprawną w kształcie', () => {
+    expect(isCalendarDate('2026-02-30')).toBe(false);
+    expect(isCalendarDate('2026-13-01')).toBe(false);
+    expect(isCalendarDate('2027-02-29')).toBe(false);
   });
 });
 
