@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, afterRenderEffect, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../core/api-client';
 import { formatDateTime } from '../shared/business-time';
@@ -197,8 +198,15 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
           @if (visible().length) {
             <ul class="flex flex-col gap-4">
               @for (b of visible(); track b.id) {
+                <!-- id + tabindex: wizyta wskazana z powiadomienia (#54) dostaje fokus, żeby
+                     użytkownik klawiatury i czytnika trafił tam, gdzie link obiecywał -->
                 <li
-                  class="rounded-2xl border border-stone-200 bg-white p-5 shadow-card"
+                  [id]="'booking-' + b.id"
+                  [attr.tabindex]="highlightedId() === b.id ? -1 : null"
+                  class="rounded-2xl border border-stone-200 bg-white p-5 shadow-card focus-visible:outline-none"
+                  [class]="
+                    highlightedId() === b.id ? 'ring-2 ring-brand-600 ring-offset-2' : ''
+                  "
                 >
                   <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -329,6 +337,7 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
 })
 export default class MyBookings {
   private readonly api = inject(ApiClient);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly dateTime = formatDateTime;
   protected readonly tabs = [
@@ -357,6 +366,10 @@ export default class MyBookings {
 
   protected readonly tab = signal<Tab>('upcoming');
 
+  // wizyta wskazana przez ?booking= (deep-link z powiadomienia in-app, #54)
+  protected readonly highlightedId = signal<string | null>(null);
+  private requestedId: string | null = null;
+
   protected readonly visible = computed(() =>
     this.tab() === 'upcoming' ? this.upcoming() : this.past(),
   );
@@ -376,6 +389,25 @@ export default class MyBookings {
 
   constructor() {
     void this.load();
+
+    // queryParamMap, nie snapshot: drugi klik w powiadomienie, gdy ten ekran jest już otwarty,
+    // zmienia tylko query param — komponent nie powstaje od nowa, a podświetlenie ma przeskoczyć
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      this.requestedId = params.get('booking');
+      this.highlightRequested();
+    });
+
+    // Fokus i przewinięcie dopiero po renderze: karta wchodzi do DOM razem z przełączoną
+    // zakładką, więc w momencie zapisu sygnału jeszcze jej nie ma. afterRenderEffect zamiast
+    // setTimeout, bo aplikacja jest zoneless i moment renderu należy do Angulara, nie do zegara.
+    afterRenderEffect(() => {
+      const id = this.highlightedId();
+      if (!id) return;
+      const card = document.getElementById(`booking-${id}`);
+      card?.focus({ preventScroll: true });
+      // jsdom nie implementuje scrollIntoView — w testach po prostu go nie ma
+      card?.scrollIntoView?.({ block: 'center' });
+    });
   }
 
   protected count(tab: Tab): number {
@@ -544,6 +576,31 @@ export default class MyBookings {
     this.past.update(apply);
   }
 
+  /**
+   * Podświetlenie wizyty z `?booking=` (AC #54 „klik prowadzi do wizyty"). Rezerwacja może
+   * leżeć w dowolnej z dwóch zakładek, więc najpierw trzeba ją znaleźć, a dopiero potem
+   * przełączyć widok. Nieznane id ignorujemy cicho: wizyta mogła zniknąć z listy, a błąd
+   * w tym miejscu nic nie daje użytkownikowi, który przyszedł tu z powiadomienia.
+   */
+  private highlightRequested(): void {
+    const id = this.requestedId;
+    if (!id) {
+      this.highlightedId.set(null);
+      return;
+    }
+
+    const tab: Tab | null = this.upcoming().some((b) => b.id === id)
+      ? 'upcoming'
+      : this.past().some((b) => b.id === id)
+        ? 'past'
+        : null;
+    if (!tab) return;
+
+    this.tab.set(tab);
+    // fokus i przewinięcie dokłada afterRenderEffect z konstruktora
+    this.highlightedId.set(id);
+  }
+
   private async load(silent = false): Promise<void> {
     if (!silent) {
       this.loading.set(true);
@@ -555,6 +612,8 @@ export default class MyBookings {
       );
       this.upcoming.set(res.upcoming);
       this.past.set(res.past);
+      // dopiero teraz wiadomo, w której zakładce leży wizyta z ?booking=
+      this.highlightRequested();
     } catch (err) {
       this.serverError.set(apiErrorMessage(err));
     } finally {

@@ -1,4 +1,4 @@
-import { BUSINESS_TIMEZONE } from '../availability/business-time';
+import { BUSINESS_TIMEZONE, utcToLocalDate } from '../availability/business-time';
 
 // Formatowanie na potrzeby treści maili: instanty z bazy (UTC) na ścianę zegara firmy
 // i grosze na złotówki. Na Intl, jak business-time.ts — pełne ICU jest w runtime, więc
@@ -36,3 +36,14 @@ export const formatPrice = (priceCents: number): string =>
 
 /** Czas trwania usługi — minuty tak, jak trzyma je Service.durationMin. */
 export const formatDuration = (durationMin: number): string => `${durationMin} min`;
+
+/**
+ * „2026-01-14" — doba lokalna firmy, w której wypada ten instant. Do linków deep-link
+ * powiadomień in-app (#54), bo kalendarz panelu adresuje dni przez `?date=YYYY-MM-DD`.
+ * Nie `toISOString().slice(0, 10)`: dla wizyty o 22:30 czasu polskiego UTC pokazuje już
+ * następny dzień i kalendarz otwierałby się na pustym dniu.
+ */
+export const formatDateIso = (instant: Date): string => {
+  const { year, month, day } = utcToLocalDate(instant, BUSINESS_TIMEZONE);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};

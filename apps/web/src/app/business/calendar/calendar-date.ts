@@ -33,8 +33,8 @@ function toIsoDate(utcMs: number): string {
 }
 
 /**
- * Czy „YYYY-MM-DD" jest istniejącą datą kalendarzową. Sam kształt nie wystarcza: `?from=2026-13-99`
- * z adresu przeszłoby regexa i rozjechało zakres (Date.UTC przewinęłoby to na inny rok).
+ * Czy „YYYY-MM-DD" jest istniejącą datą kalendarzową. Sam kształt nie wystarcza: `?date=2026-13-99`
+ * z adresu przeszłoby regexa i rozjechało cały kalendarz (Date.UTC przewinęłoby to na inny rok).
  * Round-trip przez Date.UTC ujawnia przewinięcie — ten sam test co parseLocalDate w apps/api.
  */
 export function isCalendarDate(value: string): boolean {

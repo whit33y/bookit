@@ -1,5 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { BookingStatus, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import {
+  BOOKING_EVENT_RECIPIENT,
+  BookingEvent,
+} from '../../src/app/notifications/templates/booking-event';
+import { renderBookingNotification } from '../../src/app/notifications/templates/notification.template';
 import { planDemoBookings, planDemoTimeOffs } from './demo-bookings';
 import {
   CATEGORIES,
@@ -22,6 +27,25 @@ import {
 // więc dłuższe czekanie nic nie blokuje — a limit poniżej sumy round-tripów zostawiłby
 // firmy demo bez rezerwacji.
 const TRANSACTION_OPTIONS = { timeout: 30_000 };
+
+/**
+ * Zdarzenie, które „doprowadziło" rezerwację demo do jej stanu — potrzebne, żeby dzwoneczek
+ * (#54) nie był po seedzie pusty. Powiadomienia powstają normalnie tylko w locie, przy realnych
+ * operacjach, a seed wstawia rezerwacje wprost do bazy.
+ *
+ * PENDING to nie przejście, a stan początkowy, więc odpowiada mu 'CREATED'; COMPLETED domyka cron
+ * i nie ma adresata. Reszta statusów jest własnym zdarzeniem.
+ */
+const notificationEventFor = (status: BookingStatus): BookingEvent | null => {
+  if (status === BookingStatus.PENDING) return 'CREATED';
+  if (status === BookingStatus.COMPLETED) return null;
+  return status;
+};
+
+// Wizyty z przeszłości dostają powiadomienia przeczytane — inaczej po seedzie plakietka
+// pokazywałaby kilkanaście zaległości i nie dałoby się zobaczyć, jak działa licznik.
+const seededReadAt = (startsAt: Date, now: Date): Date | null =>
+  startsAt < now ? startsAt : null;
 
 /** Kategorie seedujemy zawsze — także tam, gdzie kont demo nie zakładamy. */
 export const seedCategories = async (prisma: PrismaClient): Promise<void> => {
@@ -237,6 +261,7 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
   // nie zwraca identyfikatorów, więc trzeba by dopytywać bazę o świeżo wstawione rezerwacje.
   // Kosztem jest kilkadziesiąt round-tripów zamiast dwóch, a transakcja interaktywna ma domyślny
   // limit 5 s — na wolniejszym połączeniu do bazy seed przerwałby się w połowie na P2028.
+  let notificationCount = 0;
   const removed = await prisma.$transaction(async (tx) => {
     const { count } = await tx.booking.deleteMany({
       where: { businessId: { in: [...businessIds.values()] } },
@@ -246,7 +271,29 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
       const clientId = userIds.get(spec.clientEmail) as string;
       const businessId = businessIds.get(spec.businessSlug) as string;
 
-      await tx.booking.create({
+      const created = await tx.booking.create({
+        // select komplet danych dla szablonu powiadomienia — te same pola, które w aplikacji
+        // dobiera NotificationsService, więc treść z seeda jest identyczna z produkcyjną
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          clientNote: true,
+          client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+          business: {
+            select: {
+              name: true,
+              slug: true,
+              street: true,
+              city: true,
+              postalCode: true,
+              phone: true,
+              ownerId: true,
+            },
+          },
+          service: { select: { name: true, durationMin: true, priceCents: true } },
+          employee: { select: { name: true } },
+        },
         data: {
           clientId,
           businessId,
@@ -272,6 +319,24 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
             : undefined,
         },
       });
+
+      const event = notificationEventFor(spec.status);
+      const recipient = event ? BOOKING_EVENT_RECIPIENT[event] : null;
+      const rendered = event
+        ? renderBookingNotification(event, created.id, created)
+        : null;
+      if (recipient && rendered) {
+        await tx.notification.create({
+          data: {
+            ...rendered,
+            bookingId: created.id,
+            userId:
+              recipient === 'CLIENT' ? created.client.id : created.business.ownerId,
+            readAt: seededReadAt(created.startsAt, now),
+          },
+        });
+        notificationCount++;
+      }
     }
 
     return count;
@@ -283,6 +348,6 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
     `Dane demo: ${DEMO_USERS.length} użytkowników, ${DEMO_BUSINESSES.length} firm, ` +
       `${employeeIds.size} pracowników, ${serviceIds.size} usług, ` +
       `${bookings.length} rezerwacji (usunięto poprzednie: ${removed}), ` +
-      `${reviewCount} recenzji.`,
+      `${reviewCount} recenzji, ${notificationCount} powiadomień.`,
   );
 };

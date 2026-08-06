@@ -90,7 +90,7 @@ const MOCK = {
   past: [booking('b3', 'COMPLETED', false, 'Masaż')],
 };
 
-async function setup(response: unknown = MOCK) {
+async function setup(response: unknown = MOCK, url = '/client') {
   localStorage.clear();
   localStorage.setItem(
     'bookit.accessToken',
@@ -109,7 +109,7 @@ async function setup(response: unknown = MOCK) {
   });
 
   const harness = await RouterTestingHarness.create();
-  await harness.navigateByUrl('/client', MyBookings);
+  await harness.navigateByUrl(url, MyBookings);
   const http = TestBed.inject(HttpTestingController);
   http.expectOne('/api/bookings/mine').flush(response);
   await settle(harness.fixture);
@@ -539,6 +539,43 @@ describe('MyBookings', () => {
       });
 
       expect(ctx.text()).not.toContain('Zaliczka');
+    });
+  });
+
+  // deep-link z powiadomienia in-app (#54): „klik prowadzi do wizyty"
+  describe('?booking=', () => {
+    const card = (ctx: Awaited<ReturnType<typeof setup>>, id: string) =>
+      ctx.el().querySelector(`#booking-${id}`);
+
+    it('wskazana wizyta z historii przełącza zakładkę i podświetla kartę', async () => {
+      const ctx = await setup(MOCK, '/client?booking=b3');
+
+      expect(ctx.tabs()[1].getAttribute('aria-selected')).toBe('true');
+      expect(ctx.text()).toContain('Masaż');
+      expect(card(ctx, 'b3')?.className).toContain('ring-brand-600');
+      // podświetlona jest dokładnie jedna karta
+      expect(ctx.el().querySelectorAll('.ring-brand-600')).toHaveLength(1);
+    });
+
+    it('wskazana wizyta zostaje wyfokusowana — użytkownik klawiatury trafia do celu', async () => {
+      const ctx = await setup(MOCK, '/client?booking=b3');
+
+      expect(document.activeElement).toBe(card(ctx, 'b3'));
+    });
+
+    it('nadchodząca wizyta zostaje w pierwszej zakładce', async () => {
+      const ctx = await setup(MOCK, '/client?booking=b2');
+
+      expect(ctx.tabs()[0].getAttribute('aria-selected')).toBe('true');
+      expect(card(ctx, 'b2')?.className).toContain('ring-brand-600');
+    });
+
+    it('nieznane id nie psuje widoku ani nie zmienia zakładki', async () => {
+      const ctx = await setup(MOCK, '/client?booking=nie-ma-takiej');
+
+      expect(ctx.tabs()[0].getAttribute('aria-selected')).toBe('true');
+      expect(ctx.text()).toContain('Strzyżenie męskie');
+      expect(ctx.el().querySelectorAll('.ring-brand-600')).toHaveLength(0);
     });
   });
 

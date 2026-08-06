@@ -33,6 +33,13 @@ describe('App', () => {
     expect(compiled.querySelector('nav')?.textContent).toContain('Zaloguj');
   });
 
+  it('niezalogowany nie ma dzwoneczka powiadomień (#54)', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('app-notification-bell')).toBeNull();
+  });
+
   it('OWNER zalogowany — plakietka pokazuje liczbę oczekujących rezerwacji z API (#33)', async () => {
     localStorage.setItem(
       'bookit.accessToken',
@@ -44,11 +51,15 @@ describe('App', () => {
     const http = TestBed.inject(HttpTestingController);
     const req = http.expectOne((r) => r.url.startsWith('/api/businesses/mine/bookings'));
     req.flush([{ status: 'PENDING' }, { status: 'PENDING' }, { status: 'CONFIRMED' }]);
+    // dzwoneczek (#54) odpytuje licznik nieprzeczytanych dla każdej zalogowanej roli —
+    // bez tego flusha verify() w afterEach wywaliłby ten test na zaległym żądaniu
+    http.expectOne('/api/notifications/unread-count').flush({ unread: 0 });
     await fixture.whenStable();
     fixture.detectChanges();
 
     const link = fixture.nativeElement.querySelector('nav a[href="/business"]');
     expect(link?.textContent).toContain('Panel firmy');
     expect(link?.textContent).toContain('2');
+    expect(fixture.nativeElement.querySelector('app-notification-bell')).not.toBeNull();
   });
 });
