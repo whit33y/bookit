@@ -32,7 +32,17 @@ function readStored(): Locale {
  * `inject()`, a aplikacja jest zoneless — to odczyt sygnału w wyrażeniu szablonu decyduje
  * o ponownym renderze. Sygnał modułowy daje jedno i drugie za darmo.
  */
+/** WCAG 3.1.1: czytnik ekranu dobiera fonetykę po atrybucie lang, a index.html ma na sztywno
+ *  lang="pl" jako wartość startową. */
+function applyDocumentLang(locale: Locale): void {
+  document.documentElement.lang = locale;
+}
+
 const localeSignal = signal<Locale>(readStored());
+
+// Wołane przy imporcie, nie tylko w setLocale: po odświeżeniu strony język wraca z localStorage
+// bez żadnego kliknięcia, a bez tego angielskie UI zostawałoby z lang="pl" z index.html.
+applyDocumentLang(localeSignal());
 
 /** Aktualny język UI. Odczyt w szablonie/`computed` = automatyczne odświeżenie po zmianie. */
 export const currentLocale = localeSignal.asReadonly();
@@ -45,9 +55,7 @@ export function localeTag(): string {
 export function setLocale(locale: Locale): void {
   localStorage.setItem(LOCALE_KEY, locale);
   localeSignal.set(locale);
-  // WCAG 3.1.1: czytnik ekranu dobiera fonetykę po atrybucie lang, a index.html ma na sztywno
-  // lang="pl" jako wartość startową
-  document.documentElement.lang = locale;
+  applyDocumentLang(locale);
 }
 
 /** Reset do stanu po pierwszym wejściu — dla testów. Sygnał jest modułowy, więc bez tego
@@ -55,5 +63,5 @@ export function setLocale(locale: Locale): void {
 export function resetLocale(): void {
   localStorage.removeItem(LOCALE_KEY);
   localeSignal.set(DEFAULT_LOCALE);
-  document.documentElement.lang = DEFAULT_LOCALE;
+  applyDocumentLang(DEFAULT_LOCALE);
 }

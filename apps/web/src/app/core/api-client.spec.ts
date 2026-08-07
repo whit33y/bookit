@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { describe, expect, it } from 'vitest';
 import { apiErrorMessage } from './api-client';
+import { setLocale } from './i18n/locale';
 
 const httpError = (status: number, error: unknown) =>
   new HttpErrorResponse({ status, error });
@@ -56,5 +57,33 @@ describe('apiErrorMessage', () => {
 
   it('radzi sobie z błędem, który nie jest odpowiedzią HTTP', () => {
     expect(apiErrorMessage(new Error('boom'))).toBe('Coś poszło nie tak. Spróbuj ponownie.');
+  });
+
+  describe('po angielsku (#57)', () => {
+    it('tłumaczy kopertę po kodzie zamiast pokazywać polski message z serwera', () => {
+      setLocale('en');
+      const err = httpError(409, {
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'Wybrany termin jest już zajęty',
+      });
+
+      expect(apiErrorMessage(err)).toBe(
+        'The data changed in the meantime. Refresh the page and try again.',
+      );
+    });
+
+    // kształt koperty przechodzi walidację przy dowolnym `code: string` — nieznany kod
+    // (nowy po stronie API, obca koperta) nie może skończyć się pustym alertem
+    it('nieznany kod dostaje ogólny komunikat, nie pusty string', () => {
+      setLocale('en');
+      const err = httpError(402, {
+        statusCode: 402,
+        code: 'PAYMENT_FAILED',
+        message: 'Płatność odrzucona',
+      });
+
+      expect(apiErrorMessage(err)).toBe('Something went wrong. Please try again.');
+    });
   });
 });

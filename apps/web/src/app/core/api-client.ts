@@ -83,7 +83,11 @@ function apiErrorBody(err: unknown): ApiErrorBody | null {
 export function apiErrorMessage(err: unknown): string {
   const body = apiErrorBody(err);
   if (body) {
-    return currentLocale() === 'pl' ? body.message : translate(CODE_KEYS[body.code]);
+    // `code` przechodzi walidację jako dowolny string, więc mapa może go nie znać — nowy kod
+    // po stronie API albo obca koperta o tym samym kształcie. Bez fallbacku translate() dostałoby
+    // undefined i oddało pusty komunikat.
+    const key = CODE_KEYS[body.code] ?? 'api.error.generic';
+    return currentLocale() === 'pl' ? body.message : translate(key);
   }
   if (err instanceof HttpErrorResponse) {
     const key = STATUS_KEYS[err.status];
