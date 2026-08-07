@@ -12,13 +12,16 @@ import { apply, form } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import AppFormField, {
   passwordSchema,
   submitAuthForm,
 } from '../form-field/form-field';
 
 // kontrakt z backendowym auth.service.ts — tylko ten 400 oznacza zużyty/wygasły token;
-// inne 400 (np. przyszła walidacja DTO hasła) mają trafić do serverError
+// inne 400 (np. przyszła walidacja DTO hasła) mają trafić do serverError.
+// Celowo polski literał i celowo poza słownikiem (#57): to porównanie z odpowiedzią serwera,
+// nie tekst dla użytkownika — przetłumaczony przestałby pasować.
 const EXPIRED_TOKEN_MESSAGE = 'Nieprawidłowy lub wygasły token';
 
 const isExpiredTokenError = (err: unknown) =>
@@ -40,18 +43,18 @@ const isExpiredTokenError = (err: unknown) =>
             tabindex="-1"
             class="text-2xl font-bold outline-none"
           >
-            Link nieaktywny
+            {{ i18n.t('auth.reset.expiredTitle') }}
           </h1>
           <p role="alert" class="alert-danger mt-4">
-            Link do resetu hasła wygasł lub został już użyty.
+            {{ i18n.t('auth.reset.expiredBody') }}
           </p>
           <a routerLink="/forgot-password" class="btn-primary mt-6 block text-center"
-            >Wyślij nowy link</a
+            >{{ i18n.t('auth.reset.newLink') }}</a
           >
         } @else {
-          <h1 class="text-2xl font-bold">Ustaw nowe hasło</h1>
+          <h1 class="text-2xl font-bold">{{ i18n.t('auth.reset.title') }}</h1>
           <p class="mt-1 text-sm text-stone-500">
-            Wpisz nowe hasło do swojego konta
+            {{ i18n.t('auth.reset.subtitle') }}
           </p>
 
           @if (serverError(); as msg) {
@@ -64,7 +67,7 @@ const isExpiredTokenError = (err: unknown) =>
             <app-form-field
               [field]="resetForm.password"
               fieldId="password"
-              label="Nowe hasło"
+              [label]="i18n.t('auth.field.newPassword')"
               type="password"
               autocomplete="new-password"
             />
@@ -75,7 +78,9 @@ const isExpiredTokenError = (err: unknown) =>
               class="btn-primary mt-6"
             >
               {{
-                resetForm().submitting() ? 'Zapisywanie…' : 'Ustaw nowe hasło'
+                resetForm().submitting()
+                  ? i18n.t('auth.reset.submitting')
+                  : i18n.t('auth.reset.submit')
               }}
             </button>
           </form>
@@ -86,6 +91,7 @@ const isExpiredTokenError = (err: unknown) =>
 })
 export default class ResetPassword {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly auth = inject(AuthStore);
   private readonly token =
     inject(ActivatedRoute).snapshot.queryParamMap.get('token') ?? '';

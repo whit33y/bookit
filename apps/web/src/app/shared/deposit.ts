@@ -8,6 +8,8 @@
  * zaliczce dopiero po wysłaniu formularza, jednym komunikatem nad całą formą, bez wskazania pola.
  */
 
+import { translate } from '../core/i18n/translate';
+
 /** FIXED → depositValue w groszach, PERCENT → w procentach ceny (1–100). */
 export type DepositType = 'FIXED' | 'PERCENT';
 
@@ -40,8 +42,9 @@ export const depositAmountCents = ({
   return Math.round((priceCents * depositValue) / 100);
 };
 
-/** Polski komunikat błędu albo null, gdy zaliczka jest poprawna — dokładnie te same stringi
- *  co backendowe `depositError`, żeby walidacja frontowa i 400 z serwera mówiły to samo. */
+/** Komunikat błędu w języku UI albo null, gdy zaliczka jest poprawna. Polskie brzmienie to
+ *  dokładnie te same stringi co w backendowym `depositError` (patrz `pl.ts`), żeby walidacja
+ *  frontowa i 400 z serwera mówiły to samo. */
 export const depositError = (fields: DepositFields): string | null => {
   const { depositType, depositValue, priceCents } = fields;
 
@@ -49,7 +52,7 @@ export const depositError = (fields: DepositFields): string | null => {
     return null;
   }
   if (depositType === null || depositValue === null) {
-    return 'Typ i wartość zaliczki ustawia się razem';
+    return translate('deposit.error.typeAndValueTogether');
   }
 
   if (depositType === 'PERCENT') {
@@ -57,21 +60,24 @@ export const depositError = (fields: DepositFields): string | null => {
       depositValue < MIN_DEPOSIT_PERCENT ||
       depositValue > MAX_DEPOSIT_PERCENT
     ) {
-      return `Zaliczka procentowa to ${MIN_DEPOSIT_PERCENT}–${MAX_DEPOSIT_PERCENT}% ceny`;
+      return translate('deposit.error.percentRange', {
+        min: MIN_DEPOSIT_PERCENT,
+        max: MAX_DEPOSIT_PERCENT,
+      });
     }
     // procent z groszowej ceny może się zaokrąglić do zera — takiej płatności Stripe nie pobierze
     if ((depositAmountCents(fields) ?? 0) < 1) {
-      return 'Zaliczka po przeliczeniu wychodzi 0 gr — podnieś procent albo cenę usługi';
+      return translate('deposit.error.roundsToZero');
     }
     return null;
   }
 
   if (depositValue < 1) {
-    return 'Kwota zaliczki musi być większa od zera';
+    return translate('deposit.error.mustBePositive');
   }
   // cena 0 gr wpada tutaj: żadna dodatnia zaliczka nie jest od niej mniejsza ani równa
   if (depositValue > priceCents) {
-    return 'Zaliczka nie może być wyższa niż cena usługi';
+    return translate('deposit.error.exceedsPrice');
   }
   return null;
 };

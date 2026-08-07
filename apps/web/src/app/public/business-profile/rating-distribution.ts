@@ -1,5 +1,6 @@
-import { Component, computed, input } from '@angular/core';
-import { pluralPl } from '../../shared/plural-pl';
+import { Component, computed, inject, input } from '@angular/core';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate, translatePlural } from '../../core/i18n/translate';
 
 /** Stopnie od najwyższego — histogram czyta się 5→1, jak wszędzie indziej w sieci. */
 const RATINGS = [5, 4, 3, 2, 1] as const;
@@ -29,7 +30,10 @@ interface DistributionRow {
     @if (total()) {
       <!-- lista dostaje nazwę, bo w spisie elementów czytnika ekranu stoi obok listy opinii
            i bez niej obie są nierozróżnialne (AC: „całość ma sensowną etykietę") -->
-      <ul aria-label="Rozkład ocen" class="mb-6 max-w-md space-y-1.5">
+      <ul
+        [attr.aria-label]="i18n.t('rating.distribution.listLabel')"
+        class="mb-6 max-w-md space-y-1.5"
+      >
         @for (row of rows(); track row.rating) {
           <li>
             <!-- Wzorzec z ui/rating-stars.ts: wnętrze wiersza jest w całości aria-hidden,
@@ -69,6 +73,8 @@ interface DistributionRow {
 export default class RatingDistributionChart {
   readonly distribution = input.required<RatingDistribution>();
 
+  protected readonly i18n = inject(I18nStore);
+
   protected readonly total = computed(() =>
     RATINGS.reduce((sum, rating) => sum + this.count(rating), 0),
   );
@@ -86,9 +92,11 @@ export default class RatingDistributionChart {
         rating,
         count,
         percent,
-        label:
-          `${rating} ${pluralPl(rating, 'gwiazdka', 'gwiazdki', 'gwiazdek')}: ` +
-          `${count} ${pluralPl(count, 'opinia', 'opinie', 'opinii')}, ${percent}% ocen`,
+        label: translate('rating.distribution.rowLabel', {
+          stars: translatePlural('rating.starCount', rating),
+          reviews: translatePlural('rating.reviewCount', count),
+          percent,
+        }),
       };
     });
   });

@@ -1,4 +1,5 @@
-import { Component, input, linkedSignal, output } from '@angular/core';
+import { Component, inject, input, linkedSignal, output } from '@angular/core';
+import { I18nStore } from '../core/i18n/i18n-store';
 import { BlockedFilter, MAX_QUERY_LENGTH } from './admin-list-params';
 
 export interface AdminFilters {
@@ -39,7 +40,7 @@ export interface AdminFilters {
 
       <div class="sm:w-52">
         <label for="admin-status" class="mb-1.5 block text-sm font-medium">
-          Status
+          {{ i18n.t('admin.toolbar.status') }}
         </label>
         <select
           id="admin-status"
@@ -48,21 +49,23 @@ export interface AdminFilters {
           (change)="onBlockedChange($event)"
           class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
         >
-          <option value="">Wszystkie</option>
+          <option value="">{{ i18n.t('admin.toolbar.all') }}</option>
           <option value="false">{{ activeLabel() }}</option>
           <option value="true">{{ blockedLabel() }}</option>
         </select>
       </div>
 
       <div class="flex gap-2">
-        <button type="submit" class="btn-primary w-auto">Szukaj</button>
+        <button type="submit" class="btn-primary w-auto">
+          {{ i18n.t('admin.toolbar.search') }}
+        </button>
         @if (hasFilters()) {
           <button
             type="button"
             (click)="onReset()"
             class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
-            Wyczyść
+            {{ i18n.t('admin.toolbar.reset') }}
           </button>
         }
       </div>
@@ -70,6 +73,8 @@ export interface AdminFilters {
   `,
 })
 export default class AdminToolbar {
+  protected readonly i18n = inject(I18nStore);
+
   readonly q = input('');
   readonly blocked = input<BlockedFilter>(null);
   readonly searchLabel = input.required<string>();

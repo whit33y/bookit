@@ -12,6 +12,8 @@ import {
 } from '@angular/core';
 import type { Stripe, StripeElements } from '@stripe/stripe-js';
 import { StripeLoader } from '../../shared/payments/stripe-loader';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 
 /** Ile zostało do wygaśnięcia rezerwacji, w pełnych sekundach (0 = już po). */
@@ -54,25 +56,24 @@ export function formatCountdown(seconds: number): string {
         tabindex="-1"
         class="text-lg font-bold outline-none"
       >
-        4. Zapłać zaliczkę
+        {{ i18n.t('deposit.payment.title') }}
       </h2>
 
       <p class="mt-2 text-sm leading-relaxed text-stone-600">
-        Termin jest już zarezerwowany. Zachowasz go, opłacając zaliczkę
+        {{ i18n.t('deposit.payment.intro') }}
         <strong class="font-semibold">{{ amountCents() | pricePln }}</strong
-        >; resztę zapłacisz na miejscu.
+        >{{ i18n.t('deposit.payment.introSuffix') }}
       </p>
 
       @if (expired()) {
         <p role="alert" class="alert-danger mt-4">
-          Czas na opłacenie zaliczki minął — rezerwacja wygasła, a termin wrócił do puli
-          wolnych. Wybierz go jeszcze raz, jeśli nadal jest dostępny.
+          {{ i18n.t('deposit.payment.expired') }}
         </p>
       } @else {
         <p class="mt-4 text-sm font-medium text-stone-500">
-          Termin czeka na płatność jeszcze
+          {{ i18n.t('deposit.payment.countdownPrefix') }}
           <span class="font-bold tabular-nums text-stone-800">{{ countdown() }}</span>
-          min.
+          {{ i18n.t('deposit.payment.countdownSuffix') }}
         </p>
       }
 
@@ -80,9 +81,7 @@ export function formatCountdown(seconds: number): string {
         <!-- Bez „odśwież stronę": client_secret żyje wyłącznie w pamięci tej instancji,
              więc przeładowanie odbiera jedyną możliwość zapłaty zamiast ją przywracać -->
         <p role="alert" class="alert-danger mt-4">
-          Nie udało się załadować formularza płatności, a bez niego nie opłacisz tej
-          rezerwacji — termin zwolni się po upływie odliczania. Spróbuj zarezerwować go
-          ponownie, najlepiej bez blokera treści albo w innej przeglądarce.
+          {{ i18n.t('deposit.payment.loadError') }}
         </p>
       }
 
@@ -91,7 +90,9 @@ export function formatCountdown(seconds: number): string {
       <div #kontener class="mt-5" [class.hidden]="!ready()"></div>
 
       @if (!ready() && !loadError()) {
-        <p class="mt-5 text-sm text-stone-500">Ładowanie formularza płatności…</p>
+        <p class="mt-5 text-sm text-stone-500">
+          {{ i18n.t('deposit.payment.formLoading') }}
+        </p>
       }
 
       @if (payError(); as msg) {
@@ -115,9 +116,13 @@ export function formatCountdown(seconds: number): string {
           class="btn-primary mt-5"
         >
           @if (submitting()) {
-            Przetwarzam płatność…
+            {{ i18n.t('deposit.payment.submitting') }}
           } @else {
-            Zapłać {{ amountCents() | pricePln }}
+            {{
+              i18n.t('deposit.payment.pay', {
+                amount: amountCents() | pricePln,
+              })
+            }}
           }
         </button>
       }
@@ -125,6 +130,7 @@ export function formatCountdown(seconds: number): string {
   `,
 })
 export default class DepositPayment {
+  protected readonly i18n = inject(I18nStore);
   private readonly stripeLoader = inject(StripeLoader);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -234,7 +240,7 @@ export default class DepositPayment {
         // zgadnąć („odmowa banku", „zły kod CVC") — własny komunikat zostaje na wypadek,
         // gdy SDK nie ma nic do powiedzenia
         this.payError.set(
-          error.message ?? 'Nie udało się pobrać zaliczki — spróbuj ponownie.',
+          error.message ?? translate('deposit.payment.unknownError'),
         );
         return;
       }
@@ -250,11 +256,11 @@ export default class DepositPayment {
       }
 
       this.payError.set(
-        'Płatność nie została zakończona — spróbuj ponownie lub wybierz inną metodę.',
+        translate('deposit.payment.notCompleted'),
       );
     } catch {
       this.payError.set(
-        'Nie udało się połączyć z operatorem płatności — spróbuj ponownie.',
+        translate('deposit.payment.processorError'),
       );
     } finally {
       // przycisk wraca do gry: ten sam client_secret obsłuży kolejną próbę

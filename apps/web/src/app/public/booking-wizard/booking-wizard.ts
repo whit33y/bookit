@@ -12,6 +12,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { AuthStore } from '../../core/auth/auth-store';
 import {
   formatDateTime,
@@ -126,33 +128,32 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
             @switch (result) {
               @case ('paid') {
                 <p class="mt-3 text-sm leading-relaxed text-stone-600">
-                  Dziękujemy — termin jest opłacony. Firma potwierdzi wizytę, a status
-                  znajdziesz w sekcji „Moje wizyty".
+                  {{ i18n.t('booking.redirect.paidBody') }}
                 </p>
               }
               @case ('failed') {
                 <!-- świadomie bez „zapłać ponownie w Moich wizytach": ponowienie żyje tylko
                      w kreatorze, dopóki trzyma client_secret, a ten po przekierowaniu przepadł -->
                 <p role="alert" class="alert-danger mt-3">
-                  Nie otrzymaliśmy zaliczki, więc ta rezerwacja wygaśnie i termin wróci
-                  do puli wolnych. Zarezerwuj go jeszcze raz, jeśli nadal jest dostępny.
+                  {{ i18n.t('booking.redirect.failedBody') }}
                 </p>
               }
               @default {
                 <!-- nie wiemy, czy pieniądze wyszły — najgorsze, co można tu zrobić, to
                      wypchnąć klienta w drugą płatność za tę samą wizytę -->
                 <p role="alert" class="alert-danger mt-3">
-                  Nie udało się sprawdzić, czy płatność doszła do skutku. Nie płać
-                  drugi raz — aktualny stan zaliczki znajdziesz w sekcji „Moje wizyty".
+                  {{ i18n.t('booking.redirect.unknownBody') }}
                 </p>
               }
             }
             <div class="mt-6 flex flex-wrap gap-3">
-              <a routerLink="/client" class="btn-primary w-auto">Moje wizyty</a>
+              <a routerLink="/client" class="btn-primary w-auto">{{
+                i18n.t('booking.myBookings')
+              }}</a>
               <a
                 routerLink="../"
                 class="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                >Wróć do profilu firmy</a
+                >{{ i18n.t('booking.backToProfile') }}</a
               >
             </div>
           </section>
@@ -165,7 +166,11 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               tabindex="-1"
               class="text-xl font-bold tracking-tight outline-none sm:text-2xl"
             >
-              {{ awaitingDeposit() ? 'Termin zarezerwowany' : 'Rezerwacja przyjęta' }}
+              {{
+                awaitingDeposit()
+                  ? i18n.t('booking.confirmation.titleAwaitingDeposit')
+                  : i18n.t('booking.confirmation.titleAccepted')
+              }}
             </h1>
             <p
               class="mt-3 inline-block rounded-full px-3 py-1 text-sm font-semibold"
@@ -177,25 +182,39 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
             >
               {{
                 awaitingDeposit()
-                  ? 'Czeka na opłacenie zaliczki'
-                  : 'Oczekuje na akceptację firmy'
+                  ? i18n.t('booking.confirmation.awaitingDeposit')
+                  : i18n.t('booking.confirmation.awaitingBusiness')
               }}
             </p>
 
             <dl class="mt-6 grid gap-3 text-sm sm:grid-cols-[10rem_1fr]">
-              <dt class="font-semibold text-stone-600">Firma</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('booking.summary.business') }}
+              </dt>
               <dd class="font-medium">{{ b.name }}</dd>
-              <dt class="font-semibold text-stone-600">Usługa</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('booking.summary.service') }}
+              </dt>
               <dd class="font-medium">{{ selectedService()?.name }}</dd>
-              <dt class="font-semibold text-stone-600">Pracownik</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('booking.summary.employee') }}
+              </dt>
               <dd class="font-medium">{{ employeeName(booking.employeeId) }}</dd>
-              <dt class="font-semibold text-stone-600">Termin</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('booking.summary.slot') }}
+              </dt>
               <dd class="font-medium">{{ dateTime(booking.startsAt) }}</dd>
               @if (booking.payment; as payment) {
-                <dt class="font-semibold text-stone-600">Zaliczka</dt>
+                <dt class="font-semibold text-stone-600">
+                  {{ i18n.t('booking.summary.depositRow') }}
+                </dt>
                 <dd class="font-medium">
                   {{ payment.amountCents | pricePln }}
-                  {{ awaitingDeposit() ? '— do opłacenia' : '— opłacona' }}
+                  {{
+                    awaitingDeposit()
+                      ? i18n.t('booking.confirmation.depositToPay')
+                      : i18n.t('booking.confirmation.depositPaid')
+                  }}
                 </dd>
               }
             </dl>
@@ -213,13 +232,12 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                 />
               } @else {
                 <p class="mt-6 text-sm text-stone-500">
-                  Zaliczka została opłacona. Firma potwierdzi wizytę — status znajdziesz
-                  w sekcji „Moje wizyty".
+                  {{ i18n.t('booking.confirmation.depositPaidNote') }}
                 </p>
               }
             } @else {
               <p class="mt-6 text-sm text-stone-500">
-                Firma potwierdzi wizytę — status znajdziesz w sekcji „Moje wizyty".
+                {{ i18n.t('booking.confirmation.willConfirm') }}
               </p>
             }
 
@@ -228,11 +246,13 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                  czym wyjść, zamiast szukać przycisku wstecz -->
             @if (!awaitingDeposit() || depositUnavailable()) {
               <div class="mt-6 flex flex-wrap gap-3">
-                <a routerLink="/client" class="btn-primary w-auto">Moje wizyty</a>
+                <a routerLink="/client" class="btn-primary w-auto">{{
+                  i18n.t('booking.myBookings')
+                }}</a>
                 <a
                   routerLink="../"
                   class="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                  >Wróć do profilu firmy</a
+                  >{{ i18n.t('booking.backToProfile') }}</a
                 >
               </div>
             }
@@ -244,17 +264,24 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
             >← {{ b.name }}</a
           >
           <h1 class="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
-            Rezerwacja terminu
+            {{ i18n.t('booking.title') }}
           </h1>
           <p class="mt-1 text-sm font-medium text-stone-500" role="status">
-            Krok {{ currentStep() }} z {{ totalSteps() }}
+            {{
+              i18n.t('booking.step', {
+                current: currentStep(),
+                total: totalSteps(),
+              })
+            }}
           </p>
 
           <section
             aria-labelledby="krok-1"
             class="mt-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-card"
           >
-            <h2 id="krok-1" class="text-lg font-bold">1. Wybierz usługę</h2>
+            <h2 id="krok-1" class="text-lg font-bold">
+              {{ i18n.t('booking.step1') }}
+            </h2>
             @if (b.services.length) {
               <ul class="mt-4 grid gap-3 sm:grid-cols-2">
                 @for (s of b.services; track s.id) {
@@ -272,7 +299,12 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                     >
                       <span class="block text-sm font-bold">{{ s.name }}</span>
                       <span class="mt-1 block text-[13px] text-stone-500">
-                        {{ s.durationMin }} min · {{ s.priceCents | pricePln }}
+                        {{
+                          i18n.t('booking.service.meta', {
+                            minutes: s.durationMin,
+                            price: s.priceCents | pricePln,
+                          })
+                        }}
                       </span>
                       <!-- AC: „kwota zaliczki widoczna przed potwierdzeniem" — już przy
                            wyborze usługi, a nie dopiero w podsumowaniu -->
@@ -280,7 +312,11 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                         <span
                           class="mt-2 inline-block rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"
                         >
-                          Zaliczka {{ deposit | pricePln }} online
+                          {{
+                            i18n.t('booking.deposit.badge', {
+                              amount: deposit | pricePln,
+                            })
+                          }}
                         </span>
                       }
                     </button>
@@ -290,7 +326,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
             } @else {
               <app-empty-state
                 class="mt-4"
-                title="Ta firma nie ma jeszcze aktywnych usług."
+                [title]="i18n.t('booking.noServices')"
               />
             }
           </section>
@@ -300,10 +336,12 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               aria-labelledby="krok-2"
               class="mt-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-card"
             >
-              <h2 id="krok-2" class="text-lg font-bold">2. Wybierz pracownika</h2>
+              <h2 id="krok-2" class="text-lg font-bold">
+                {{ i18n.t('booking.step2') }}
+              </h2>
               @if (svc.employees.length) {
                 <fieldset class="mt-4">
-                  <legend class="sr-only">Pracownik</legend>
+                  <legend class="sr-only">{{ i18n.t('booking.staff.legend') }}</legend>
                   <div class="grid gap-2">
                     <label
                       class="flex cursor-pointer items-center gap-3 rounded-lg border border-stone-200 px-4 py-2.5 text-sm font-medium transition hover:bg-stone-50 focus-within:ring-2 focus-within:ring-brand-ring"
@@ -315,7 +353,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                         [checked]="employeeId() === anyEmployee"
                         (change)="selectEmployee(anyEmployee)"
                       />
-                      Dowolny pracownik
+                      {{ i18n.t('booking.staff.any') }}
                     </label>
                     @for (e of svc.employees; track e.id) {
                       <label
@@ -336,7 +374,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               } @else {
                 <app-empty-state
                   class="mt-4"
-                  title="Ta usługa nie ma jeszcze przypisanych pracowników."
+                  [title]="i18n.t('booking.noStaff')"
                 />
               }
             </section>
@@ -346,7 +384,9 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                 aria-labelledby="krok-3"
                 class="mt-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-card"
               >
-                <h2 id="krok-3" class="text-lg font-bold">3. Wybierz termin</h2>
+                <h2 id="krok-3" class="text-lg font-bold">
+                  {{ i18n.t('booking.step3') }}
+                </h2>
 
                 @if (bookingError(); as msg) {
                   <!-- tabindex + focus: przy 409 znika całe podsumowanie razem z przyciskiem
@@ -362,7 +402,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                 }
 
                 <label for="data" class="mb-1.5 mt-4 block text-sm font-medium"
-                  >Dzień</label
+                  >{{ i18n.t('booking.field.day') }}</label
                 >
                 <input
                   id="data"
@@ -375,7 +415,10 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
 
                 @if (date()) {
                   @if (slotsLoading()) {
-                    <app-loading-state class="mt-4" message="Ładowanie terminów…" />
+                    <app-loading-state
+                      class="mt-4"
+                      [message]="i18n.t('booking.slotsLoading')"
+                    />
                   } @else if (slotsError(); as msg) {
                     <app-error-state
                       class="mt-4"
@@ -406,7 +449,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                   } @else {
                     <app-empty-state
                       class="mt-4"
-                      title="Brak wolnych terminów w tym dniu."
+                      [title]="i18n.t('booking.noSlots')"
                     />
                   }
                 }
@@ -418,22 +461,41 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                 aria-labelledby="podsumowanie"
                 class="mt-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-card"
               >
-                <h2 id="podsumowanie" class="text-lg font-bold">Podsumowanie</h2>
+                <h2 id="podsumowanie" class="text-lg font-bold">
+                  {{ i18n.t('booking.summary.title') }}
+                </h2>
                 <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-[10rem_1fr]">
-                  <dt class="font-semibold text-stone-600">Usługa</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('booking.summary.service') }}
+                  </dt>
                   <dd class="font-medium">
-                    {{ svc.name }} ({{ svc.durationMin }} min)
+                    {{
+                      i18n.t('booking.summary.serviceWithDuration', {
+                        name: svc.name,
+                        minutes: svc.durationMin,
+                      })
+                    }}
                   </dd>
-                  <dt class="font-semibold text-stone-600">Pracownik</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('booking.summary.employee') }}
+                  </dt>
                   <dd class="font-medium">{{ employeeName(slot.employeeId) }}</dd>
-                  <dt class="font-semibold text-stone-600">Termin</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('booking.summary.slot') }}
+                  </dt>
                   <dd class="font-medium">{{ dateTime(slot.startsAt) }}</dd>
-                  <dt class="font-semibold text-stone-600">Cena</dt>
+                  <dt class="font-semibold text-stone-600">
+                    {{ i18n.t('booking.summary.price') }}
+                  </dt>
                   <dd class="font-medium">{{ svc.priceCents | pricePln }}</dd>
                   @if (depositCents(); as deposit) {
-                    <dt class="font-semibold text-stone-600">Zaliczka (online)</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('booking.summary.deposit') }}
+                    </dt>
                     <dd class="font-medium">{{ deposit | pricePln }}</dd>
-                    <dt class="font-semibold text-stone-600">Do zapłaty na miejscu</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('booking.summary.payOnSite') }}
+                    </dt>
                     <dd class="font-medium">
                       {{ svc.priceCents - deposit | pricePln }}
                     </dd>
@@ -442,13 +504,12 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
 
                 @if (depositCents()) {
                   <p class="mt-4 text-[13px] leading-relaxed text-stone-500">
-                    Ta usługa wymaga zaliczki. Po kliknięciu przycisku przejdziesz do
-                    płatności — termin czeka zarezerwowany przez 15 minut.
+                    {{ i18n.t('booking.deposit.notice') }}
                   </p>
                 }
 
                 <label for="notatka" class="mb-1.5 mt-5 block text-sm font-medium"
-                  >Notatka dla firmy (opcjonalnie)</label
+                  >{{ i18n.t('booking.field.note') }}</label
                 >
                 <textarea
                   id="notatka"
@@ -460,13 +521,17 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                   class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
                 ></textarea>
                 <p id="notatka-licznik" class="mt-1 text-[13px] text-stone-500">
-                  {{ clientNote().length }} / 500 znaków
+                  {{
+                    i18n.t('booking.field.noteCounter', {
+                      used: clientNote().length,
+                      max: 500,
+                    })
+                  }}
                 </p>
 
                 @if (!isLoggedIn()) {
                   <p class="mt-4 text-sm text-stone-500">
-                    Dokończenie rezerwacji wymaga zalogowania. Przeniesiemy Cię na
-                    stronę logowania i wrócisz tutaj z zachowanym wyborem.
+                    {{ i18n.t('booking.loginNotice') }}
                   </p>
                 }
 
@@ -492,6 +557,7 @@ export default class BookingWizard {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly stripeLoader = inject(StripeLoader);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly anyEmployee = ANY_EMPLOYEE;
   protected readonly minDate = todayInBusinessTz();
@@ -585,9 +651,11 @@ export default class BookingWizard {
     viewChild<ElementRef<HTMLParagraphElement>>('bladZapisu');
 
   protected readonly submitLabel = computed(() => {
-    if (this.submitting()) return 'Rezerwuję…';
-    if (!this.isLoggedIn()) return 'Zaloguj się i zarezerwuj';
-    return this.depositCents() ? 'Zarezerwuj i zapłać zaliczkę' : 'Rezerwuj';
+    if (this.submitting()) return translate('booking.submit.submitting');
+    if (!this.isLoggedIn()) return translate('booking.submit.loginAndBook');
+    return this.depositCents()
+      ? translate('booking.submit.bookAndPay')
+      : translate('booking.submit.book');
   });
 
   /** Adres powrotu dla metod płatności z przekierowaniem — bezwzględny, bo trafia do Stripe'a. */
@@ -604,10 +672,10 @@ export default class BookingWizard {
   }
 
   protected redirectHeading(result: 'paid' | 'failed' | 'unknown'): string {
-    if (result === 'paid') return 'Zaliczka opłacona';
+    if (result === 'paid') return translate('booking.redirect.paidTitle');
     return result === 'failed'
-      ? 'Płatność niedokończona'
-      : 'Nie znamy statusu płatności';
+      ? translate('booking.redirect.failedTitle')
+      : translate('booking.redirect.unknownTitle');
   }
 
   constructor() {

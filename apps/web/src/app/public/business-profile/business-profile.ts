@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import { DepositType, depositAmountCents } from '../../shared/deposit';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
@@ -70,7 +71,7 @@ function initials(name: string): string {
   template: `
     @if (loading()) {
       <div class="flex flex-1 items-center justify-center px-4 py-16">
-        <app-loading-state message="Ładowanie profilu…" />
+        <app-loading-state [message]="i18n.t('profile.loading')" />
       </div>
     } @else if (notFound()) {
       <app-not-found />
@@ -113,7 +114,7 @@ function initials(name: string): string {
             <div class="mb-8 grid gap-4 sm:grid-cols-2">
               <div class="rounded-xl border border-stone-200 bg-stone-50 p-5">
                 <h2 class="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-600">
-                  Kontakt
+                  {{ i18n.t('profile.contact') }}
                 </h2>
                 <p class="text-sm font-medium">{{ b.street }}</p>
                 <p class="text-sm font-medium">
@@ -128,7 +129,7 @@ function initials(name: string): string {
               <app-map class="rounded-xl" [lat]="b.lat" [lng]="b.lng" />
             </div>
 
-            <h2 class="mb-4 text-lg font-bold">Usługi</h2>
+            <h2 class="mb-4 text-lg font-bold">{{ i18n.t('profile.services') }}</h2>
             @if (b.services.length) {
               <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 @for (s of b.services; track s.id) {
@@ -136,7 +137,7 @@ function initials(name: string): string {
                     <div class="mb-1 flex items-start justify-between gap-2">
                       <h3 class="text-sm font-bold">{{ s.name }}</h3>
                       <span class="whitespace-nowrap rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600">
-                        {{ s.durationMin }} min
+                        {{ i18n.t('profile.duration', { minutes: s.durationMin }) }}
                       </span>
                     </div>
                     @if (s.description) {
@@ -146,7 +147,11 @@ function initials(name: string): string {
                          w kreatorze — klient nie ma się o niej dowiadywać po kliknięciu -->
                     @if (depositFor(s); as deposit) {
                       <p class="mt-2 text-[13px] font-semibold text-brand-700">
-                        Zaliczka {{ deposit | pricePln }} płatna online
+                        {{
+                          i18n.t('profile.deposit', {
+                            amount: deposit | pricePln,
+                          })
+                        }}
                       </p>
                     }
                     <div class="mt-4 flex items-center justify-between">
@@ -155,10 +160,12 @@ function initials(name: string): string {
                         <a
                           routerLink="rezerwacja"
                           [queryParams]="{ serviceId: s.id }"
-                          [attr.aria-label]="'Zarezerwuj: ' + s.name"
+                          [attr.aria-label]="
+                            i18n.t('profile.bookAria', { service: s.name })
+                          "
                           class="inline-block rounded-md bg-brand-700 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                         >
-                          Zarezerwuj
+                          {{ i18n.t('profile.book') }}
                         </a>
                       } @else {
                         <!-- bez pracownika nie ma czego rezerwować — wizard skończyłby się
@@ -166,10 +173,10 @@ function initials(name: string): string {
                         <button
                           type="button"
                           disabled
-                          title="Ta usługa nie ma jeszcze przypisanych pracowników"
+                          [title]="i18n.t('profile.noStaffTitle')"
                           class="rounded-md bg-brand-700 px-3 py-1.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Zarezerwuj
+                          {{ i18n.t('profile.book') }}
                         </button>
                       }
                     </div>
@@ -177,11 +184,11 @@ function initials(name: string): string {
                 }
               </div>
             } @else {
-              <app-empty-state title="Ta firma nie ma jeszcze aktywnych usług." />
+              <app-empty-state [title]="i18n.t('profile.noServices')" />
             }
 
             @if (b.employees.length) {
-              <h2 class="mb-4 mt-8 text-lg font-bold">Zespół</h2>
+              <h2 class="mb-4 mt-8 text-lg font-bold">{{ i18n.t('profile.team') }}</h2>
               <ul class="flex flex-wrap gap-4">
                 @for (e of b.employees; track e.id) {
                   <li class="flex items-center gap-3">
@@ -205,6 +212,7 @@ function initials(name: string): string {
 export default class BusinessProfile {
   private readonly api = inject(ApiClient);
   private readonly route = inject(ActivatedRoute);
+  protected readonly i18n = inject(I18nStore);
   private slug = '';
 
   protected readonly business = signal<PublicBusiness | null>(null);

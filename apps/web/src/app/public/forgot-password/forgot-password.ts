@@ -10,6 +10,7 @@ import { RouterLink } from '@angular/router';
 import { apply, form } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
 import AppFormField, {
   emailSchema,
   submitAuthForm,
@@ -25,23 +26,22 @@ import AppFormField, {
       >
         @if (sent()) {
           <h1 #sentHeading tabindex="-1" class="text-2xl font-bold outline-none">
-            Sprawdź skrzynkę
+            {{ i18n.t('auth.forgot.sentTitle') }}
           </h1>
           <p role="status" class="mt-4 text-sm text-stone-500">
-            Jeśli konto istnieje, wysłaliśmy link do resetu hasła na podany
-            adres.
+            {{ i18n.t('auth.forgot.sentBody') }}
           </p>
           <p class="mt-6 text-center text-sm">
             <a
               routerLink="/login"
               class="font-medium text-brand-700 hover:text-brand-800"
-              >Wróć do logowania</a
+              >{{ i18n.t('auth.backToLogin') }}</a
             >
           </p>
         } @else {
-          <h1 class="text-2xl font-bold">Nie pamiętasz hasła?</h1>
+          <h1 class="text-2xl font-bold">{{ i18n.t('auth.forgot.title') }}</h1>
           <p class="mt-1 text-sm text-stone-500">
-            Podaj email, a wyślemy Ci link do ustawienia nowego hasła
+            {{ i18n.t('auth.forgot.subtitle') }}
           </p>
 
           @if (serverError(); as msg) {
@@ -54,7 +54,7 @@ import AppFormField, {
             <app-form-field
               [field]="forgotForm.email"
               fieldId="email"
-              label="Email"
+              [label]="i18n.t('auth.field.email')"
               type="email"
               autocomplete="email"
             />
@@ -64,7 +64,11 @@ import AppFormField, {
               [disabled]="forgotForm().submitting()"
               class="btn-primary mt-6"
             >
-              {{ forgotForm().submitting() ? 'Wysyłanie…' : 'Wyślij link' }}
+              {{
+                forgotForm().submitting()
+                  ? i18n.t('auth.forgot.submitting')
+                  : i18n.t('auth.forgot.submit')
+              }}
             </button>
           </form>
 
@@ -72,7 +76,7 @@ import AppFormField, {
             <a
               routerLink="/login"
               class="font-medium text-brand-700 hover:text-brand-800"
-              >Wróć do logowania</a
+              >{{ i18n.t('auth.backToLogin') }}</a
             >
           </p>
         }
@@ -82,6 +86,7 @@ import AppFormField, {
 })
 export default class ForgotPassword {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly sentHeading =
     viewChild<ElementRef<HTMLElement>>('sentHeading');
 

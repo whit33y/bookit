@@ -4,6 +4,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../core/api-client';
+import { I18nStore } from '../core/i18n/i18n-store';
+import type { TranslationKey } from '../core/i18n/pl';
+import { translate } from '../core/i18n/translate';
 import { formatDateTime } from '../shared/business-time';
 import { PricePlnPipe } from '../shared/price-pln.pipe';
 import EmptyState from '../shared/ui/empty-state';
@@ -93,13 +96,14 @@ type Tab = 'upcoming' | 'past';
 // Lustro STATUS_LABELS z apps/api/src/app/bookings/booking-status.ts, ale w mianowniku i z
 // wielkiej litery — tam etykiety wpadają w środek zdania („Rezerwacja jest odwołana…"),
 // tutaj stoją samodzielnie w badge'u.
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  PENDING: 'Oczekująca',
-  CONFIRMED: 'Potwierdzona',
-  DECLINED: 'Odrzucona',
-  CANCELLED_BY_CLIENT: 'Odwołana przez Ciebie',
-  CANCELLED_BY_BUSINESS: 'Odwołana przez firmę',
-  COMPLETED: 'Zakończona',
+const STATUS_KEYS: Record<BookingStatus, TranslationKey> = {
+  PENDING: 'status.pending',
+  CONFIRMED: 'status.confirmed',
+  DECLINED: 'status.declined',
+  // „przez Ciebie", nie „przez klienta": to jego własna lista wizyt (panel firmy ma swój wariant)
+  CANCELLED_BY_CLIENT: 'status.cancelledByYou',
+  CANCELLED_BY_BUSINESS: 'status.cancelledByBusiness',
+  COMPLETED: 'status.completed',
 };
 
 // Odcienie 700 na tle 50/100 — kontrast ponad 4.5:1 (WCAG AA). Kolor tylko dubluje etykietę,
@@ -116,12 +120,12 @@ const STATUS_CLASSES: Record<BookingStatus, string> = {
 // Stan zaliczki (#53). Etykiety nazywają rzecz z punktu widzenia klienta („zaliczka
 // niepobrana"), a nie stanem PaymentIntenta — `CANCELLED` na płatności znaczy tyle, że
 // rezerwacja wygasła nieopłacona i nikt nic nie pobrał.
-const PAYMENT_LABELS: Record<PaymentStatus, string> = {
-  PENDING: 'oczekuje na opłacenie',
-  SUCCEEDED: 'opłacona',
-  FAILED: 'płatność nieudana',
-  CANCELLED: 'niepobrana — rezerwacja wygasła',
-  REFUNDED: 'zwrócona',
+const PAYMENT_KEYS: Record<PaymentStatus, TranslationKey> = {
+  PENDING: 'payment.status.pending',
+  SUCCEEDED: 'payment.status.succeeded',
+  FAILED: 'payment.status.failed',
+  CANCELLED: 'payment.status.cancelled',
+  REFUNDED: 'payment.status.refunded',
 };
 
 // Te same odcienie 700 na tłach 50/100 co przy statusie wizyty — kontrast ponad 4.5:1,
@@ -147,10 +151,12 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
   ],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
-      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Moje wizyty</h1>
+      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
+        {{ i18n.t('myBookings.title') }}
+      </h1>
 
       @if (loading()) {
-        <app-loading-state class="mt-6" message="Ładowanie wizyt…" />
+        <app-loading-state class="mt-6" [message]="i18n.t('myBookings.loading')" />
       } @else if (serverError(); as msg) {
         <!-- pusta lista i nieudane pobranie to dwie różne rzeczy: bez tej gałęzi klient
              z wizytami zobaczyłby „nie masz zaplanowanych wizyt" pod komunikatem o błędzie -->
@@ -163,7 +169,7 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
       } @else {
         <div
           role="tablist"
-          aria-label="Zakres wizyt"
+          [attr.aria-label]="i18n.t('myBookings.tablistLabel')"
           class="mt-6 flex gap-2 border-b border-stone-200"
         >
           @for (t of tabs; track t.id) {
@@ -183,7 +189,12 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                   : 'border-transparent text-stone-500 hover:text-stone-800'
               "
             >
-              {{ t.label }} ({{ count(t.id) }})
+              {{
+                i18n.t('myBookings.tabWithCount', {
+                  label: i18n.t(t.labelKey),
+                  count: count(t.id),
+                })
+              }}
             </button>
           }
         </div>
@@ -225,26 +236,42 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                   </div>
 
                   <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
-                    <dt class="font-semibold text-stone-600">Termin</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('myBookings.field.slot') }}
+                    </dt>
                     <dd class="font-medium">{{ dateTime(b.startsAt) }}</dd>
-                    <dt class="font-semibold text-stone-600">Pracownik</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('myBookings.field.employee') }}
+                    </dt>
                     <dd class="font-medium">{{ b.employee.name }}</dd>
-                    <dt class="font-semibold text-stone-600">Czas i cena</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('myBookings.field.durationAndPrice') }}
+                    </dt>
                     <dd class="font-medium">
-                      {{ b.service.durationMin }} min ·
-                      {{ b.service.priceCents | pricePln }}
+                      {{
+                        i18n.t('myBookings.durationAndPrice', {
+                          minutes: b.service.durationMin,
+                          price: b.service.priceCents | pricePln,
+                        })
+                      }}
                     </dd>
-                    <dt class="font-semibold text-stone-600">Adres</dt>
+                    <dt class="font-semibold text-stone-600">
+                      {{ i18n.t('myBookings.field.address') }}
+                    </dt>
                     <dd class="font-medium">
                       {{ b.business.street }}, {{ b.business.postalCode }}
                       {{ b.business.city }}
                     </dd>
                     @if (b.business.phone; as phone) {
-                      <dt class="font-semibold text-stone-600">Telefon</dt>
+                      <dt class="font-semibold text-stone-600">
+                        {{ i18n.t('myBookings.field.phone') }}
+                      </dt>
                       <dd class="font-medium">{{ phone }}</dd>
                     }
                     @if (b.payment; as payment) {
-                      <dt class="font-semibold text-stone-600">Zaliczka</dt>
+                      <dt class="font-semibold text-stone-600">
+                        {{ i18n.t('myBookings.field.deposit') }}
+                      </dt>
                       <dd class="font-medium">
                         {{ payment.amountCents | pricePln }}
                         <span
@@ -255,7 +282,9 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                       </dd>
                     }
                     @if (b.clientNote; as note) {
-                      <dt class="font-semibold text-stone-600">Twoja notatka</dt>
+                      <dt class="font-semibold text-stone-600">
+                        {{ i18n.t('myBookings.field.note') }}
+                      </dt>
                       <dd class="font-medium">{{ note }}</dd>
                     }
                   </dl>
@@ -273,7 +302,11 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                       (click)="onCancel(b)"
                       class="mt-4 rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 disabled:text-stone-400"
                     >
-                      {{ isCancelling(b.id) ? 'Odwoływanie…' : 'Odwołaj wizytę' }}
+                      {{
+                        isCancelling(b.id)
+                          ? i18n.t('myBookings.cancelling')
+                          : i18n.t('myBookings.cancel')
+                      }}
                     </button>
                   } @else if (b.status === 'CONFIRMED' && tab() === 'upcoming') {
                     <!-- Jedyny powód, dla którego *nadchodząca* potwierdzona wizyta traci
@@ -291,7 +324,7 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                   @if (b.review; as review) {
                     <div class="mt-4 border-t border-stone-100 pt-4">
                       <p class="text-xs font-semibold uppercase tracking-wider text-stone-400">
-                        Twoja ocena
+                        {{ i18n.t('myBookings.reviewGiven') }}
                       </p>
                       <app-rating-stars class="mt-1.5" [value]="review.rating" />
                       @if (review.comment; as comment) {
@@ -300,7 +333,11 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                         </p>
                       }
                       <p class="mt-1.5 text-[13px] text-stone-400">
-                        Wystawiona {{ dateTime(review.createdAt) }}
+                        {{
+                          i18n.t('myBookings.reviewGivenAt', {
+                            when: dateTime(review.createdAt),
+                          })
+                        }}
                       </p>
                     </div>
                   } @else if (canReview(b)) {
@@ -309,7 +346,7 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                       (click)="openReview(b)"
                       class="mt-4 rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                     >
-                      Oceń wizytę
+                      {{ i18n.t('myBookings.review') }}
                     </button>
                   }
                 </li>
@@ -338,12 +375,13 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
 export default class MyBookings {
   private readonly api = inject(ApiClient);
   private readonly route = inject(ActivatedRoute);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly dateTime = formatDateTime;
   protected readonly tabs = [
-    { id: 'upcoming', label: 'Nadchodzące' },
-    { id: 'past', label: 'Historia' },
-  ] as const satisfies readonly { id: Tab; label: string }[];
+    { id: 'upcoming', labelKey: 'myBookings.tab.upcoming' },
+    { id: 'past', labelKey: 'myBookings.tab.past' },
+  ] as const satisfies readonly { id: Tab; labelKey: TranslationKey }[];
 
   protected readonly upcoming = signal<ClientBooking[]>([]);
   protected readonly past = signal<ClientBooking[]>([]);
@@ -383,8 +421,8 @@ export default class MyBookings {
 
   protected readonly emptyMessage = computed(() =>
     this.tab() === 'upcoming'
-      ? 'Nie masz zaplanowanych wizyt. Znajdź firmę i zarezerwuj termin.'
-      : 'Nie masz jeszcze minionych wizyt.',
+      ? translate('myBookings.empty.upcoming')
+      : translate('myBookings.empty.past'),
   );
 
   constructor() {
@@ -415,7 +453,7 @@ export default class MyBookings {
   }
 
   protected statusLabel(status: BookingStatus): string {
-    return STATUS_LABELS[status];
+    return this.i18n.t(STATUS_KEYS[status]);
   }
 
   protected statusClass(status: BookingStatus): string {
@@ -423,7 +461,7 @@ export default class MyBookings {
   }
 
   protected paymentLabel(status: PaymentStatus): string {
-    return PAYMENT_LABELS[status];
+    return this.i18n.t(PAYMENT_KEYS[status]);
   }
 
   protected paymentClass(status: PaymentStatus): string {
@@ -431,7 +469,7 @@ export default class MyBookings {
   }
 
   protected cancellationNote(hours: number): string {
-    return `Tę wizytę można było odwołać najpóźniej ${hours} h przed terminem — skontaktuj się z firmą.`;
+    return this.i18n.t('myBookings.cancellationNote', { hours });
   }
 
   protected selectTab(tab: Tab): void {
@@ -530,7 +568,10 @@ export default class MyBookings {
 
     // odwołanie jest nieodwracalne (stan terminalny w maszynie statusów) — pytamy przed akcją
     const ok = globalThis.confirm(
-      `Odwołać wizytę „${booking.service.name}" — ${formatDateTime(booking.startsAt)}?`,
+      translate('myBookings.cancelConfirm', {
+        service: booking.service.name,
+        when: formatDateTime(booking.startsAt),
+      }),
     );
     if (!ok) return;
 

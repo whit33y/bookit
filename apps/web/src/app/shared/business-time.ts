@@ -1,42 +1,36 @@
+import { dateTimeFormat, relativeTimeFormat } from '../core/i18n/intl';
+
 /** Lustro BUSINESS_TIMEZONE z apps/api/src/app/availability/business-time.ts. Backend zwraca
  *  instanty UTC (sloty, wizyty), a użytkownik myśli godzinami firmy — formatujemy jawnie w jej
  *  strefie, żeby przeglądarka spoza PL nie pokazała innej godziny niż grafik. */
 export const BUSINESS_TIMEZONE = 'Europe/Warsaw';
 
-const timeFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: BUSINESS_TIMEZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-const dateTimeFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: BUSINESS_TIMEZONE,
-  dateStyle: 'full',
-  timeStyle: 'short',
-});
-
-const dateFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: BUSINESS_TIMEZONE,
-  dateStyle: 'short',
-});
+/** Strefa zostaje `Europe/Warsaw` niezależnie od języka UI (#57) — zmienia się tylko locale
+ *  formatowania. Anglojęzyczny klient ma zobaczyć godzinę z grafiku firmy, a nie przeliczoną
+ *  na swoją strefę. */
+const inBusinessTz = (options: Intl.DateTimeFormatOptions) =>
+  dateTimeFormat({ ...options, timeZone: BUSINESS_TIMEZONE });
 
 /** Sama godzina w strefie firmy, np. „09:30". */
 export function formatTime(iso: string): string {
-  return timeFormat.format(new Date(iso));
+  return inBusinessTz({ hour: '2-digit', minute: '2-digit' }).format(
+    new Date(iso),
+  );
 }
 
-/** Pełna data i godzina w strefie firmy, np. „poniedziałek, 3 sierpnia 2026, 09:30". */
+/** Pełna data i godzina w strefie firmy, np. „poniedziałek, 3 sierpnia 2026, 09:30"
+ *  („Monday, 3 August 2026, 09:30" po angielsku). */
 export function formatDateTime(iso: string): string {
-  return dateTimeFormat.format(new Date(iso));
+  return inBusinessTz({ dateStyle: 'full', timeStyle: 'short' }).format(
+    new Date(iso),
+  );
 }
 
 /** Sama data w strefie firmy, np. „3.08.2026" — do komórek tabel, gdzie formatDateTime
  *  („poniedziałek, 3 sierpnia 2026, 09:30") rozpycha kolumnę. */
 export function formatDate(iso: string): string {
-  return dateFormat.format(new Date(iso));
+  return inBusinessTz({ dateStyle: 'short' }).format(new Date(iso));
 }
-
-const relativeFormat = new Intl.RelativeTimeFormat('pl', { numeric: 'auto' });
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -56,6 +50,7 @@ export function formatRelativeTime(iso: string, now = new Date()): string {
   if (absMs >= RELATIVE_LIMIT_MS) {
     return formatDate(iso);
   }
+  const relativeFormat = relativeTimeFormat({ numeric: 'auto' });
   // trunc, nie round: „1 godzinę temu" dla 90 minut to konwencja czasu względnego, a round
   // dodatkowo zaokrągla asymetrycznie dla wartości ujemnych (−1,5 → −1, ale 1,5 → 2)
   if (absMs < HOUR_MS) {

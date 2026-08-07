@@ -2,6 +2,8 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { todayInBusinessTz } from '../../shared/business-time';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import BarChart, { BarChartData } from '../../shared/ui/bar-chart';
@@ -11,7 +13,7 @@ import LoadingState from '../../shared/ui/loading-state';
 import { isCalendarDate } from '../calendar/calendar-date';
 import {
   STATUS_CLASSES,
-  STATUS_LABELS,
+  STATUS_KEYS,
 } from '../calendar/booking-details-dialog';
 import { buildStatsQueryParams, readStatsParams, statsPath } from './stats-params';
 import {
@@ -27,7 +29,7 @@ import {
 } from './stats-range';
 
 // lustrzane typy backendu (BusinessStats z apps/api/.../stats/stats.service.ts, #56)
-type BookingStatus = keyof typeof STATUS_LABELS;
+type BookingStatus = keyof typeof STATUS_KEYS;
 type StatusCounts = Record<BookingStatus, number>;
 
 interface SeriesBucket {
@@ -94,12 +96,14 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
   imports: [PricePlnPipe, BarChart, LoadingState, ErrorState, EmptyState],
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 py-8">
-      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">Statystyki</h1>
+      <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
+        {{ i18n.t('stats.title') }}
+      </h1>
 
       <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
         <div
           role="group"
-          aria-label="Zakres statystyk"
+          [attr.aria-label]="i18n.t('stats.range.groupLabel')"
           class="flex gap-1 rounded-lg border border-stone-200 p-1"
         >
           @for (option of presets; track option.value) {
@@ -114,7 +118,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
               "
               (click)="setPreset(option.value)"
             >
-              {{ option.label }}
+              {{ i18n.t(option.labelKey) }}
             </button>
           }
         </div>
@@ -122,7 +126,9 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
         @if (preset() === 'custom') {
           <div class="flex flex-wrap items-end gap-3">
             <div>
-              <label for="stats-from" class="mb-1.5 block text-sm font-medium">Od</label>
+              <label for="stats-from" class="mb-1.5 block text-sm font-medium">{{
+                i18n.t('stats.range.from')
+              }}</label>
               <input
                 id="stats-from"
                 type="date"
@@ -132,7 +138,9 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
               />
             </div>
             <div>
-              <label for="stats-to" class="mb-1.5 block text-sm font-medium">Do</label>
+              <label for="stats-to" class="mb-1.5 block text-sm font-medium">{{
+                i18n.t('stats.range.to')
+              }}</label>
               <input
                 id="stats-to"
                 type="date"
@@ -146,7 +154,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
           <div class="flex items-center gap-2">
             <button
               type="button"
-              aria-label="Poprzedni okres"
+              [attr.aria-label]="i18n.t('stats.nav.previous')"
               class="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
               (click)="navigate(-1)"
             >
@@ -157,7 +165,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
             }}</span>
             <button
               type="button"
-              aria-label="Następny okres"
+              [attr.aria-label]="i18n.t('stats.nav.next')"
               class="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
               (click)="navigate(1)"
             >
@@ -168,7 +176,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
               class="ml-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
               (click)="navigate('today')"
             >
-              Dziś
+              {{ i18n.t('stats.nav.today') }}
             </button>
           </div>
         }
@@ -179,7 +187,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
       }
 
       @if (loading()) {
-        <app-loading-state class="mt-8" message="Liczenie statystyk…" />
+        <app-loading-state class="mt-8" [message]="i18n.t('stats.loading')" />
       } @else if (serverError(); as msg) {
         <app-error-state
           class="mt-8"
@@ -191,13 +199,13 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
         <dl class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
             <dt class="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Rezerwacje
+              {{ i18n.t('stats.total.bookings') }}
             </dt>
             <dd class="mt-2 text-2xl font-bold tabular-nums">{{ data.totals.bookings }}</dd>
           </div>
           <div class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
             <dt class="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Zrealizowane wizyty
+              {{ i18n.t('stats.total.completed') }}
             </dt>
             <dd class="mt-2 text-2xl font-bold tabular-nums">
               {{ data.totals.completedBookings }}
@@ -205,7 +213,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
           </div>
           <div class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
             <dt class="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Przychód z wizyt
+              {{ i18n.t('stats.total.revenue') }}
             </dt>
             <dd class="mt-2 text-2xl font-bold tabular-nums">
               {{ data.totals.completedRevenueCents | pricePln }}
@@ -213,32 +221,40 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
           </div>
           <div class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
             <dt class="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Średnie obłożenie
+              {{ i18n.t('stats.total.occupancy') }}
             </dt>
             <dd class="mt-2 text-2xl font-bold tabular-nums">
               @if (data.totals.occupancyPercent === null) {
-                <span class="text-base font-semibold text-stone-400">brak grafiku</span>
+                <span class="text-base font-semibold text-stone-400">{{
+                  i18n.t('stats.total.noSchedule')
+                }}</span>
               } @else {
                 {{ data.totals.occupancyPercent }}%
               }
             </dd>
             <p class="mt-1 text-[13px] text-stone-500">
-              {{ formatMinutes(data.totals.bookedMinutes) }} z
-              {{ formatMinutes(data.totals.capacityMinutes) }}
+              {{
+                i18n.t('stats.total.occupancyRatio', {
+                  booked: formatMinutes(data.totals.bookedMinutes),
+                  capacity: formatMinutes(data.totals.capacityMinutes),
+                })
+              }}
             </p>
           </div>
         </dl>
 
         @if (data.totals.bookings) {
           <section class="mt-6 rounded-xl border border-stone-200 bg-white p-6 shadow-card">
-            <h2 class="text-base font-bold">Rezerwacje wg statusu w czasie</h2>
+            <h2 class="text-base font-bold">{{ i18n.t('stats.chart.title') }}</h2>
             <p class="mt-1 text-sm text-stone-500">{{ granularityHint() }}</p>
             <app-bar-chart
               class="mt-4"
               [data]="chartData()"
-              [caption]="'Rezerwacje wg statusu: ' + periodLabel()"
+              [caption]="i18n.t('stats.chart.caption', { period: periodLabel() })"
               [categoryHeader]="
-                data.range.granularity === 'week' ? 'Tydzień od' : 'Dzień'
+                data.range.granularity === 'week'
+                  ? i18n.t('stats.chart.columnWeek')
+                  : i18n.t('stats.chart.columnDay')
               "
             />
             <ul class="mt-4 flex flex-wrap gap-2">
@@ -247,7 +263,7 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
                   class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
                   [class]="statusClasses[row.status]"
                 >
-                  {{ statusLabels[row.status] }}
+                  {{ i18n.t(statusKeys[row.status]) }}
                   <span class="tabular-nums">{{ row.count }}</span>
                 </li>
               }
@@ -255,28 +271,34 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
           </section>
 
           <section class="mt-6 rounded-xl border border-stone-200 bg-white p-6 shadow-card">
-            <h2 class="text-base font-bold">Najpopularniejsze usługi</h2>
+            <h2 class="text-base font-bold">{{ i18n.t('stats.top.title') }}</h2>
             <p class="mt-1 text-sm text-stone-500">
-              Bez rezerwacji odwołanych i odrzuconych.
+              {{ i18n.t('stats.top.subtitle') }}
             </p>
             @if (data.topServices.length) {
               <div
                 class="mt-4 overflow-x-auto"
                 tabindex="0"
                 role="region"
-                aria-label="Tabela najpopularniejszych usług"
+                [attr.aria-label]="i18n.t('stats.top.tableLabel')"
               >
                 <table class="w-full min-w-[28rem] text-left text-sm">
                   <caption class="sr-only">
-                    Najpopularniejsze usługi w okresie {{ periodLabel() }}
+                    {{ i18n.t('stats.top.caption', { period: periodLabel() }) }}
                   </caption>
                   <thead
                     class="border-b border-stone-200 text-[11px] font-semibold uppercase tracking-wider text-stone-500"
                   >
                     <tr>
-                      <th scope="col" class="py-2 pr-4">Usługa</th>
-                      <th scope="col" class="py-2 pr-4 text-right">Rezerwacje</th>
-                      <th scope="col" class="py-2 text-right">Przychód</th>
+                      <th scope="col" class="py-2 pr-4">
+                        {{ i18n.t('stats.top.column.service') }}
+                      </th>
+                      <th scope="col" class="py-2 pr-4 text-right">
+                        {{ i18n.t('stats.top.column.bookings') }}
+                      </th>
+                      <th scope="col" class="py-2 text-right">
+                        {{ i18n.t('stats.top.column.revenue') }}
+                      </th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-stone-100">
@@ -295,25 +317,31 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
                 </table>
               </div>
             } @else {
-              <app-empty-state class="mt-4" title="Brak usług do pokazania." />
+              <app-empty-state
+                class="mt-4"
+                [title]="i18n.t('stats.empty.noServices')"
+              />
             }
           </section>
         } @else {
           <app-empty-state
             class="mt-6"
             [boxed]="true"
-            title="Brak rezerwacji w wybranym okresie."
-            description="Zmień zakres dat, żeby zobaczyć wykres i najpopularniejsze usługi."
+            [title]="i18n.t('stats.empty.noBookings')"
+            [description]="i18n.t('stats.empty.noBookingsHint')"
           />
         }
 
         <section class="mt-6 rounded-xl border border-stone-200 bg-white p-6 shadow-card">
-          <h2 class="text-base font-bold">Obłożenie pracowników</h2>
+          <h2 class="text-base font-bold">{{ i18n.t('stats.occupancy.title') }}</h2>
           <p class="mt-1 text-sm text-stone-500">
-            Zajęty czas w stosunku do grafiku pomniejszonego o urlopy.
+            {{ i18n.t('stats.occupancy.subtitle') }}
           </p>
           @if (data.employees.length) {
-            <ul aria-label="Obłożenie pracowników" class="mt-4 space-y-3">
+            <ul
+              [attr.aria-label]="i18n.t('stats.occupancy.title')"
+              class="mt-4 space-y-3"
+            >
               @for (row of occupancyRows(); track row.employeeId) {
                 <li>
                   <!-- Wzorzec z rating-distribution.ts: wnętrze wiersza aria-hidden, całość
@@ -343,14 +371,22 @@ const STATUS_SERIES: { status: BookingStatus; color: string }[] = [
                       aria-hidden="true"
                       class="w-44 shrink-0 text-right text-[13px] font-medium tabular-nums text-stone-500"
                     >
-                      {{ row.percentText }} · {{ row.minutesText }}
+                      {{
+                        i18n.t('stats.occupancy.rowSummary', {
+                          percent: row.percentText,
+                          booked: row.minutesText,
+                        })
+                      }}
                     </span>
                   </span>
                 </li>
               }
             </ul>
           } @else {
-            <app-empty-state class="mt-4" title="Firma nie ma jeszcze pracowników." />
+            <app-empty-state
+              class="mt-4"
+              [title]="i18n.t('stats.empty.noEmployees')"
+            />
           }
         </section>
       }
@@ -361,9 +397,10 @@ export default class BusinessStats {
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly presets = STATS_PRESETS;
-  protected readonly statusLabels = STATUS_LABELS;
+  protected readonly statusKeys = STATUS_KEYS;
   protected readonly statusClasses = STATUS_CLASSES;
   protected readonly formatMinutes = formatMinutes;
 
@@ -383,8 +420,8 @@ export default class BusinessStats {
 
   protected readonly granularityHint = computed(() =>
     this.stats()?.range.granularity === 'week'
-      ? 'Kubełki tygodniowe — zakres dłuższy niż miesiąc.'
-      : 'Kubełki dzienne.',
+      ? translate('stats.granularity.week')
+      : translate('stats.granularity.day'),
   );
 
   /** Serie tylko dla statusów, które w tym okresie wystąpiły — inaczej legenda to sam szum. */
@@ -399,7 +436,7 @@ export default class BusinessStats {
       ),
       series: STATUS_SERIES.filter(({ status }) => data.totals.byStatus[status] > 0).map(
         ({ status, color }) => ({
-          label: STATUS_LABELS[status],
+          label: translate(STATUS_KEYS[status]),
           color,
           data: data.series.map((bucket) => bucket.byStatus[status]),
         }),
@@ -421,7 +458,9 @@ export default class BusinessStats {
   protected readonly occupancyRows = computed(() =>
     (this.stats()?.employees ?? []).map((row) => {
       const percentText =
-        row.occupancyPercent === null ? 'brak grafiku' : `${row.occupancyPercent}%`;
+        row.occupancyPercent === null
+          ? translate('stats.total.noSchedule')
+          : `${row.occupancyPercent}%`;
       const minutesText = formatMinutes(row.bookedMinutes);
       return {
         ...row,
@@ -430,9 +469,13 @@ export default class BusinessStats {
         barPercent: Math.min(row.occupancyPercent ?? 0, 100),
         percentText,
         minutesText,
-        label:
-          `${row.name}: obłożenie ${percentText}, ${minutesText} zajętego czasu ` +
-          `z ${formatMinutes(row.capacityMinutes)} grafiku, ${row.bookings} rezerwacji`,
+        label: translate('stats.occupancy.label', {
+          name: row.name,
+          percent: percentText,
+          booked: minutesText,
+          capacity: formatMinutes(row.capacityMinutes),
+          bookings: row.bookings,
+        }),
       };
     }),
   );
@@ -497,7 +540,7 @@ export default class BusinessStats {
     }
     const next = { ...this.range(), [bound]: value };
     if (next.to < next.from) {
-      this.rangeError.set('Data „do" nie może być wcześniejsza niż „od".');
+      this.rangeError.set(translate('stats.rangeError.toBeforeFrom'));
       return;
     }
     this.rangeError.set(null);

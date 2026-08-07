@@ -14,6 +14,8 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatDateTime, formatTime } from '../../shared/business-time';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import type { TranslationKey } from '../../core/i18n/pl';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import { PendingCountStore } from '../pending-count-store';
 
@@ -51,13 +53,13 @@ export interface BookingChangedEvent {
 
 // mirror STATUS_LABELS/STATUS_CLASSES z client/my-bookings.ts — te same 6 statusów, ten sam
 // schemat kolorów sprawdzony pod kątem kontrastu AA (odcienie 700 na tle 50/100)
-export const STATUS_LABELS: Record<BookingStatus, string> = {
-  PENDING: 'Oczekująca',
-  CONFIRMED: 'Potwierdzona',
-  DECLINED: 'Odrzucona',
-  CANCELLED_BY_CLIENT: 'Odwołana przez klienta',
-  CANCELLED_BY_BUSINESS: 'Odwołana przez firmę',
-  COMPLETED: 'Zakończona',
+export const STATUS_KEYS: Record<BookingStatus, TranslationKey> = {
+  PENDING: 'status.pending',
+  CONFIRMED: 'status.confirmed',
+  DECLINED: 'status.declined',
+  CANCELLED_BY_CLIENT: 'status.cancelledByClient',
+  CANCELLED_BY_BUSINESS: 'status.cancelledByBusiness',
+  COMPLETED: 'status.completed',
 };
 
 export const STATUS_CLASSES: Record<BookingStatus, string> = {
@@ -92,27 +94,47 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
             <span
               class="shrink-0 rounded-full px-3 py-1 text-[13px] font-semibold"
               [class]="statusClasses[b.status]"
-              >{{ statusLabels[b.status] }}</span
+              >{{ i18n.t(statusKeys[b.status]) }}</span
             >
           </div>
 
           <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
-            <dt class="font-semibold text-stone-600">Klient</dt>
+            <dt class="font-semibold text-stone-600">
+              {{ i18n.t('bookingDetails.field.client') }}
+            </dt>
             <dd class="font-medium">{{ b.client.firstName }} {{ b.client.lastName }}</dd>
             @if (b.client.phone; as phone) {
-              <dt class="font-semibold text-stone-600">Telefon</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('bookingDetails.field.phone') }}
+              </dt>
               <dd class="font-medium">{{ phone }}</dd>
             }
-            <dt class="font-semibold text-stone-600">Termin</dt>
+            <dt class="font-semibold text-stone-600">
+              {{ i18n.t('bookingDetails.field.slot') }}
+            </dt>
             <dd class="font-medium">
-              {{ formatDateTime(b.startsAt) }} – {{ formatTime(b.endsAt) }}
+              {{
+                i18n.t('bookingDetails.slotRange', {
+                  from: formatDateTime(b.startsAt),
+                  to: formatTime(b.endsAt),
+                })
+              }}
             </dd>
-            <dt class="font-semibold text-stone-600">Czas i cena</dt>
+            <dt class="font-semibold text-stone-600">
+              {{ i18n.t('bookingDetails.field.durationAndPrice') }}
+            </dt>
             <dd class="font-medium">
-              {{ b.service.durationMin }} min · {{ b.service.priceCents | pricePln }}
+              {{
+                i18n.t('bookingDetails.durationAndPrice', {
+                  minutes: b.service.durationMin,
+                  price: b.service.priceCents | pricePln,
+                })
+              }}
             </dd>
             @if (b.clientNote; as note) {
-              <dt class="font-semibold text-stone-600">Notatka klienta</dt>
+              <dt class="font-semibold text-stone-600">
+                {{ i18n.t('bookingDetails.field.note') }}
+              </dt>
               <dd class="font-medium">{{ note }}</dd>
             }
           </dl>
@@ -124,8 +146,12 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
           @if (canAct() && confirmingCancel()) {
             <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4">
               <p class="text-sm font-medium text-rose-800">
-                Na pewno odwołać wizytę „{{ b.service.name }}" —
-                {{ formatDateTime(b.startsAt) }}? Klient zostanie o tym poinformowany.
+                {{
+                  i18n.t('bookingDetails.cancelConfirm', {
+                    service: b.service.name,
+                    when: formatDateTime(b.startsAt),
+                  })
+                }}
               </p>
               <div class="mt-3 flex gap-2">
                 <button
@@ -134,7 +160,11 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
                   (click)="onConfirmCancel()"
                   class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-rose-800 disabled:opacity-60"
                 >
-                  {{ busy() ? 'Odwoływanie…' : 'Tak, odwołaj' }}
+                  {{
+                    busy()
+                      ? i18n.t('bookingDetails.cancelling')
+                      : i18n.t('bookingDetails.cancelConfirmYes')
+                  }}
                 </button>
                 <button
                   type="button"
@@ -142,7 +172,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
                   (click)="onCancelCancel()"
                   class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
                 >
-                  Anuluj
+                  {{ i18n.t('bookingDetails.cancelBack') }}
                 </button>
               </div>
             </div>
@@ -155,7 +185,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
                   (click)="onAccept()"
                   class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-emerald-800 disabled:opacity-60"
                 >
-                  Zaakceptuj
+                  {{ i18n.t('bookingDetails.accept') }}
                 </button>
                 <button
                   type="button"
@@ -163,7 +193,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
                   (click)="onReject()"
                   class="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
                 >
-                  Odrzuć
+                  {{ i18n.t('bookingDetails.reject') }}
                 </button>
               }
               <button
@@ -172,7 +202,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
                 (click)="onRequestCancel()"
                 class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:opacity-60"
               >
-                Odwołaj
+                {{ i18n.t('bookingDetails.cancel') }}
               </button>
             </div>
           }
@@ -182,7 +212,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
             class="mt-6 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50"
             (click)="dialogEl().nativeElement.close()"
           >
-            Zamknij
+            {{ i18n.t('bookingDetails.close') }}
           </button>
         </div>
       }
@@ -191,6 +221,7 @@ export const STATUS_CLASSES: Record<BookingStatus, string> = {
 })
 export default class BookingDetailsDialog {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly authStore = inject(AuthStore);
   private readonly pendingCountStore = inject(PendingCountStore);
 
@@ -203,7 +234,7 @@ export default class BookingDetailsDialog {
 
   protected readonly dialogEl =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
-  protected readonly statusLabels = STATUS_LABELS;
+  protected readonly statusKeys = STATUS_KEYS;
   protected readonly statusClasses = STATUS_CLASSES;
   protected readonly formatDateTime = formatDateTime;
   protected readonly formatTime = formatTime;

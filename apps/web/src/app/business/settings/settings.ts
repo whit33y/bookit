@@ -11,6 +11,8 @@ import {
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import AppFormField, {
   submitAuthForm,
 } from '../../public/form-field/form-field';
@@ -34,8 +36,12 @@ interface Business {
 
 // Lustrzane do UpdateBusinessDto (apps/api) — patterny i długości takie same.
 const POSTAL_CODE = /^\d{2}-\d{3}$/;
+const NAME_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 2000;
 const STREET_MAX_LENGTH = 120;
 const CITY_MAX_LENGTH = 80;
+const CANCELLATION_HOURS_MIN = 0;
+const CANCELLATION_HOURS_MAX = 720;
 const PHONE = /^\+?[0-9\s-]{7,20}$/;
 
 @Component({
@@ -46,13 +52,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
       <section
         class="w-full max-w-2xl rounded-xl border border-stone-200 bg-white p-8 shadow-card"
       >
-        <h1 class="text-2xl font-bold">Ustawienia firmy</h1>
-        <p class="mt-1 text-sm text-stone-500">
-          Edytuj profil swojej firmy i politykę odwołań
-        </p>
+        <h1 class="text-2xl font-bold">{{ i18n.t('settings.title') }}</h1>
+        <p class="mt-1 text-sm text-stone-500">{{ i18n.t('settings.subtitle') }}</p>
 
         @if (loading()) {
-          <app-loading-state class="mt-6" message="Ładowanie danych firmy…" />
+          <app-loading-state class="mt-6" [message]="i18n.t('settings.loading')" />
         } @else if (loadError(); as msg) {
           <app-error-state
             class="mt-4"
@@ -69,7 +73,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               role="status"
               class="mt-4 rounded-lg bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700"
             >
-              Zapisano zmiany
+              {{ i18n.t('settings.saved') }}
             </p>
           }
 
@@ -77,12 +81,15 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
             <app-form-field
               [field]="settingsForm.name"
               fieldId="name"
-              label="Nazwa firmy"
+              [label]="i18n.t('businessForm.field.name')"
             />
 
             <div class="mt-4">
               <label for="description" class="mb-1.5 block text-sm font-medium">
-                Opis <span class="text-stone-400">(opcjonalnie)</span>
+                {{ i18n.t('businessForm.field.description') }}
+                <span class="text-stone-400">{{
+                  i18n.t('businessForm.field.descriptionOptional')
+                }}</span>
               </label>
               <textarea
                 [formField]="settingsForm.description"
@@ -96,7 +103,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               class="mt-4"
               [field]="settingsForm.phone"
               fieldId="phone"
-              label="Telefon (opcjonalnie)"
+              [label]="i18n.t('businessForm.field.phone')"
               type="tel"
               autocomplete="tel"
             />
@@ -106,18 +113,18 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
                 class="sm:col-span-3"
                 [field]="settingsForm.street"
                 fieldId="street"
-                label="Ulica i numer"
+                [label]="i18n.t('businessForm.field.street')"
               />
               <app-form-field
                 [field]="settingsForm.postalCode"
                 fieldId="postalCode"
-                label="Kod pocztowy (opcjonalnie)"
+                [label]="i18n.t('businessForm.field.postalCode')"
               />
               <app-form-field
                 class="sm:col-span-2"
                 [field]="settingsForm.city"
                 fieldId="city"
-                label="Miasto"
+                [label]="i18n.t('businessForm.field.city')"
               />
             </div>
 
@@ -127,7 +134,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               [disabled]="geocoding()"
               (click)="onGeocode()"
             >
-              {{ geocoding() ? 'Szukam…' : 'Znajdź na mapie' }}
+              {{
+                geocoding()
+                  ? i18n.t('businessForm.geocode.searching')
+                  : i18n.t('businessForm.geocode.find')
+              }}
             </button>
 
             @if (geocodeError(); as msg) {
@@ -143,7 +154,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
                 for="cancellationHours"
                 class="mb-1.5 block text-sm font-medium"
               >
-                Polityka odwołań (godziny)
+                {{ i18n.t('settings.cancellationLabel') }}
               </label>
               <input
                 [formField]="settingsForm.cancellationHours"
@@ -153,9 +164,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
                 class="w-full max-w-xs rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
               />
               <p class="mt-1.5 text-[13px] text-stone-500">
-                Klient może odwołać rezerwację do
-                {{ settingsForm.cancellationHours().value() }} godzin przed
-                wizytą.
+                {{
+                  i18n.t('settings.cancellationHint', {
+                    hours: settingsForm.cancellationHours().value(),
+                  })
+                }}
               </p>
               @if (
                 settingsForm.cancellationHours().touched() &&
@@ -173,7 +186,9 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               class="btn-primary mt-6"
             >
               {{
-                settingsForm().submitting() ? 'Zapisywanie…' : 'Zapisz zmiany'
+                settingsForm().submitting()
+                  ? i18n.t('settings.saving')
+                  : i18n.t('settings.submit')
               }}
             </button>
           </form>
@@ -184,6 +199,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
 })
 export default class BusinessSettings {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly geocoder = inject(GeocodingService);
 
   protected readonly loading = signal(true);
@@ -217,36 +233,71 @@ export default class BusinessSettings {
   private readonly geocodedKey = signal<string | null>(null);
 
   protected readonly settingsForm = form(this.model, (p) => {
-    required(p.name, { message: 'Nazwa jest wymagana' });
-    maxLength(p.name, 100, {
-      message: 'Nazwa może mieć maksymalnie 100 znaków',
+    required(p.name, {
+      message: () => translate('validation.businessName.required'),
     });
-    maxLength(p.description, 2000, {
-      message: 'Opis może mieć maksymalnie 2000 znaków',
+    maxLength(p.name, NAME_MAX_LENGTH, {
+      message: () =>
+        translate('validation.businessName.tooLong', { max: NAME_MAX_LENGTH }),
     });
-    pattern(p.phone, PHONE, { message: 'Nieprawidłowy numer telefonu' });
-    required(p.street, { message: 'Ulica jest wymagana' });
+    maxLength(p.description, DESCRIPTION_MAX_LENGTH, {
+      message: () =>
+        translate('validation.businessDescription.tooLong', {
+          max: DESCRIPTION_MAX_LENGTH,
+        }),
+    });
+    pattern(p.phone, PHONE, {
+      message: () => translate('validation.phone.invalid'),
+    });
+    required(p.street, {
+      message: () => translate('validation.businessStreet.required'),
+    });
     maxLength(p.street, STREET_MAX_LENGTH, {
-      message: `Ulica może mieć maksymalnie ${STREET_MAX_LENGTH} znaków`,
+      message: () =>
+        translate('validation.businessStreet.tooLong', { max: STREET_MAX_LENGTH }),
     });
-    required(p.city, { message: 'Miasto jest wymagane' });
+    required(p.city, {
+      message: () => translate('validation.businessCity.required'),
+    });
     maxLength(p.city, CITY_MAX_LENGTH, {
-      message: `Miasto może mieć maksymalnie ${CITY_MAX_LENGTH} znaków`,
+      message: () =>
+        translate('validation.businessCity.tooLong', { max: CITY_MAX_LENGTH }),
     });
     pattern(p.postalCode, POSTAL_CODE, {
-      message: 'Kod pocztowy w formacie 00-000',
+      message: () => translate('validation.postalCode.format'),
     });
     // required łapie puste pole (null z inputu number) — bez tego szłoby null do
     // nienullowalnej kolumny cancellationHours → 500. isEmpty traktuje 0 jako wartość.
-    required(p.cancellationHours, { message: 'Podaj liczbę godzin (0–720)' });
-    min(p.cancellationHours, 0, { message: 'Podaj wartość od 0 do 720' });
-    max(p.cancellationHours, 720, { message: 'Podaj wartość od 0 do 720' });
+    required(p.cancellationHours, {
+      message: () =>
+        translate('validation.cancellationHours.required', {
+          min: CANCELLATION_HOURS_MIN,
+          max: CANCELLATION_HOURS_MAX,
+        }),
+    });
+    min(p.cancellationHours, CANCELLATION_HOURS_MIN, {
+      message: () =>
+        translate('validation.cancellationHours.range', {
+          min: CANCELLATION_HOURS_MIN,
+          max: CANCELLATION_HOURS_MAX,
+        }),
+    });
+    max(p.cancellationHours, CANCELLATION_HOURS_MAX, {
+      message: () =>
+        translate('validation.cancellationHours.range', {
+          min: CANCELLATION_HOURS_MIN,
+          max: CANCELLATION_HOURS_MAX,
+        }),
+    });
     // input number przepuszcza ułamki (24.5), a DTO ma @IsInt → 400; walidujemy na froncie
     validate(p.cancellationHours, ({ value }) => {
       const v = value();
       return v == null || Number.isInteger(v)
         ? undefined
-        : { kind: 'integer', message: 'Podaj pełną liczbę godzin' };
+        : {
+            kind: 'integer',
+            message: translate('validation.cancellationHours.integer'),
+          };
     });
   });
 
@@ -275,7 +326,9 @@ export default class BusinessSettings {
         this.geocodedKey.set(this.addressKey());
       })
       .catch((err: unknown) => {
-        this.loadError.set('Nie udało się wczytać danych firmy. ' + apiErrorMessage(err));
+        this.loadError.set(
+          translate('settings.error.load', { detail: apiErrorMessage(err) }),
+        );
       })
       .finally(() => this.loading.set(false));
   }
@@ -287,7 +340,7 @@ export default class BusinessSettings {
       .replace(/\s+/g, ' ')
       .trim();
     if (query.replace(/[,\s]/g, '') === '') {
-      this.geocodeError.set('Podaj adres, aby wyszukać na mapie.');
+      this.geocodeError.set(translate('businessForm.geocode.emptyAddress'));
       return;
     }
     this.geocoding.set(true);
@@ -295,7 +348,7 @@ export default class BusinessSettings {
       const hit = await this.geocoder.geocode(query);
       if (!hit) {
         this.geocodeError.set(
-          'Nie znaleziono adresu na mapie. Sprawdź dane i spróbuj ponownie.',
+          translate('businessForm.geocode.notFound'),
         );
         return;
       }
@@ -314,7 +367,7 @@ export default class BusinessSettings {
       const point = this.coords();
       if (!point || this.addressKey() !== this.geocodedKey()) {
         this.geocodeError.set(
-          'Zmieniono adres — kliknij „Znajdź na mapie”, aby zaktualizować pinezkę przed zapisem.',
+          translate('businessForm.geocode.addressChanged'),
         );
         return;
       }

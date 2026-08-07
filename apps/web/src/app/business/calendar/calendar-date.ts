@@ -1,3 +1,4 @@
+import { dateTimeFormat } from '../../core/i18n/intl';
 import { BUSINESS_TIMEZONE } from '../../shared/business-time';
 
 /** Okno siatki kalendarza — poza tymi godzinami wizyty są przycinane do brzegu (SDD #32).
@@ -81,6 +82,8 @@ export function rangeForView(
   return { from, to: addDays(from, 6) };
 }
 
+/** Celowo stały `en-GB` z `hourCycle: 'h23'` — to nie jest tekst dla użytkownika, tylko parser
+ *  „HH:MM" na minuty od północy. Locale UI nie może tu nic zmienić (#57). */
 const wallTimeFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: BUSINESS_TIMEZONE,
   hour: '2-digit',
@@ -118,16 +121,15 @@ export function bookingGridRow(startsAtIso: string, endsAtIso: string): GridPlac
   return { rowStart, rowEnd: rowStart + span };
 }
 
-const dayLabelFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: 'UTC',
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-});
-
-/** Skrócony polski dzień tygodnia + data, np. „pon., 3 sie" — data traktowana jako kalendarzowa
- *  (UTC), nie instant, więc formatujemy w strefie UTC zamiast Europe/Warsaw. */
+/** Skrócony dzień tygodnia + data w języku UI, np. „pon., 3 sie" / „Mon, 3 Aug" — data
+ *  traktowana jako kalendarzowa (UTC), nie instant, więc formatujemy w strefie UTC
+ *  zamiast Europe/Warsaw. */
 export function formatDayLabel(dateIso: string): string {
   const { y, m, d } = parseIsoDate(dateIso);
-  return dayLabelFormat.format(new Date(Date.UTC(y, m - 1, d)));
+  return dateTimeFormat({
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
 }

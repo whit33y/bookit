@@ -2,6 +2,9 @@ import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import type { TranslationKey } from '../../core/i18n/pl';
+import { translate } from '../../core/i18n/translate';
 import { GeolocationService } from '../../shared/geolocation';
 
 interface Category {
@@ -10,19 +13,18 @@ interface Category {
   slug: string;
 }
 
-const GEO_ERROR_MESSAGES = {
-  denied: 'Odmówiono dostępu do lokalizacji. Możesz nadal wyszukiwać bez niej.',
-  timeout:
-    'Nie udało się ustalić lokalizacji (upłynął czas oczekiwania). Spróbuj ponownie lub wyszukaj bez niej.',
-  unavailable: 'Twoja przeglądarka nie obsługuje geolokalizacji.',
-} as const;
+const GEO_ERROR_KEYS = {
+  denied: 'landing.geo.error.denied',
+  timeout: 'landing.geo.error.timeout',
+  unavailable: 'landing.geo.error.unavailable',
+} as const satisfies Record<string, TranslationKey>;
 
 @Component({
   selector: 'app-landing',
   template: `
     <div class="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center px-4 py-12 text-center">
       <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">Bookit</h1>
-      <p class="mt-2 text-stone-500">Znajdź firmę i zarezerwuj wizytę online.</p>
+      <p class="mt-2 text-stone-500">{{ i18n.t('landing.tagline') }}</p>
 
       <form
         class="mt-8 w-full rounded-2xl border border-stone-200 bg-white p-6 text-left shadow-card"
@@ -32,7 +34,7 @@ const GEO_ERROR_MESSAGES = {
         <div class="grid gap-4 sm:grid-cols-3">
           <div>
             <label for="category" class="mb-1.5 block text-sm font-medium">
-              Kategoria
+              {{ i18n.t('landing.field.category') }}
             </label>
             <select
               id="category"
@@ -40,7 +42,7 @@ const GEO_ERROR_MESSAGES = {
               (change)="onCategoryChange($event)"
               class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
             >
-              <option value="">Wszystkie kategorie</option>
+              <option value="">{{ i18n.t('landing.category.all') }}</option>
               @for (c of categories(); track c.id) {
                 <option [value]="c.slug">{{ c.name }}</option>
               }
@@ -51,33 +53,37 @@ const GEO_ERROR_MESSAGES = {
           </div>
 
           <div>
-            <label for="city" class="mb-1.5 block text-sm font-medium">Miasto</label>
+            <label for="city" class="mb-1.5 block text-sm font-medium">{{
+              i18n.t('landing.field.city')
+            }}</label>
             <input
               id="city"
               type="text"
               [value]="city()"
               (input)="onCityInput($event)"
-              placeholder="np. Kraków"
+              [placeholder]="i18n.t('landing.city.placeholder')"
               class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm placeholder-stone-400 shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
             />
           </div>
 
           <div>
             <label for="q" class="mb-1.5 block text-sm font-medium">
-              Czego szukasz?
+              {{ i18n.t('landing.field.query') }}
             </label>
             <input
               id="q"
               type="text"
               [value]="q()"
               (input)="onQueryInput($event)"
-              placeholder="np. strzyżenie"
+              [placeholder]="i18n.t('landing.query.placeholder')"
               class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm placeholder-stone-400 shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
             />
           </div>
         </div>
 
-        <button type="submit" class="btn-primary mt-5">Szukaj</button>
+        <button type="submit" class="btn-primary mt-5">
+          {{ i18n.t('landing.search') }}
+        </button>
 
         <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-stone-200 pt-4">
           <button
@@ -86,11 +92,17 @@ const GEO_ERROR_MESSAGES = {
             (click)="onUseMyLocation()"
             class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
           >
-            {{ geoLoading() ? 'Ustalam lokalizację…' : '📍 Szukaj w mojej okolicy' }}
+            {{
+              geoLoading()
+                ? i18n.t('landing.geo.locating')
+                : i18n.t('landing.geo.useMyLocation')
+            }}
           </button>
 
           <div>
-            <label for="radiusKm" class="sr-only">Promień wyszukiwania</label>
+            <label for="radiusKm" class="sr-only">{{
+              i18n.t('landing.geo.radiusLabel')
+            }}</label>
             <select
               id="radiusKm"
               [value]="radiusKm()"
@@ -113,6 +125,7 @@ const GEO_ERROR_MESSAGES = {
 })
 export default class Landing {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly router = inject(Router);
   private readonly geolocation = inject(GeolocationService);
 
@@ -133,7 +146,7 @@ export default class Landing {
         // wyszukiwanie bez filtra kategorii nadal działa — błąd tylko informuje,
         // że lista kategorii akurat nie jest dostępna, nie blokuje formularza
         this.categoriesError.set(
-          'Nie udało się wczytać listy kategorii. ' + apiErrorMessage(err),
+          translate('landing.error.categories', { detail: apiErrorMessage(err) }),
         );
       });
   }
@@ -165,7 +178,7 @@ export default class Landing {
     try {
       const result = await this.geolocation.getCurrentPosition();
       if (!result.ok) {
-        this.geoError.set(GEO_ERROR_MESSAGES[result.reason]);
+        this.geoError.set(translate(GEO_ERROR_KEYS[result.reason]));
         return;
       }
 
@@ -181,7 +194,7 @@ export default class Landing {
       // getCurrentPosition() teoretycznie może odrzucić Promise zamiast zwrócić
       // { ok: false } (np. Permissions-Policy w iframe rzuca synchronicznie) —
       // bez try/catch geoLoading zostałby zablokowany na true na stałe
-      this.geoError.set(GEO_ERROR_MESSAGES.unavailable);
+      this.geoError.set(translate(GEO_ERROR_KEYS.unavailable));
     } finally {
       this.geoLoading.set(false);
     }

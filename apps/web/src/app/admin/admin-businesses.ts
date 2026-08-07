@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../core/api-client';
+import { I18nStore } from '../core/i18n/i18n-store';
+import { translate } from '../core/i18n/translate';
 import { formatDate } from '../shared/business-time';
 import ConfirmDialog from '../shared/confirm-dialog';
 import EmptyState from '../shared/ui/empty-state';
@@ -51,10 +53,10 @@ interface PendingAction {
       class="mt-6 block"
       [q]="list.params().q"
       [blocked]="list.params().blocked"
-      searchLabel="Szukaj firmy"
-      searchPlaceholder="Nazwa, miasto lub e-mail właściciela"
-      activeLabel="Aktywne"
-      blockedLabel="Zablokowane"
+      [searchLabel]="i18n.t('admin.businesses.searchLabel')"
+      [searchPlaceholder]="i18n.t('admin.businesses.searchPlaceholder')"
+      [activeLabel]="i18n.t('admin.businesses.active')"
+      [blockedLabel]="i18n.t('admin.businesses.blocked')"
       (applied)="list.applyFilters($event)"
     />
 
@@ -76,7 +78,7 @@ interface PendingAction {
              strona poza zakresem byłaby ślepym zaułkiem (zakładka, „wstecz") -->
         <app-empty-state
           class="mt-6"
-          title="Ta strona nie ma już wyników."
+          [title]="i18n.t('admin.emptyPage')"
           [boxed]="true"
         >
           <button
@@ -84,18 +86,22 @@ interface PendingAction {
             class="btn-primary mt-4 w-auto"
             (click)="list.goToPage(1)"
           >
-            Wróć na pierwszą stronę
+            {{ i18n.t('admin.backToFirstPage') }}
           </button>
         </app-empty-state>
       } @else if (list.filtered()) {
         <app-empty-state
           class="mt-6"
-          title="Brak firm dla podanych filtrów."
-          description="Zmień frazę wyszukiwania lub filtr statusu."
+          [title]="i18n.t('admin.businesses.emptyFiltered')"
+          [description]="i18n.t('admin.businesses.emptyFilteredHint')"
           [boxed]="true"
         />
       } @else {
-        <app-empty-state class="mt-6" title="Nie ma jeszcze żadnych firm." [boxed]="true" />
+        <app-empty-state
+          class="mt-6"
+          [title]="i18n.t('admin.businesses.empty')"
+          [boxed]="true"
+        />
       }
     } @else {
       <div
@@ -107,25 +113,41 @@ interface PendingAction {
           class="overflow-x-auto"
           tabindex="0"
           role="region"
-          aria-label="Tabela firm"
+          [attr.aria-label]="i18n.t('admin.businesses.tableLabel')"
         >
           <table class="w-full min-w-[900px] text-left text-sm">
             <caption class="sr-only">
-              Lista firm zarejestrowanych w serwisie
+              {{ i18n.t('admin.businesses.caption') }}
             </caption>
             <thead
               class="border-b border-stone-200 bg-stone-50 text-[11px] font-semibold uppercase tracking-wider text-stone-500"
             >
               <tr>
-                <th scope="col" class="px-4 py-3 sm:px-6">Firma</th>
-                <th scope="col" class="px-4 py-3">Właściciel</th>
-                <th scope="col" class="px-4 py-3 text-right">Usługi</th>
-                <th scope="col" class="px-4 py-3 text-right">Pracownicy</th>
-                <th scope="col" class="px-4 py-3 text-right">Rezerwacje</th>
-                <th scope="col" class="px-4 py-3">Status</th>
-                <th scope="col" class="px-4 py-3">Dodano</th>
                 <th scope="col" class="px-4 py-3 sm:px-6">
-                  <span class="sr-only">Akcje</span>
+                  {{ i18n.t('admin.businesses.column.business') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.businesses.column.owner') }}
+                </th>
+                <th scope="col" class="px-4 py-3 text-right">
+                  {{ i18n.t('admin.businesses.column.services') }}
+                </th>
+                <th scope="col" class="px-4 py-3 text-right">
+                  {{ i18n.t('admin.businesses.column.employees') }}
+                </th>
+                <th scope="col" class="px-4 py-3 text-right">
+                  {{ i18n.t('admin.businesses.column.bookings') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.businesses.column.status') }}
+                </th>
+                <th scope="col" class="px-4 py-3">
+                  {{ i18n.t('admin.businesses.column.added') }}
+                </th>
+                <th scope="col" class="px-4 py-3 sm:px-6">
+                  <span class="sr-only">{{
+                    i18n.t('admin.businesses.column.actions')
+                  }}</span>
                 </th>
               </tr>
             </thead>
@@ -135,7 +157,13 @@ interface PendingAction {
                   <td class="px-4 py-3.5 sm:px-6">
                     <span class="font-semibold">{{ b.name }}</span>
                     <span class="block text-[13px] text-stone-500">
-                      {{ b.category.name }} · {{ b.city }}, {{ b.street }}
+                      {{
+                        i18n.t('admin.businesses.meta', {
+                          category: b.category.name,
+                          city: b.city,
+                          street: b.street,
+                        })
+                      }}
                     </span>
                   </td>
                   <td class="px-4 py-3.5">
@@ -158,7 +186,11 @@ interface PendingAction {
                   <td class="px-4 py-3.5">
                     <app-admin-status-badge
                       [blocked]="b.isBlocked"
-                      [label]="b.isBlocked ? 'Zablokowana' : 'Aktywna'"
+                      [label]="
+                        b.isBlocked
+                          ? i18n.t('admin.businesses.badge.blocked')
+                          : i18n.t('admin.businesses.badge.active')
+                      "
                     />
                   </td>
                   <td class="px-4 py-3.5 tabular-nums text-stone-600">
@@ -169,7 +201,9 @@ interface PendingAction {
                       type="button"
                       [disabled]="isBusy(b.id)"
                       [attr.aria-label]="
-                        (b.isBlocked ? 'Odblokuj firmę ' : 'Zablokuj firmę ') + b.name
+                        b.isBlocked
+                          ? i18n.t('admin.businesses.unblockAria', { name: b.name })
+                          : i18n.t('admin.businesses.blockAria', { name: b.name })
                       "
                       (click)="onRequestToggle(b)"
                       class="rounded-lg border px-3.5 py-1.5 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-60"
@@ -179,7 +213,11 @@ interface PendingAction {
                           : 'border-rose-300 text-rose-700 hover:bg-rose-50 focus-visible:ring-rose-600'
                       "
                     >
-                      {{ b.isBlocked ? 'Odblokuj' : 'Zablokuj' }}
+                      {{
+                        b.isBlocked
+                          ? i18n.t('admin.businesses.unblock')
+                          : i18n.t('admin.businesses.block')
+                      }}
                     </button>
                     @if (errorFor(b.id); as msg) {
                       <span
@@ -200,7 +238,7 @@ interface PendingAction {
           [page]="list.page()"
           [limit]="list.limit()"
           [total]="list.total()"
-          itemsLabel="firm"
+          [itemsLabel]="i18n.t('admin.businesses.itemsLabel')"
           (pageChange)="list.goToPage($event)"
         />
       </div>
@@ -221,6 +259,7 @@ interface PendingAction {
 })
 export default class AdminBusinesses {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
 
   protected readonly list = createAdminList<AdminBusiness>('businesses');
   protected readonly formatDate = formatDate;
@@ -239,7 +278,9 @@ export default class AdminBusinesses {
   });
 
   protected readonly dialogHeading = computed(() =>
-    this.pendingAction()?.block ? 'Zablokować firmę?' : 'Odblokować firmę?',
+    this.pendingAction()?.block
+      ? translate('admin.businesses.dialog.blockHeading')
+      : translate('admin.businesses.dialog.unblockHeading'),
   );
 
   protected readonly dialogMessage = computed(() => {
@@ -247,17 +288,23 @@ export default class AdminBusinesses {
     if (!pending) {
       return '';
     }
+    // pełne zdania, nie sklejanie czasownika w interpolacji: po polsku „została
+    // zablokowana/odblokowana" odmienia się przez rodzaj, a po angielsku brzmi inaczej (#57)
     return pending.block
-      ? `Firma „${pending.name}" zniknie z wyszukiwarki i przestanie przyjmować nowe rezerwacje. Już złożone rezerwacje pozostaną bez zmian.`
-      : `Firma „${pending.name}" wróci do wyszukiwarki i znów będzie przyjmować rezerwacje.`;
+      ? translate('admin.businesses.dialog.blockMessage', { name: pending.name })
+      : translate('admin.businesses.dialog.unblockMessage', { name: pending.name });
   });
 
   protected readonly dialogConfirmLabel = computed(() =>
-    this.pendingAction()?.block ? 'Zablokuj firmę' : 'Odblokuj firmę',
+    this.pendingAction()?.block
+      ? translate('admin.businesses.dialog.blockConfirm')
+      : translate('admin.businesses.dialog.unblockConfirm'),
   );
 
   protected readonly dialogBusyLabel = computed(() =>
-    this.pendingAction()?.block ? 'Blokowanie…' : 'Odblokowywanie…',
+    this.pendingAction()?.block
+      ? translate('admin.businesses.dialog.blockBusy')
+      : translate('admin.businesses.dialog.unblockBusy'),
   );
 
   protected isBusy(id: string): boolean {
@@ -309,7 +356,9 @@ export default class AdminBusinesses {
         this.list.replaceItem(updated);
       }
       this.statusMessage.set(
-        `Firma „${updated.name}" została ${updated.isBlocked ? 'zablokowana' : 'odblokowana'}.`,
+        updated.isBlocked
+          ? translate('admin.businesses.blockedMessage', { name: updated.name })
+          : translate('admin.businesses.unblockedMessage', { name: updated.name }),
       );
     } catch (err) {
       // 404 („Nie znaleziono firmy") trafia tu tak samo jak awaria sieci — w obu przypadkach

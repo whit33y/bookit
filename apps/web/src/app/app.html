@@ -1,11 +1,11 @@
 <header>
-  <nav aria-label="Nawigacja główna">
+  <nav [attr.aria-label]="i18n.t('nav.main')">
     <a routerLink="/">Bookit</a>
     @if (auth.isLoggedIn()) {
-      <a routerLink="/client">Moje wizyty</a>
+      <a routerLink="/client">{{ i18n.t('nav.myBookings') }}</a>
       @if (role() === 'OWNER' || role() === 'EMPLOYEE') {
         <a routerLink="/business"
-          >Panel firmy
+          >{{ i18n.t('nav.businessPanel') }}
           @if (pendingCount() > 0) {
             <span
               class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-bold text-white"
@@ -15,13 +15,19 @@
         </a>
       }
       @if (role() === 'ADMIN') {
-        <a routerLink="/admin">Admin</a>
+        <a routerLink="/admin">{{ i18n.t('nav.admin') }}</a>
       }
       <app-notification-bell />
-      <button type="button" (click)="auth.logout()">Wyloguj</button>
+    }
+    <!-- poza gałęzią zalogowania: język zmienia się też na ekranie logowania -->
+    <app-language-switcher />
+    @if (auth.isLoggedIn()) {
+      <button type="button" (click)="auth.logout()">
+        {{ i18n.t('nav.logout') }}
+      </button>
     } @else {
-      <a routerLink="/login">Zaloguj</a>
-      <a routerLink="/register">Rejestracja</a>
+      <a routerLink="/login">{{ i18n.t('nav.login') }}</a>
+      <a routerLink="/register">{{ i18n.t('nav.register') }}</a>
     }
   </nav>
 </header>

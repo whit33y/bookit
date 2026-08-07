@@ -16,6 +16,8 @@ import {
 } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
+import { I18nStore } from '../../core/i18n/i18n-store';
+import { translate } from '../../core/i18n/translate';
 import { AuthStore } from '../../core/auth/auth-store';
 import AppFormField, { submitAuthForm } from '../../public/form-field/form-field';
 import AppMap from '../../shared/map/map';
@@ -29,6 +31,8 @@ interface Category {
 
 // Lustrzane do CreateBusinessDto (apps/api) — patterny i długości takie same.
 const POSTAL_CODE = /^\d{2}-\d{3}$/;
+const NAME_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 2000;
 const STREET_MAX_LENGTH = 120;
 const CITY_MAX_LENGTH = 80;
 const PHONE = /^\+?[0-9\s-]{7,20}$/;
@@ -41,9 +45,9 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
       <section
         class="w-full max-w-2xl rounded-xl border border-stone-200 bg-white p-8 shadow-card"
       >
-        <h1 class="text-2xl font-bold">Załóż firmę</h1>
+        <h1 class="text-2xl font-bold">{{ i18n.t('createBusiness.title') }}</h1>
         <p class="mt-1 text-sm text-stone-500">
-          Utwórz publiczny profil swojej firmy w BookIt
+          {{ i18n.t('createBusiness.subtitle') }}
         </p>
 
         @if (serverError(); as msg) {
@@ -54,19 +58,21 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
           <app-form-field
             [field]="createForm.name"
             fieldId="name"
-            label="Nazwa firmy"
+            [label]="i18n.t('businessForm.field.name')"
           />
 
           <div class="mt-4">
             <label for="categoryId" class="mb-1.5 block text-sm font-medium">
-              Kategoria
+              {{ i18n.t('createBusiness.field.category') }}
             </label>
             <select
               [formField]="createForm.categoryId"
               id="categoryId"
               class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
             >
-              <option value="" disabled>Wybierz kategorię</option>
+              <option value="" disabled>
+                {{ i18n.t('createBusiness.categoryPlaceholder') }}
+              </option>
               @for (c of categories(); track c.id) {
                 <option [value]="c.id">{{ c.name }}</option>
               }
@@ -76,7 +82,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               createForm.categoryId().invalid()
             ) {
               <p class="mt-1.5 text-[13px] font-medium text-rose-600">
-                Wybierz kategorię
+                {{ i18n.t('validation.category.required') }}
               </p>
             }
             @if (categoriesError(); as msg) {
@@ -88,14 +94,17 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
                 (click)="loadCategories()"
                 class="mt-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-[13px] font-semibold shadow-card transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               >
-                Spróbuj ponownie
+                {{ i18n.t('ui.retry') }}
               </button>
             }
           </div>
 
           <div class="mt-4">
             <label for="description" class="mb-1.5 block text-sm font-medium">
-              Opis <span class="text-stone-400">(opcjonalnie)</span>
+              {{ i18n.t('businessForm.field.description') }}
+              <span class="text-stone-400">{{
+                i18n.t('businessForm.field.descriptionOptional')
+              }}</span>
             </label>
             <textarea
               [formField]="createForm.description"
@@ -109,7 +118,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
             class="mt-4"
             [field]="createForm.phone"
             fieldId="phone"
-            label="Telefon (opcjonalnie)"
+            [label]="i18n.t('businessForm.field.phone')"
             type="tel"
             autocomplete="tel"
           />
@@ -119,18 +128,18 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               class="sm:col-span-3"
               [field]="createForm.street"
               fieldId="street"
-              label="Ulica i numer"
+              [label]="i18n.t('businessForm.field.street')"
             />
             <app-form-field
               [field]="createForm.postalCode"
               fieldId="postalCode"
-              label="Kod pocztowy (opcjonalnie)"
+              [label]="i18n.t('businessForm.field.postalCode')"
             />
             <app-form-field
               class="sm:col-span-2"
               [field]="createForm.city"
               fieldId="city"
-              label="Miasto"
+              [label]="i18n.t('businessForm.field.city')"
             />
           </div>
 
@@ -140,7 +149,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
             [disabled]="geocoding()"
             (click)="onGeocode()"
           >
-            {{ geocoding() ? 'Szukam…' : 'Znajdź na mapie' }}
+            {{
+              geocoding()
+                ? i18n.t('businessForm.geocode.searching')
+                : i18n.t('businessForm.geocode.find')
+            }}
           </button>
 
           @if (geocodeError(); as msg) {
@@ -156,7 +169,11 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
             [disabled]="createForm().submitting()"
             class="btn-primary mt-6"
           >
-            {{ createForm().submitting() ? 'Zakładanie…' : 'Załóż firmę' }}
+            {{
+              createForm().submitting()
+                ? i18n.t('createBusiness.submitting')
+                : i18n.t('createBusiness.submit')
+            }}
           </button>
         </form>
       </section>
@@ -165,6 +182,7 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
 })
 export default class CreateBusiness {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly geocoder = inject(GeocodingService);
@@ -197,25 +215,41 @@ export default class CreateBusiness {
   });
 
   protected readonly createForm = form(this.model, (p) => {
-    required(p.name, { message: 'Nazwa jest wymagana' });
-    maxLength(p.name, 100, {
-      message: 'Nazwa może mieć maksymalnie 100 znaków',
+    required(p.name, {
+      message: () => translate('validation.businessName.required'),
     });
-    required(p.categoryId, { message: 'Wybierz kategorię' });
-    maxLength(p.description, 2000, {
-      message: 'Opis może mieć maksymalnie 2000 znaków',
+    maxLength(p.name, NAME_MAX_LENGTH, {
+      message: () =>
+        translate('validation.businessName.tooLong', { max: NAME_MAX_LENGTH }),
     });
-    pattern(p.phone, PHONE, { message: 'Nieprawidłowy numer telefonu' });
-    required(p.street, { message: 'Ulica jest wymagana' });
+    required(p.categoryId, {
+      message: () => translate('validation.category.required'),
+    });
+    maxLength(p.description, DESCRIPTION_MAX_LENGTH, {
+      message: () =>
+        translate('validation.businessDescription.tooLong', {
+          max: DESCRIPTION_MAX_LENGTH,
+        }),
+    });
+    pattern(p.phone, PHONE, {
+      message: () => translate('validation.phone.invalid'),
+    });
+    required(p.street, {
+      message: () => translate('validation.businessStreet.required'),
+    });
     maxLength(p.street, STREET_MAX_LENGTH, {
-      message: `Ulica może mieć maksymalnie ${STREET_MAX_LENGTH} znaków`,
+      message: () =>
+        translate('validation.businessStreet.tooLong', { max: STREET_MAX_LENGTH }),
     });
-    required(p.city, { message: 'Miasto jest wymagane' });
+    required(p.city, {
+      message: () => translate('validation.businessCity.required'),
+    });
     maxLength(p.city, CITY_MAX_LENGTH, {
-      message: `Miasto może mieć maksymalnie ${CITY_MAX_LENGTH} znaków`,
+      message: () =>
+        translate('validation.businessCity.tooLong', { max: CITY_MAX_LENGTH }),
     });
     pattern(p.postalCode, POSTAL_CODE, {
-      message: 'Kod pocztowy w formacie 00-000',
+      message: () => translate('validation.postalCode.format'),
     });
   });
 
@@ -244,7 +278,7 @@ export default class CreateBusiness {
       .catch((err: unknown) => {
         this.categories.set([]);
         this.categoriesError.set(
-          'Nie udało się wczytać listy kategorii. ' + apiErrorMessage(err),
+          translate('landing.error.categories', { detail: apiErrorMessage(err) }),
         );
       });
   }
@@ -256,7 +290,7 @@ export default class CreateBusiness {
       .replace(/\s+/g, ' ')
       .trim();
     if (query.replace(/[,\s]/g, '') === '') {
-      this.geocodeError.set('Podaj adres, aby wyszukać na mapie.');
+      this.geocodeError.set(translate('businessForm.geocode.emptyAddress'));
       return;
     }
     this.geocoding.set(true);
@@ -265,7 +299,7 @@ export default class CreateBusiness {
       if (!hit) {
         this.coords.set(null);
         this.geocodeError.set(
-          'Nie znaleziono adresu na mapie. Sprawdź dane i spróbuj ponownie.',
+          translate('businessForm.geocode.notFound'),
         );
         return;
       }
@@ -282,7 +316,7 @@ export default class CreateBusiness {
       const point = this.coords();
       if (!point) {
         this.geocodeError.set(
-          'Najpierw znajdź adres na mapie — bez współrzędnych nie można założyć firmy.',
+          translate('createBusiness.geocode.required'),
         );
         return;
       }

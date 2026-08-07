@@ -1,3 +1,6 @@
+import { dateTimeFormat } from '../../core/i18n/intl';
+import type { TranslationKey } from '../../core/i18n/pl';
+import { translate } from '../../core/i18n/translate';
 import { addDays, formatDayLabel, startOfWeekMonday } from '../calendar/calendar-date';
 
 /**
@@ -11,10 +14,10 @@ import { addDays, formatDayLabel, startOfWeekMonday } from '../calendar/calendar
 
 export type StatsPreset = 'week' | 'month' | 'custom';
 
-export const STATS_PRESETS: { value: StatsPreset; label: string }[] = [
-  { value: 'week', label: 'Tydzień' },
-  { value: 'month', label: 'Miesiąc' },
-  { value: 'custom', label: 'Własny' },
+export const STATS_PRESETS: { value: StatsPreset; labelKey: TranslationKey }[] = [
+  { value: 'week', labelKey: 'stats.preset.week' },
+  { value: 'month', labelKey: 'stats.preset.month' },
+  { value: 'custom', labelKey: 'stats.preset.custom' },
 ];
 
 export interface StatsRange {
@@ -71,24 +74,23 @@ export function shiftAnchor(
   return toIso(Date.UTC(year, month - 1 + delta, 1));
 }
 
-const monthLabelFormat = new Intl.DateTimeFormat('pl-PL', {
-  timeZone: 'UTC',
-  month: 'long',
-  year: 'numeric',
-});
-
 /** Opis zakresu nad wykresem: „sierpień 2026" dla miesiąca, „pon., 3 sie – nd., 9 sie" dla reszty. */
 export function rangeLabel(preset: StatsPreset, range: StatsRange): string {
   if (preset === 'month') {
     const [year, month] = parts(range.from);
-    return monthLabelFormat.format(new Date(Date.UTC(year, month - 1, 1)));
+    return dateTimeFormat({
+      timeZone: 'UTC',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(Date.UTC(year, month - 1, 1)));
   }
   return `${formatDayLabel(range.from)} – ${formatDayLabel(range.to)}`;
 }
 
 /** Etykieta kubełka na osi X — dla tygodnia zaznaczamy, że to początek okresu. */
 export function bucketLabel(dateIso: string, granularity: StatsGranularity): string {
-  return granularity === 'week' ? `od ${formatDayLabel(dateIso)}` : formatDayLabel(dateIso);
+  const day = formatDayLabel(dateIso);
+  return granularity === 'week' ? translate('stats.bucket.weekFrom', { day }) : day;
 }
 
 /** Minuty → „6 h 30 min" / „45 min"; obłożenie czyta się w godzinach, nie w 390 minutach. */
@@ -96,7 +98,9 @@ export function formatMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   if (!hours) {
-    return `${rest} min`;
+    return translate('stats.duration.minutes', { minutes: rest });
   }
-  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+  return rest
+    ? translate('stats.duration.hoursMinutes', { hours, minutes: rest })
+    : translate('stats.duration.hours', { hours });
 }

@@ -2,6 +2,10 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { dateTimeFormat } from '../../../core/i18n/intl';
+import { I18nStore } from '../../../core/i18n/i18n-store';
+import type { TranslationKey } from '../../../core/i18n/pl';
+import { translate } from '../../../core/i18n/translate';
 import { ApiClient, apiErrorMessage } from '../../../core/api-client';
 import EmptyState from '../../../shared/ui/empty-state';
 import ErrorState from '../../../shared/ui/error-state';
@@ -23,14 +27,15 @@ interface TimeOff {
   reason: string | null;
 }
 
-const DAY_NAMES = [
-  'Poniedziałek',
-  'Wtorek',
-  'Środa',
-  'Czwartek',
-  'Piątek',
-  'Sobota',
-  'Niedziela',
+// indeks 0 = poniedziałek (jak `weekday` w backendowym DaySchedule) — kolejność musi zostać
+const DAY_KEYS: TranslationKey[] = [
+  'schedule.weekday.monday',
+  'schedule.weekday.tuesday',
+  'schedule.weekday.wednesday',
+  'schedule.weekday.thursday',
+  'schedule.weekday.friday',
+  'schedule.weekday.saturday',
+  'schedule.weekday.sunday',
 ];
 
 @Component({
@@ -45,15 +50,13 @@ const DAY_NAMES = [
           routerLink="/business/employees"
           class="text-sm font-medium text-brand-600 hover:underline"
         >
-          ← Wróć do pracowników
+          {{ i18n.t('schedule.back') }}
         </a>
-        <h1 class="mt-3 text-2xl font-bold">Grafik pracownika</h1>
-        <p class="mt-1 text-sm text-stone-500">
-          Ustaw godziny pracy w tygodniu i zarządzaj urlopami
-        </p>
+        <h1 class="mt-3 text-2xl font-bold">{{ i18n.t('schedule.title') }}</h1>
+        <p class="mt-1 text-sm text-stone-500">{{ i18n.t('schedule.subtitle') }}</p>
 
         @if (loading()) {
-          <app-loading-state class="mt-6" message="Ładowanie grafiku…" />
+          <app-loading-state class="mt-6" [message]="i18n.t('schedule.loading')" />
         } @else if (loadError(); as msg) {
           <app-error-state
             class="mt-6"
@@ -70,7 +73,7 @@ const DAY_NAMES = [
               role="status"
               class="mt-4 rounded-lg bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700"
             >
-              Zapisano grafik
+              {{ i18n.t('schedule.saved') }}
             </p>
           }
 
@@ -83,13 +86,15 @@ const DAY_NAMES = [
                 </legend>
 
                 @if (!slots.length) {
-                  <p class="text-[13px] text-stone-400">Dzień wolny</p>
+                  <p class="text-[13px] text-stone-400">
+                    {{ i18n.t('schedule.dayOff') }}
+                  </p>
                 }
 
                 @for (slot of slots; track $index; let i = $index) {
                   <div class="mt-2 flex items-center gap-2">
                     <label class="sr-only" [for]="'start-' + weekday + '-' + i"
-                      >Początek przedziału</label
+                      >{{ i18n.t('schedule.slotStart') }}</label
                     >
                     <input
                       [id]="'start-' + weekday + '-' + i"
@@ -100,7 +105,7 @@ const DAY_NAMES = [
                     />
                     <span class="text-stone-400">–</span>
                     <label class="sr-only" [for]="'end-' + weekday + '-' + i"
-                      >Koniec przedziału</label
+                      >{{ i18n.t('schedule.slotEnd') }}</label
                     >
                     <input
                       [id]="'end-' + weekday + '-' + i"
@@ -114,7 +119,7 @@ const DAY_NAMES = [
                       class="text-sm font-medium text-rose-600 hover:underline"
                       (click)="removeSlot(weekday, i)"
                     >
-                      Usuń
+                      {{ i18n.t('schedule.removeSlot') }}
                     </button>
                   </div>
                 }
@@ -128,7 +133,7 @@ const DAY_NAMES = [
                   class="mt-3 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium shadow-card transition hover:bg-stone-50"
                   (click)="addSlot(weekday)"
                 >
-                  + Dodaj przedział
+                  {{ i18n.t('schedule.addSlot') }}
                 </button>
               </fieldset>
             }
@@ -140,14 +145,16 @@ const DAY_NAMES = [
             [disabled]="hasErrors() || saving()"
             (click)="onSave()"
           >
-            {{ saving() ? 'Zapisywanie…' : 'Zapisz grafik' }}
+            {{ saving() ? i18n.t('schedule.saving') : i18n.t('schedule.save') }}
           </button>
 
           <!-- Urlopy -->
           <div class="mt-10 border-t border-stone-200 pt-8">
-            <h2 class="text-lg font-semibold">Urlopy</h2>
+            <h2 class="text-lg font-semibold">
+              {{ i18n.t('schedule.timeOff.title') }}
+            </h2>
             <p class="mt-1 text-sm text-stone-500">
-              Przedziały niedostępności — nadchodzące i trwające
+              {{ i18n.t('schedule.timeOff.subtitle') }}
             </p>
 
             @if (timeOffError(); as msg) {
@@ -157,7 +164,7 @@ const DAY_NAMES = [
             <div class="mt-4 flex flex-wrap items-end gap-3">
               <div>
                 <label for="to-start" class="mb-1.5 block text-sm font-medium"
-                  >Od</label
+                  >{{ i18n.t('schedule.timeOff.from') }}</label
                 >
                 <input
                   id="to-start"
@@ -169,7 +176,7 @@ const DAY_NAMES = [
               </div>
               <div>
                 <label for="to-end" class="mb-1.5 block text-sm font-medium"
-                  >Do</label
+                  >{{ i18n.t('schedule.timeOff.to') }}</label
                 >
                 <input
                   id="to-end"
@@ -181,7 +188,7 @@ const DAY_NAMES = [
               </div>
               <div class="flex-1">
                 <label for="to-reason" class="mb-1.5 block text-sm font-medium"
-                  >Powód (opcjonalnie)</label
+                  >{{ i18n.t('schedule.timeOff.reason') }}</label
                 >
                 <input
                   id="to-reason"
@@ -198,7 +205,11 @@ const DAY_NAMES = [
                 [disabled]="!timeOffValid() || timeOffAdding()"
                 (click)="onAddTimeOff()"
               >
-                {{ timeOffAdding() ? 'Dodawanie…' : 'Dodaj urlop' }}
+                {{
+                  timeOffAdding()
+                    ? i18n.t('schedule.timeOff.adding')
+                    : i18n.t('schedule.timeOff.add')
+                }}
               </button>
             </div>
 
@@ -209,7 +220,12 @@ const DAY_NAMES = [
                 >
                   <div>
                     <span class="font-medium"
-                      >{{ fmt(t.startsAt) }} – {{ fmt(t.endsAt) }}</span
+                      >{{
+                        i18n.t('schedule.timeOff.range', {
+                          from: fmt(t.startsAt),
+                          to: fmt(t.endsAt),
+                        })
+                      }}</span
                     >
                     @if (t.reason) {
                       <p class="mt-0.5 text-[13px] text-stone-500">
@@ -223,12 +239,12 @@ const DAY_NAMES = [
                     [disabled]="timeOffBusy() === t.id"
                     (click)="onDeleteTimeOff(t)"
                   >
-                    Usuń
+                    {{ i18n.t('schedule.timeOff.delete') }}
                   </button>
                 </li>
               } @empty {
                 <li>
-                  <app-empty-state title="Brak zaplanowanych urlopów." />
+                  <app-empty-state [title]="i18n.t('schedule.timeOff.empty')" />
                 </li>
               }
             </ul>
@@ -240,6 +256,7 @@ const DAY_NAMES = [
 })
 export default class BusinessSchedule {
   private readonly api = inject(ApiClient);
+  protected readonly i18n = inject(I18nStore);
   private readonly route = inject(ActivatedRoute);
   private readonly employeeId = signal('');
   // getter, nie stała — komponent bywa reużywany przy zmianie tylko :id (patrz constructor)
@@ -302,20 +319,21 @@ export default class BusinessSchedule {
       ),
     ])
       .catch((err: unknown) =>
-        this.loadError.set('Nie udało się wczytać grafiku. ' + apiErrorMessage(err)),
+        this.loadError.set(
+          translate('schedule.error.load', { detail: apiErrorMessage(err) }),
+        ),
       )
       .finally(() => this.loading.set(false));
   }
 
   protected dayName(weekday: number): string {
-    return DAY_NAMES[weekday];
+    return this.i18n.t(DAY_KEYS[weekday]);
   }
 
   protected fmt(iso: string): string {
-    return new Date(iso).toLocaleString('pl-PL', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+    return dateTimeFormat({ dateStyle: 'medium', timeStyle: 'short' }).format(
+      new Date(iso),
+    );
   }
 
   protected addSlot(weekday: number): void {
@@ -416,7 +434,10 @@ export default class BusinessSchedule {
 
   protected async onDeleteTimeOff(t: TimeOff): Promise<void> {
     const ok = globalThis.confirm(
-      `Usunąć urlop ${this.fmt(t.startsAt)} – ${this.fmt(t.endsAt)}?`,
+      translate('schedule.timeOff.deleteConfirm', {
+        from: this.fmt(t.startsAt),
+        to: this.fmt(t.endsAt),
+      }),
     );
     if (!ok) return;
     this.timeOffError.set(null);
@@ -444,16 +465,17 @@ export default class BusinessSchedule {
 
   private validateDay(slots: Slot[]): string | null {
     for (const s of slots) {
-      if (!s.startTime || !s.endTime) return 'Uzupełnij godziny przedziału';
+      if (!s.startTime || !s.endTime)
+        return translate('schedule.error.timesRequired');
       if (s.startTime >= s.endTime)
-        return 'Początek musi być przed końcem';
+        return translate('schedule.error.startAfterEnd');
     }
     const sorted = [...slots].sort((a, b) =>
       a.startTime.localeCompare(b.startTime),
     );
     for (let i = 1; i < sorted.length; i++) {
       if (sorted[i].startTime < sorted[i - 1].endTime)
-        return 'Przedziały nachodzą na siebie';
+        return translate('schedule.error.overlap');
     }
     return null;
   }
