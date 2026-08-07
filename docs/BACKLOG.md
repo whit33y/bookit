@@ -1,6 +1,6 @@
 # Backlog — BookIt
 
-Rozpisanie [SDD](./SDD.md) na issue GitHubowe. MVP = milestone'y **M1–M8** (zgodnie z roadmapą SDD §9), Faza 2 = **M9–M11**.
+Rozpisanie [SDD](./SDD.md) na issue GitHubowe. MVP = milestone'y **M1–M8** (zgodnie z roadmapą SDD §9), Faza 2 = **M9–M12**.
 
 ## Jak korzystać
 
@@ -38,6 +38,7 @@ Rozpisanie [SDD](./SDD.md) na issue GitHubowe. MVP = milestone'y **M1–M8** (zg
 | **M9 — Recenzje** (Faza 2) | oceny po odbytej wizycie | recenzje na profilach firm |
 | **M10 — Płatności** (Faza 2) | Stripe, zaliczki, prowizje | płatność online przy rezerwacji |
 | **M11 — Rozszerzenia** (Faza 2) | in-app/SMS, statystyki, i18n, deploy, PostGIS | platforma produkcyjna |
+| **M12 — UI/Design** (Faza 2) | nawigacja, stopka, strona główna wg design systemu | front zgodny z design systemem |
 
 ---
 
@@ -131,6 +132,15 @@ Strona „nie pamiętam hasła" (podanie emaila) i strona ustawienia nowego has�
 - [ ] Po wysłaniu emaila komunikat neutralny („jeśli konto istnieje, wysłaliśmy link")
 - [ ] Link z maila otwiera formularz nowego hasła; sukces → redirect na login
 - [ ] Zużyty/wygasły token → czytelny komunikat z możliwością ponowienia
+
+### #67 — Frontend: design system dla strony
+**Milestone:** M1 · **Labele:** — · **Zależy od:** —
+
+Design system dla frontendu, na którym będą mogły polegać przyszłe iteracje: paleta, typografia, przyciski, formularze, badge, karty, kalendarz, tabela, modal, nawigacja, profil firmy. Tokeny (`apps/web/src/styles/tokens.css`) współdzielone z aplikacją — jedno źródło prawdy.
+
+**Kryteria akceptacji:**
+- [ ] Design system w formacie HTML (`docs/design-system/index.html`)
+- [ ] Dodanie zmiennych kolorów/fontów
 
 ---
 
@@ -652,6 +662,17 @@ Krok 4 wizarda dla usług z zaliczką (Stripe Payment Element) + statusy płatno
 - [ ] Błąd płatności → możliwość ponowienia w oknie ważności rezerwacji
 - [ ] „Moje wizyty" pokazują status zaliczki (opłacona / zwrócona / przepadła)
 
+### #114 — Frontend: ustawianie zaliczki w panelu usług
+**Milestone:** M10 · **Labele:** `frontend`, `faza-2`, `epik:platnosci` · **Zależy od:** #50
+
+Panel usług (#21) nie pozwalał ustawić zaliczki — pola `depositType`/`depositValue` na `Service` dołożyło #50, ale formularz usługi ich nie wysyłał. Reguły są zaimplementowane w `apps/api/src/app/payments/deposit.ts`; front je odzwierciedla, nie wymyśla od nowa.
+
+**Kryteria akceptacji:**
+- [ ] Formularz usługi w `business/services/` pozwala włączyć zaliczkę i wybrać typ: kwota w zł albo procent ceny
+- [ ] Walidacja frontowa zgodna z backendem (procent 1–100, kwota większa od zera i nie wyższa niż cena)
+- [ ] Wyłączenie zaliczki czyści oba pola — PATCH wysyła `depositType: null` i `depositValue: null`
+- [ ] Lista usług pokazuje kwotę zaliczki, dla procentu wyliczoną z ceny
+
 ---
 
 ## M11 — Faza 2: Rozszerzenia
@@ -727,6 +748,52 @@ Gdy Haversine przestanie wystarczać (tysiące firm): rozszerzenie PostGIS, kolu
 
 ---
 
+## M12 — Faza 2: UI/Design
+
+### #125 — Frontend: nawigacja aplikacji wg design systemu
+**Milestone:** M12 · **Labele:** `frontend`, `faza-2` · **Zależy od:** #67, #33, #54, #57
+
+Shell (`apps/web/src/app/app.html`) nie ma ani jednej klasy Tailwinda na `<header>`/`<nav>`/linkach. Design system §10 opisuje docelowy topbar (kafelek logo z gradientem, `aria-current`, hamburger, awatar z inicjałami) — to zadanie przekłada go na kod. Idzie pierwsze w M12, bo dokłada utility gradientu marki do `styles.css`.
+
+**Kryteria akceptacji:**
+- [ ] `--gradient-brand` dostępny jako utility w `apps/web/src/styles.css` — koniec z `style="background: var(--gradient-brand)"` w szablonach
+- [ ] Sticky topbar wg design systemu §10: kafelek logo z gradientem, wordmark, `backdrop-blur`, kontener `max-w-7xl`
+- [ ] Aktywna trasa oznaczona wizualnie i przez `aria-current="page"` (`routerLinkActive`)
+- [ ] Poniżej `md` linki za hamburgerem (`aria-expanded`, `aria-controls`, Escape, zamknięcie po nawigacji) — disclosure jak w `notification-bell.ts`
+- [ ] Wylogowanie w menu użytkownika z awatarem z inicjałów
+- [ ] Badge oczekujących (#33), dzwonek (#54) i przełącznik języka (#57) bez zmian zachowania
+- [ ] `app.spec.ts`: pozycje wg roli, `aria-current`, rozwijanie menu mobilnego
+
+### #126 — Frontend: stopka aplikacji
+**Milestone:** M12 · **Labele:** `frontend`, `faza-2` · **Zależy od:** #67, #125
+
+Stopki nie ma w ogóle — brak komponentu, elementu `<footer>` i kluczy `footer.*`. Strony publiczne kończą się urwaną treścią. Design system nie ma jeszcze wzorca stopki, więc powstaje z istniejących klocków i zostaje do niego dopisany.
+
+**Kryteria akceptacji:**
+- [ ] Komponent `shared/layout/footer.ts` wpięty w `app.html` pod `<main>`, trzymający się dolnej krawędzi na krótkich stronach
+- [ ] Kolumny: opis produktu, „Dla klientów", „Dla firm", kontakt + dolny pasek z rokiem
+- [ ] Linki przez `routerLink`, bez martwych odnośników
+- [ ] Styl i responsywność wg design systemu (jedna kolumna na mobile)
+- [ ] Teksty w `pl.ts`/`en.ts` w sekcji `footer.*`; rok liczony w komponencie
+- [ ] Wzorzec stopki dopisany do `docs/design-system/index.html`
+- [ ] `footer.spec.ts`: `<footer>` z etykietą dostępności, kolumny, bieżący rok
+
+### #127 — Frontend: strona główna — hero i sekcje
+**Milestone:** M12 · **Labele:** `frontend`, `faza-2` · **Zależy od:** #35, #67, #125
+
+Landing z #35 to sam formularz wyszukiwarki — bez hero, bez wyjaśnienia czym jest BookIt, bez ścieżki dla firm. Formularz zostaje bez zmian funkcjonalnych, zmienia się oprawa i dochodzą sekcje zbudowane z propozycji wartości z SDD §1.
+
+**Kryteria akceptacji:**
+- [ ] Hero z gradientem marki, typografia wg design systemu §2, karta wyszukiwarki osadzona w hero
+- [ ] Formularz zachowuje obecne zachowanie (parametry w URL, geolokalizacja, błędy)
+- [ ] Sekcja kategorii z `GET /categories` → `/search?category=<slug>`; przy błędzie API sekcja znika, formularz działa
+- [ ] Sekcja „Jak to działa" (trzy kroki) i sekcja CTA dla firm z linkiem do `/create-business`
+- [ ] Dostępność: jeden `<h1>`, sekcje `aria-labelledby`, kontrast na gradiencie WCAG AA
+- [ ] Wzorzec hero i sekcji dopisany do `docs/design-system/index.html`
+- [ ] `landing.spec.ts`: kategorie jako linki z `queryParams`, brak sekcji przy błędzie API, obecność sekcji „Jak to działa" i CTA
+
+---
+
 ## Mapa zależności między milestone'ami
 
 ```mermaid
@@ -740,4 +807,5 @@ graph LR
     M8 --> M9[M9 Recenzje]
     M8 --> M10[M10 Płatności]
     M8 --> M11[M11 Rozszerzenia]
+    M8 --> M12[M12 UI/Design]
 ```
