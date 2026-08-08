@@ -50,16 +50,19 @@
       <!-- poza gałęzią zalogowania: język zmienia się też na ekranie logowania -->
       <div class="hidden md:block"><app-language-switcher /></div>
       @if (auth.isLoggedIn()) {
-        <div class="hidden md:block"><app-user-menu layout="menu" /></div>
+        <div class="hidden md:block"><app-user-menu /></div>
       }
     </div>
   </div>
 
   @if (menuOpen()) {
-    <!-- absolutnie, nie w przepływie: rozwinięcie przy górze strony nie ma przepychać treści -->
+    <!-- absolutnie, nie w przepływie: rozwinięcie przy górze strony nie ma przepychać treści.
+         Pasek jest sticky, więc panel nie odjedzie ze scrollem — własny limit wysokości
+         z przewijaniem, inaczej na niskim ekranie (telefon w poziomie) „Wyloguj" zostaje
+         pod krawędzią okna i nie da się do niego dojechać. -->
     <div
       id="main-menu"
-      class="absolute inset-x-0 top-full border-b border-stone-200 bg-white p-3 shadow-lifted md:hidden"
+      class="absolute inset-x-0 top-full max-h-[calc(100dvh-var(--app-header-h))] overflow-y-auto border-b border-stone-200 bg-white p-3 shadow-lifted md:hidden"
     >
       <nav [attr.aria-label]="i18n.t('nav.main')">
         <app-nav-links
@@ -72,11 +75,21 @@
       <app-language-switcher />
       @if (auth.isLoggedIn()) {
         <hr class="my-3 border-stone-200" />
-        <app-user-menu layout="panel" />
+        <app-account-items />
       }
     </div>
   }
 </header>
+@if (menuOpen()) {
+  <!-- Kurtyna pod paskiem (z-30 < z-40): na dotyku nie ma Escape, a bez tego panel dałoby się
+       zwinąć wyłącznie ponownym tapnięciem w hamburger. Przezroczysta — panel nawigacji nie
+       jest modalem i nie przygasza strony. -->
+  <div
+    aria-hidden="true"
+    class="fixed inset-0 z-30 md:hidden"
+    (click)="closeMenu()"
+  ></div>
+}
 <main>
   <router-outlet></router-outlet>
 </main>

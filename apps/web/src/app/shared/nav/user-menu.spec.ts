@@ -9,7 +9,7 @@ import UserMenu from './user-menu';
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
 
-async function setup(role: UserRole, layout: 'menu' | 'panel' = 'menu') {
+async function setup(role: UserRole) {
   localStorage.clear();
   localStorage.setItem(
     'bookit.accessToken',
@@ -21,7 +21,6 @@ async function setup(role: UserRole, layout: 'menu' | 'panel' = 'menu') {
   }).compileComponents();
 
   const fixture = TestBed.createComponent(UserMenu);
-  fixture.componentRef.setInput('layout', layout);
   fixture.detectChanges();
 
   const el = fixture.nativeElement as HTMLElement;
@@ -65,6 +64,25 @@ describe('UserMenu', () => {
 
     expect(panel()).toBeNull();
     expect(document.activeElement).toBe(trigger());
+  });
+
+  it('Escape obsłużony przez menu nie idzie dalej — panel hamburgera zostaje otwarty', async () => {
+    const { fixture, el, trigger } = await setup('CLIENT');
+    const onDocument = vi.fn();
+    document.addEventListener('keydown', onDocument);
+
+    trigger()?.click();
+    fixture.detectChanges();
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(onDocument).not.toHaveBeenCalled();
+
+    // przy zwiniętym menu Escape ma dolecieć do dokumentu (zamknie panel hamburgera)
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onDocument).toHaveBeenCalledOnce();
+
+    document.removeEventListener('keydown', onDocument);
   });
 
   it('klik poza menu zamyka panel', async () => {
@@ -112,14 +130,5 @@ describe('UserMenu', () => {
     logoutButton()?.click();
 
     expect(logout).toHaveBeenCalledOnce();
-  });
-
-  it('layout="panel" wypisuje pozycje płasko, bez przycisku rozwijającego', async () => {
-    const { el, trigger, logoutButton } = await setup('OWNER', 'panel');
-
-    expect(trigger()).toBeNull();
-    expect(el.textContent).toContain('anna.kowalska@firma.pl');
-    expect(el.querySelector('a')?.getAttribute('href')).toBe('/business');
-    expect(logoutButton()).toBeDefined();
   });
 });

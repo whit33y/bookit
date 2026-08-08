@@ -171,6 +171,57 @@ describe('App', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('Escape działa też, gdy fokus wrócił na <body> (#125)', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button[aria-controls="main-menu"]')?.click();
+    fixture.detectChanges();
+
+    // klik w niefokusowalny fragment panelu (padding, kreska) zdejmuje fokus z hamburgera —
+    // zdarzenie z <body> nie przechodzi przez app-root, więc listener musi siedzieć na dokumencie
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    fixture.detectChanges();
+
+    expect(el.querySelector('#main-menu')).toBeNull();
+  });
+
+  it('klik poza panelem zamyka menu mobilne (#125)', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button[aria-controls="main-menu"]')?.click();
+    fixture.detectChanges();
+
+    el.querySelector<HTMLElement>('div[aria-hidden="true"].fixed')?.click();
+    fixture.detectChanges();
+
+    expect(el.querySelector('#main-menu')).toBeNull();
+  });
+
+  it('poszerzenie okna powyżej md zwija menu mobilne (#125)', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const trigger = el.querySelector<HTMLButtonElement>(
+      'button[aria-controls="main-menu"]',
+    );
+    trigger?.click();
+    fixture.detectChanges();
+
+    Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true });
+    window.dispatchEvent(new Event('resize'));
+    fixture.detectChanges();
+
+    expect(el.querySelector('#main-menu')).toBeNull();
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('przejście na inną trasę zamyka menu mobilne (#125)', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
@@ -181,6 +232,29 @@ describe('App', () => {
     expect(el.querySelector('#main-menu')).not.toBeNull();
 
     await TestBed.inject(Router).navigateByUrl('/client');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('#main-menu')).toBeNull();
+  });
+
+  it('klik w link do bieżącej trasy też zamyka menu mobilne (#125)', async () => {
+    login('CLIENT');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    flushNavRequests();
+    await TestBed.inject(Router).navigateByUrl('/client');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button[aria-controls="main-menu"]')?.click();
+    fixture.detectChanges();
+    expect(el.querySelector('#main-menu')).not.toBeNull();
+
+    // nawigacja „w miejscu" kończy się NavigationSkipped, nie NavigationEnd
+    el.querySelector<HTMLAnchorElement>('#main-menu a[href="/client"]')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
 

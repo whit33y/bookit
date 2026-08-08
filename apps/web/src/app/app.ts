@@ -1,14 +1,24 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import {
+  NavigationEnd,
+  NavigationSkipped,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthStore } from './core/auth/auth-store';
 import { I18nStore } from './core/i18n/i18n-store';
 import { PendingCountStore } from './business/pending-count-store';
 import LanguageSwitcher from './shared/i18n/language-switcher';
+import AccountItems from './shared/nav/account-items';
 import NavLinks from './shared/nav/nav-links';
 import UserMenu from './shared/nav/user-menu';
 import NotificationBell from './shared/notifications/notification-bell';
+
+/** Breakpoint `md` Tailwinda — powyżej niego panel hamburgera jest schowany przez CSS. */
+const MD_BREAKPOINT = 768;
 
 @Component({
   imports: [
@@ -18,12 +28,18 @@ import NotificationBell from './shared/notifications/notification-bell';
     NotificationBell,
     LanguageSwitcher,
     UserMenu,
+    AccountItems,
   ],
   selector: 'app-root',
   templateUrl: './app.html',
   styleUrl: './app.css',
   host: {
-    '(keydown.escape)': 'closeMenuAndRefocus()',
+    // na dokumencie, nie na hoście: po kliknięciu w niefokusowalny fragment panelu
+    // `document.activeElement` wraca na `<body>`, a stamtąd zdarzenie nie przechodzi
+    // przez `app-root`. Wierzchnie panele (dzwoneczek, menu konta) zatrzymują propagację,
+    // więc jedno naciśnięcie zamyka tylko jedną warstwę.
+    '(document:keydown.escape)': 'closeMenuAndRefocus()',
+    '(window:resize)': 'closeMenuOnDesktop()',
   },
 })
 export class App {
@@ -50,10 +66,17 @@ export class App {
 
     // Zamknięcie po nawigacji — obsługuje też klik w link wewnątrz panelu. Nie ma tu
     // odpowiednika `(document:click)` z dzwoneczka: hostem `App` jest cała aplikacja, więc
-    // taki listener nigdy nie zobaczyłby kliku „poza", a zjadłby klik w sam hamburger.
+    // taki listener nigdy nie zobaczyłby kliku „poza", a zjadłby klik w sam hamburger —
+    // klik poza panelem łapie przezroczysta kurtyna w szablonie.
+    // `NavigationSkipped` obok `NavigationEnd`: link do trasy, na której już jesteśmy,
+    // nie kończy się nawigacją (domyślne `onSameUrlNavigation: 'ignore'`), a panel i tak
+    // ma się zwinąć — inaczej tapnięcie w bieżącą pozycję nie robiłoby nic widocznego.
     this.router.events
       .pipe(
-        filter((event) => event instanceof NavigationEnd),
+        filter(
+          (event) =>
+            event instanceof NavigationEnd || event instanceof NavigationSkipped,
+        ),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.menuOpen.set(false));
@@ -63,10 +86,23 @@ export class App {
     this.menuOpen.update((open) => !open);
   }
 
+  protected closeMenu(): void {
+    this.menuOpen.set(false);
+  }
+
   /** Escape zamyka panel i oddaje fokus hamburgerowi — inaczej zniknąłby razem z panelem. */
   protected closeMenuAndRefocus(): void {
     if (!this.menuOpen()) return;
     this.menuOpen.set(false);
     this.menuTrigger()?.nativeElement.focus();
+  }
+
+  /** Powyżej `md` panel i hamburger znikają przez CSS, ale sygnał zostałby na `true`:
+   *  hamburger raportowałby `aria-expanded="true"`, a po powrocie do wąskiego okna panel
+   *  rozwinąłby się sam nad treścią. */
+  protected closeMenuOnDesktop(): void {
+    if (this.menuOpen() && window.innerWidth >= MD_BREAKPOINT) {
+      this.menuOpen.set(false);
+    }
   }
 }

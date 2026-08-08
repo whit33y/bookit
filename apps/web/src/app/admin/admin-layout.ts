@@ -24,7 +24,6 @@ import { ACTIVE_LINK, INACTIVE_LINK } from '../shared/nav/nav-link-classes';
           #businessesLink="routerLinkActive"
           [class]="businessesLink.isActive ? activeLink : inactiveLink"
           [attr.aria-current]="businessesLink.isActive ? 'page' : null"
-          class="rounded-lg px-3.5 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         >
           {{ i18n.t('admin.nav.businesses') }}
         </a>
@@ -34,7 +33,6 @@ import { ACTIVE_LINK, INACTIVE_LINK } from '../shared/nav/nav-link-classes';
           #usersLink="routerLinkActive"
           [class]="usersLink.isActive ? activeLink : inactiveLink"
           [attr.aria-current]="usersLink.isActive ? 'page' : null"
-          class="rounded-lg px-3.5 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         >
           {{ i18n.t('admin.nav.users') }}
         </a>

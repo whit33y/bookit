@@ -28,7 +28,7 @@ const BADGE_MAX = 9;
   imports: [LoadingState, ErrorState, EmptyState],
   host: {
     class: 'relative inline-block',
-    '(keydown.escape)': 'closeAndRefocus()',
+    '(keydown.escape)': 'closeAndRefocus($event)',
     '(document:click)': 'onDocumentClick($event)',
   },
   template: `
@@ -197,8 +197,11 @@ export default class NotificationBell {
     this.open.set(false);
   }
 
-  protected closeAndRefocus(): void {
+  protected closeAndRefocus(event: Event): void {
     if (!this.open()) return;
+    // zamykamy tylko wierzchnią warstwę: bez tego to samo naciśnięcie zwinęłoby też panel
+    // hamburgera (`App` słucha Escape na dokumencie) i przeniosło fokus na hamburger
+    event.stopPropagation();
     this.open.set(false);
     this.trigger().nativeElement.focus();
   }
