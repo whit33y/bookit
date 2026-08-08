@@ -82,7 +82,7 @@ function initials(name: string): string {
     } @else if (business(); as b) {
       <div class="mx-auto w-full max-w-4xl px-4 py-8">
         <article class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-card">
-          <div class="h-32 sm:h-36" style="background: var(--gradient-brand)" aria-hidden="true"></div>
+          <div class="h-32 bg-brand-gradient sm:h-36" aria-hidden="true"></div>
           <div class="p-6 sm:p-8">
             <div class="-mt-14 mb-5 flex flex-wrap items-end gap-4 sm:-mt-16">
               <span

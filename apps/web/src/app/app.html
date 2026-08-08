@@ -1,35 +1,81 @@
-<header>
-  <nav [attr.aria-label]="i18n.t('nav.main')">
-    <a routerLink="/">Bookit</a>
-    @if (auth.isLoggedIn()) {
-      <a routerLink="/client">{{ i18n.t('nav.myBookings') }}</a>
-      @if (role() === 'OWNER' || role() === 'EMPLOYEE') {
-        <a routerLink="/business"
-          >{{ i18n.t('nav.businessPanel') }}
-          @if (pendingCount() > 0) {
-            <span
-              class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-bold text-white"
-              >{{ pendingCount() }}</span
-            >
-          }
-        </a>
+<header
+  class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 backdrop-blur"
+>
+  <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 sm:px-6">
+    <button
+      #menuTrigger
+      type="button"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="main-menu"
+      [attr.aria-label]="i18n.t('nav.toggleMenu')"
+      (click)="toggleMenu()"
+      class="grid h-9 w-9 place-items-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 md:hidden"
+    >
+      <svg
+        aria-hidden="true"
+        class="h-5 w-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+
+    <a
+      routerLink="/"
+      class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+    >
+      <!-- miejsce na logo — rozmiar zarezerwowany, żeby podmiana nie przesuwała paska -->
+      <span aria-hidden="true" class="h-8 w-8 shrink-0"></span>
+      <span class="font-bold tracking-tight">BookIt</span>
+    </a>
+
+    <nav
+      [attr.aria-label]="i18n.t('nav.main')"
+      class="ml-auto hidden items-center md:flex"
+    >
+      <app-nav-links
+        layout="bar"
+        [userRole]="role()"
+        [pendingCount]="pendingCount()"
+      />
+    </nav>
+
+    <div class="ml-auto flex items-center gap-2 md:ml-2">
+      @if (auth.isLoggedIn()) {
+        <app-notification-bell />
       }
-      @if (role() === 'ADMIN') {
-        <a routerLink="/admin">{{ i18n.t('nav.admin') }}</a>
+      <!-- poza gałęzią zalogowania: język zmienia się też na ekranie logowania -->
+      <div class="hidden md:block"><app-language-switcher /></div>
+      @if (auth.isLoggedIn()) {
+        <div class="hidden md:block"><app-user-menu layout="menu" /></div>
       }
-      <app-notification-bell />
-    }
-    <!-- poza gałęzią zalogowania: język zmienia się też na ekranie logowania -->
-    <app-language-switcher />
-    @if (auth.isLoggedIn()) {
-      <button type="button" (click)="auth.logout()">
-        {{ i18n.t('nav.logout') }}
-      </button>
-    } @else {
-      <a routerLink="/login">{{ i18n.t('nav.login') }}</a>
-      <a routerLink="/register">{{ i18n.t('nav.register') }}</a>
-    }
-  </nav>
+    </div>
+  </div>
+
+  @if (menuOpen()) {
+    <!-- absolutnie, nie w przepływie: rozwinięcie przy górze strony nie ma przepychać treści -->
+    <div
+      id="main-menu"
+      class="absolute inset-x-0 top-full border-b border-stone-200 bg-white p-3 shadow-lifted md:hidden"
+    >
+      <nav [attr.aria-label]="i18n.t('nav.main')">
+        <app-nav-links
+          layout="panel"
+          [userRole]="role()"
+          [pendingCount]="pendingCount()"
+        />
+      </nav>
+      <hr class="my-3 border-stone-200" />
+      <app-language-switcher />
+      @if (auth.isLoggedIn()) {
+        <hr class="my-3 border-stone-200" />
+        <app-user-menu layout="panel" />
+      }
+    </div>
+  }
 </header>
 <main>
   <router-outlet></router-outlet>

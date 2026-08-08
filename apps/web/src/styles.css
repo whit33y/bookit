@@ -23,6 +23,8 @@
 
   /* inline wstawia var() do utility, więc wartość nadal pochodzi z tokens.css */
   --shadow-card: var(--shadow-card);
+  /* karty pod kursorem i panel nawigacji na mobile — pomiędzy card a raised */
+  --shadow-lifted: var(--shadow-lifted);
   /* modale (design system §9) unoszą się wyżej niż karty */
   --shadow-raised: var(--shadow-raised);
 }
@@ -44,6 +46,12 @@
   }
   .alert-danger {
     @apply rounded-lg bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-600;
+  }
+  /* Gradient sygnaturowy (tokens.css) jako utility — Tailwind v4 nie ma namespace'u @theme
+     dla background-image, więc klasa zamiast tokenu. Nazwa jak w design systemie, żeby
+     szablony i showcase używały tego samego zapisu zamiast inline'owego `style`. */
+  .bg-brand-gradient {
+    background-image: var(--gradient-brand);
   }
 }
 

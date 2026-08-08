@@ -1,11 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { I18nStore } from '../core/i18n/i18n-store';
-
-// pigułki nawigacji wg design systemu §10 — rozdzielone, bo [class] podmienia cały zestaw
-// zamiast nakładać klasy na siebie (dwie konkurujące klasy text-* zależałyby od kolejności w CSS)
-const ACTIVE_LINK = 'bg-brand-50 font-semibold text-brand-700';
-const INACTIVE_LINK = 'font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900';
+import { ACTIVE_LINK, INACTIVE_LINK } from '../shared/nav/nav-link-classes';
 
 /** Wspólna ramka sekcji /admin: nagłówek + przełącznik tabel (#42). */
 @Component({

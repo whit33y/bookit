@@ -513,6 +513,7 @@ export const en: Dictionary = {
   'status.pending': 'Pending',
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
+  'nav.account': 'Account',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Business panel',
   'nav.login': 'Sign in',
@@ -520,6 +521,8 @@ export const en: Dictionary = {
   'nav.main': 'Main navigation',
   'nav.myBookings': 'My appointments',
   'nav.register': 'Sign up',
+  'nav.toggleMenu': 'Navigation menu',
+  'nav.userMenu': 'User menu',
 
   // ── Powiadomienia (shared/notifications) ────────────────────────────
   'notifications.empty': 'No notifications.',
