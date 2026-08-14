@@ -131,7 +131,7 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
 
       <section class="lg:w-2/5">
         <app-map
-          class="lg:sticky lg:top-6"
+          class="lg:sticky lg:top-[calc(var(--app-header-h)+1.5rem)]"
           heightClass="h-[28rem]"
           [ariaLabel]="i18n.t('search.mapLabel')"
           [pins]="mapPins()"

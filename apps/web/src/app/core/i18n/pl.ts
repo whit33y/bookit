@@ -505,6 +505,7 @@ export const pl = {
   'status.pending': 'Oczekująca',
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
+  'nav.account': 'Konto',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Panel firmy',
   'nav.login': 'Zaloguj',
@@ -512,6 +513,8 @@ export const pl = {
   'nav.main': 'Nawigacja główna',
   'nav.myBookings': 'Moje wizyty',
   'nav.register': 'Rejestracja',
+  'nav.toggleMenu': 'Menu nawigacji',
+  'nav.userMenu': 'Menu użytkownika',
 
   // ── Powiadomienia (shared/notifications) ────────────────────────────
   'notifications.empty': 'Brak powiadomień.',

@@ -23,6 +23,8 @@
 
   /* inline wstawia var() do utility, więc wartość nadal pochodzi z tokens.css */
   --shadow-card: var(--shadow-card);
+  /* karty pod kursorem i panel nawigacji na mobile — pomiędzy card a raised */
+  --shadow-lifted: var(--shadow-lifted);
   /* modale (design system §9) unoszą się wyżej niż karty */
   --shadow-raised: var(--shadow-raised);
 }
@@ -37,6 +39,28 @@
   }
 }
 
+/* Pasek nawigacji jest `sticky top-0 z-40` (#125), więc wszystko, co samo ustawia się przy
+   górnej krawędzi okna, musi go ominąć. */
+@layer base {
+  :root {
+    /* wysokość paska: py-2.5 (20px) + h-9 (36px) + 1px kreski */
+    --app-header-h: 3.5625rem;
+  }
+
+  /* cele scrollIntoView i kotwic lądowałyby pod paskiem — np. karta wyniku po kliknięciu
+     pinezki na mapie wyszukiwarki (search.ts) */
+  html {
+    scroll-padding-top: var(--app-header-h);
+  }
+
+  /* Leaflet trzyma warstwy mapy na z-index 400, a kontrolki na 1000, i sam nie zakłada
+     kontekstu stackingu (ma tylko `position: relative`) — bez `isolate` mapa przewinięta
+     pod pasek rysowałaby się nad nim i przechwytywała kliki w nawigację. */
+  .leaflet-container {
+    isolation: isolate;
+  }
+}
+
 /* Wspólne klocki stron auth — jedna definicja zamiast kopii ściany utility w każdym szablonie. */
 @layer components {
   .btn-primary {
@@ -44,6 +68,12 @@
   }
   .alert-danger {
     @apply rounded-lg bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-600;
+  }
+  /* Gradient sygnaturowy (tokens.css) jako utility — Tailwind v4 nie ma namespace'u @theme
+     dla background-image, więc klasa zamiast tokenu. Nazwa jak w design systemie, żeby
+     szablony i showcase używały tego samego zapisu zamiast inline'owego `style`. */
+  .bg-brand-gradient {
+    background-image: var(--gradient-brand);
   }
 }
 
