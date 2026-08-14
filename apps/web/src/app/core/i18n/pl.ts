@@ -504,6 +504,23 @@ export const pl = {
   'status.declined': 'Odrzucona',
   'status.pending': 'Oczekująca',
 
+  // ── Stopka (shared/layout/footer) ───────────────────────────────────
+  'footer.brand.tagline':
+    'Rezerwuj wizyty w salonach i gabinetach w kilku kliknięciach.',
+  'footer.business.create': 'Załóż firmę',
+  'footer.business.panel': 'Panel firmy',
+  'footer.business.title': 'Dla firm',
+  'footer.clients.myBookings': 'Moje wizyty',
+  'footer.clients.search': 'Wyszukiwarka',
+  'footer.clients.title': 'Dla klientów',
+  'footer.contact.email': 'kontakt@bookit.pl',
+  'footer.contact.emailAria': 'Napisz do nas: {email}',
+  'footer.contact.faq': 'FAQ',
+  'footer.contact.help': 'Pomoc',
+  'footer.contact.title': 'Kontakt',
+  'footer.copyright': '© {year} BookIt. Wszystkie prawa zastrzeżone.',
+  'footer.label': 'Stopka',
+
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Konto',
   'nav.admin': 'Admin',

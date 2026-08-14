@@ -68,6 +68,7 @@
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#modal">Modal i toasty</a></li>
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#nawigacja">Nawigacja</a></li>
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#profil">Profil firmy</a></li>
+        <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#stopka">Stopka</a></li>
       </ul>
     </nav>
 
@@ -475,6 +476,52 @@
             </div>
           </div>
         </article>
+      </section>
+
+      <!-- ── 12. Stopka ────────────────────────────────────── -->
+      <section id="stopka" aria-labelledby="stopka-h">
+        <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-brand-700">12</p>
+        <h2 id="stopka-h" class="mb-6 text-2xl font-bold tracking-tight">Stopka aplikacji</h2>
+        <div class="overflow-hidden rounded-xl border border-stone-200 shadow-card">
+          <footer aria-label="Stopka" class="border-t border-stone-200 bg-white">
+            <!-- ta sama miara i padding co pasek nawigacji (§10) — kolumny trzymają się siatki strony -->
+            <div class="mx-auto max-w-7xl px-4 pt-10 pb-6 sm:px-6">
+              <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <p class="mb-2 font-bold tracking-tight">BookIt</p>
+                  <p class="max-w-xs text-sm leading-relaxed text-stone-500">Rezerwuj wizyty w salonach i gabinetach w kilku kliknięciach.</p>
+                </div>
+                <nav aria-labelledby="ds-footer-clients">
+                  <h3 id="ds-footer-clients" class="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-400">Dla klientów</h3>
+                  <ul class="space-y-2">
+                    <li><a href="#stopka" class="rounded text-sm text-stone-500 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Wyszukiwarka</a></li>
+                    <li><a href="#stopka" class="rounded text-sm text-stone-500 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Moje wizyty</a></li>
+                  </ul>
+                </nav>
+                <nav aria-labelledby="ds-footer-business">
+                  <h3 id="ds-footer-business" class="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-400">Dla firm</h3>
+                  <ul class="space-y-2">
+                    <li><a href="#stopka" class="rounded text-sm text-stone-500 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Załóż firmę</a></li>
+                    <li><a href="#stopka" class="rounded text-sm text-stone-500 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Panel firmy</a></li>
+                  </ul>
+                </nav>
+                <nav aria-labelledby="ds-footer-contact">
+                  <h3 id="ds-footer-contact" class="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-400">Kontakt</h3>
+                  <ul class="space-y-2">
+                    <li><a href="mailto:kontakt@bookit.pl" aria-label="Napisz do nas: kontakt@bookit.pl" class="rounded text-sm text-stone-500 transition hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">kontakt@bookit.pl</a></li>
+                  </ul>
+                </nav>
+              </div>
+              <div class="mt-8 border-t border-stone-200 pt-4 text-sm text-stone-500">© 2026 BookIt. Wszystkie prawa zastrzeżone.</div>
+            </div>
+          </footer>
+        </div>
+        <p class="mt-4 max-w-2xl text-sm leading-relaxed text-stone-500">
+          Kolumny to nawigacje opisane własnym nagłówkiem (<code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">aria-labelledby</code>), więc etykieta ma jedno źródło.
+          Linki wewnętrzne idą przez <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">routerLink</code>; jedyny odnośnik wychodzący to <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">mailto:</code>.
+          Pozycja bez istniejącej trasy w ogóle się nie renderuje — dlatego kolumna „Kontakt” pokazuje na razie sam adres, a „Pomoc” i „FAQ” dołączą razem ze swoimi stronami.
+          Rok w nocie o prawach autorskich liczy komponent, nie tłumaczenie. Siatka: jedna kolumna na mobile, dwie od <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">sm</code>, cztery od <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">lg</code>.
+        </p>
       </section>
 
     </main>

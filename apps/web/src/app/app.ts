@@ -12,6 +12,7 @@ import { AuthStore } from './core/auth/auth-store';
 import { I18nStore } from './core/i18n/i18n-store';
 import { PendingCountStore } from './business/pending-count-store';
 import LanguageSwitcher from './shared/i18n/language-switcher';
+import Footer from './shared/layout/footer';
 import AccountItems from './shared/nav/account-items';
 import NavLinks from './shared/nav/nav-links';
 import UserMenu from './shared/nav/user-menu';
@@ -29,6 +30,7 @@ const MD_BREAKPOINT = 768;
     LanguageSwitcher,
     UserMenu,
     AccountItems,
+    Footer,
   ],
   selector: 'app-root',
   templateUrl: './app.html',

@@ -59,7 +59,7 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('nav')?.textContent).toContain('Zaloguj');
+    expect(compiled.querySelector('header nav')?.textContent).toContain('Zaloguj');
   });
 
   it('niezalogowany nie ma dzwoneczka powiadomień (#54)', async () => {
@@ -78,7 +78,9 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const link = fixture.nativeElement.querySelector('nav a[href="/business"]');
+    const link = fixture.nativeElement.querySelector(
+      'header nav a[href="/business"]',
+    );
     expect(link?.textContent).toContain('Panel firmy');
     expect(link?.textContent).toContain('2');
     expect(fixture.nativeElement.querySelector('app-notification-bell')).not.toBeNull();
@@ -94,9 +96,10 @@ describe('App', () => {
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('nav a[href="/client"]')).not.toBeNull();
-    expect(el.querySelector('nav a[href="/business"]')).toBeNull();
-    expect(el.querySelector('nav a[href="/admin"]')).toBeNull();
+    // selektory zawężone do paska: stopka (#126) linkuje do /business dla każdego
+    expect(el.querySelector('header nav a[href="/client"]')).not.toBeNull();
+    expect(el.querySelector('header nav a[href="/business"]')).toBeNull();
+    expect(el.querySelector('header nav a[href="/admin"]')).toBeNull();
   });
 
   it('ADMIN widzi pozycję panelu admina (#125)', async () => {
@@ -109,8 +112,8 @@ describe('App', () => {
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('nav a[href="/admin"]')).not.toBeNull();
-    expect(el.querySelector('nav a[href="/business"]')).toBeNull();
+    expect(el.querySelector('header nav a[href="/admin"]')).not.toBeNull();
+    expect(el.querySelector('header nav a[href="/business"]')).toBeNull();
   });
 
   it('aktywna trasa dostaje aria-current="page" i pigułkę marki (#125)', async () => {
@@ -124,7 +127,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;
-    const active = el.querySelector('nav a[href="/client"]');
+    const active = el.querySelector('header nav a[href="/client"]');
     expect(active?.getAttribute('aria-current')).toBe('page');
     expect(active?.className).toContain('bg-brand-50');
     expect(active?.className).toContain('text-brand-700');
