@@ -512,6 +512,25 @@ export const en: Dictionary = {
   'status.declined': 'Declined',
   'status.pending': 'Pending',
 
+  // ── Stopka (shared/layout/footer) ───────────────────────────────────
+  'footer.brand.tagline':
+    'Book appointments at salons and studios in a few clicks.',
+  'footer.business.create': 'Add your business',
+  'footer.business.panel': 'Business panel',
+  'footer.business.title': 'For businesses',
+  'footer.clients.myBookings': 'My appointments',
+  'footer.clients.search': 'Search',
+  'footer.clients.title': 'For customers',
+  // adres jest taki sam w obu językach — klucz istnieje, żeby żaden tekst stopki nie siedział
+  // w komponencie (globalne DoD: zero hardkodów UI)
+  'footer.contact.email': 'kontakt@bookit.pl',
+  'footer.contact.emailAria': 'Email us: {email}',
+  'footer.contact.faq': 'FAQ',
+  'footer.contact.help': 'Help',
+  'footer.contact.title': 'Contact',
+  'footer.copyright': '© {year} BookIt. All rights reserved.',
+  'footer.label': 'Footer',
+
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Account',
   'nav.admin': 'Admin',
