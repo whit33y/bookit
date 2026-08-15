@@ -69,6 +69,7 @@
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#nawigacja">Nawigacja</a></li>
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#profil">Profil firmy</a></li>
         <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#stopka">Stopka</a></li>
+        <li><a class="block rounded-md px-3 py-1.5 transition hover:bg-white hover:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" href="#landing">Strona główna</a></li>
       </ul>
     </nav>
 
@@ -521,6 +522,98 @@
           Linki wewnętrzne idą przez <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">routerLink</code>; jedyny odnośnik wychodzący to <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">mailto:</code>.
           Pozycja bez istniejącej trasy w ogóle się nie renderuje — dlatego kolumna „Kontakt” pokazuje na razie sam adres, a „Pomoc” i „FAQ” dołączą razem ze swoimi stronami.
           Rok w nocie o prawach autorskich liczy komponent, nie tłumaczenie. Siatka: jedna kolumna na mobile, dwie od <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">sm</code>, cztery od <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">lg</code>.
+        </p>
+      </section>
+
+      <!-- ── 13. Strona główna ─────────────────────────────── -->
+      <section id="landing" aria-labelledby="landing-h">
+        <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-brand-700">13</p>
+        <h2 id="landing-h" class="mb-6 text-2xl font-bold tracking-tight">Strona główna — hero i sekcje</h2>
+        <div class="overflow-hidden rounded-xl border border-stone-200 shadow-card">
+
+          <!-- Hero: tint marki + ciemny tekst, gradient sygnaturowy tylko jako pasek-akcent -->
+          <div class="bg-gradient-to-b from-brand-50 via-stone-50 to-stone-50 px-6 py-10 sm:px-8">
+            <span aria-hidden="true" class="mb-6 block h-1 w-16 rounded-full bg-brand-gradient"></span>
+            <p class="text-sm font-semibold text-brand-700">Znajdź firmę i zarezerwuj wizytę online.</p>
+            <p class="mt-2 max-w-3xl text-4xl font-extrabold tracking-tight text-stone-900">Zarezerwuj wizytę w kilka kliknięć</p>
+            <p class="mt-4 max-w-2xl text-[15px] leading-relaxed text-stone-600">Fryzjer, barber, paznokcie, masaż, fizjoterapia — sprawdź realne wolne terminy i zarezerwuj online.</p>
+            <form class="mx-auto mt-8 max-w-3xl rounded-2xl border border-stone-200 bg-white p-6 shadow-lifted" onsubmit="return false">
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label for="l-cat" class="mb-1.5 block text-sm font-medium">Kategoria</label>
+                  <select id="l-cat" class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"><option>Wszystkie kategorie</option><option>Fryzjer</option></select>
+                </div>
+                <div>
+                  <label for="l-city" class="mb-1.5 block text-sm font-medium">Miasto</label>
+                  <input id="l-city" type="text" placeholder="np. Kraków" class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm placeholder-stone-400 shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring" />
+                </div>
+                <div>
+                  <label for="l-q" class="mb-1.5 block text-sm font-medium">Czego szukasz?</label>
+                  <input id="l-q" type="text" placeholder="np. strzyżenie" class="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm placeholder-stone-400 shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring" />
+                </div>
+              </div>
+              <button class="mt-5 w-full rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Szukaj</button>
+              <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-stone-200 pt-4">
+                <button class="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium shadow-card transition hover:bg-stone-50">📍 Szukaj w mojej okolicy</button>
+                <select aria-label="Promień wyszukiwania" class="rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"><option>10 km</option></select>
+              </div>
+            </form>
+          </div>
+
+          <div class="space-y-12 bg-stone-50 px-6 py-10 sm:px-8">
+            <!-- Kategorie: kafelki-linki, sekcja znika w całości, gdy API nie odpowie -->
+            <section aria-labelledby="ds-landing-cat">
+              <h3 id="ds-landing-cat" class="mb-6 text-2xl font-bold tracking-tight">Przeglądaj kategorie</h3>
+              <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <li><a href="#landing" class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-5 text-sm font-semibold shadow-card transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 hover:shadow-lifted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Fryzjer <span aria-hidden="true" class="text-stone-400">›</span></a></li>
+                <li><a href="#landing" class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-5 text-sm font-semibold shadow-card transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 hover:shadow-lifted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Barber <span aria-hidden="true" class="text-stone-400">›</span></a></li>
+                <li><a href="#landing" class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-5 text-sm font-semibold shadow-card transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 hover:shadow-lifted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Paznokcie <span aria-hidden="true" class="text-stone-400">›</span></a></li>
+                <li><a href="#landing" class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-5 text-sm font-semibold shadow-card transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 hover:shadow-lifted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Masaż <span aria-hidden="true" class="text-stone-400">›</span></a></li>
+              </ul>
+            </section>
+
+            <!-- Jak to działa: numer kroku to ten sam klocek co awatar z §6 -->
+            <section aria-labelledby="ds-landing-how">
+              <h3 id="ds-landing-how" class="mb-6 text-2xl font-bold tracking-tight">Jak to działa</h3>
+              <ol class="grid gap-5 sm:grid-cols-3">
+                <li class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
+                  <span aria-hidden="true" class="mb-4 grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-200">1</span>
+                  <h4 class="text-lg font-bold">Znajdź firmę</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-stone-500">Szukaj po kategorii, mieście lub frazie — albo pozwól nam znaleźć firmy w Twojej okolicy.</p>
+                </li>
+                <li class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
+                  <span aria-hidden="true" class="mb-4 grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-200">2</span>
+                  <h4 class="text-lg font-bold">Wybierz termin</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-stone-500">Zobacz cennik i realne wolne godziny wybranego specjalisty, bez telefonów i czekania.</p>
+                </li>
+                <li class="rounded-xl border border-stone-200 bg-white p-6 shadow-card">
+                  <span aria-hidden="true" class="mb-4 grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-200">3</span>
+                  <h4 class="text-lg font-bold">Zarezerwuj</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-stone-500">Potwierdzenie dostaniesz mailem, a wizytę odwołasz lub przełożysz w swoim panelu.</p>
+                </li>
+              </ol>
+            </section>
+
+            <!-- CTA dla firm: panel na troncie marki, nie na gradiencie — tekst zostaje ciemny -->
+            <section aria-labelledby="ds-landing-biz">
+              <div class="rounded-2xl bg-brand-50 p-8 ring-1 ring-inset ring-brand-200">
+                <h3 id="ds-landing-biz" class="text-2xl font-bold tracking-tight">Prowadzisz firmę usługową?</h3>
+                <p class="mt-3 max-w-2xl text-[15px] leading-relaxed text-stone-600">Wystaw swój grafik online, przyjmuj rezerwacje przez całą dobę i prowadź kalendarz w jednym miejscu. Założenie profilu jest darmowe.</p>
+                <a href="#landing" class="mt-6 inline-flex rounded-lg bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">Załóż profil firmy</a>
+              </div>
+            </section>
+          </div>
+        </div>
+        <p class="mt-4 max-w-2xl text-sm leading-relaxed text-stone-500">
+          Hero <strong class="font-semibold">nie kładzie tekstu na gradiencie sygnaturowym</strong>: biel na jego jasnym końcu (<code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">#F97316</code>) daje 2,7:1, a WCAG AA wymaga 4,5:1.
+          Tłem jest więc tint marki (<code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">from-brand-50 via-stone-50</code>) pod ciemnym tekstem — ~15:1 — a gradient zostaje wąskim paskiem-akcentem,
+          zgodnie z zasadą z <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">tokens.css</code>: gradient tylko na logo i okładkę profilu (§11).
+          Sekcje trzymają miarę <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">max-w-7xl</code> paska nawigacji (§10) i rytm <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">py-14 sm:py-16</code>; na mobile wszystko schodzi do jednej kolumny.
+          Kafelki kategorii i CTA dla firm są linkami, nie przyciskami. Kafelki prowadzą do <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">/search?category=…</code>, a CTA — do <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">/register?returnUrl=/create-business</code>, nie prosto na zakładanie firmy:
+          ta trasa jest za <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">authGuard</code>, więc niezalogowany — czyli dokładnie ten, do kogo mówi ta sekcja — wylądowałby na gołym formularzu logowania. <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">returnUrl</code> obsługują obie strony, a <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">guestGuard</code> przepuszcza zalogowanego prosto na cel.
+          Cała sekcja kategorii znika, gdy <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">GET /categories</code> zawiedzie; formularz działa wtedy dalej bez filtra kategorii.
+          W trakcie ładowania sekcja stoi już na swoim miejscu z placeholderami o wysokości docelowego kafelka (<code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">p-5</code> + wiersz <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">h-5</code>) i <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">aria-busy</code> — inaczej wskakiwałaby dopiero z odpowiedzią i spychała sekcje pod sobą w połowie renderu.
+          Na stronie jest dokładnie jeden <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">&lt;h1&gt;</code> (nagłówek hero), a każda sekcja opisuje się własnym <code class="rounded bg-stone-100 px-1 py-0.5 text-[13px]">aria-labelledby</code>.
         </p>
       </section>
 

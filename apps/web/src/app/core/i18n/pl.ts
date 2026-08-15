@@ -444,6 +444,11 @@ export const pl = {
   'language.groupLabel': 'Język / Language',
 
   // ── Strona główna (public/landing) ──────────────────────────────────
+  'landing.business.cta': 'Załóż profil firmy',
+  'landing.business.text':
+    'Wystaw swój grafik online, przyjmuj rezerwacje przez całą dobę i prowadź kalendarz w jednym miejscu. Założenie profilu jest darmowe.',
+  'landing.business.title': 'Prowadzisz firmę usługową?',
+  'landing.categories.title': 'Przeglądaj kategorie',
   'landing.category.all': 'Wszystkie kategorie',
   'landing.city.placeholder': 'np. Kraków',
   'landing.error.categories': 'Nie udało się wczytać listy kategorii. {detail}',
@@ -458,6 +463,19 @@ export const pl = {
   'landing.geo.locating': 'Ustalam lokalizację…',
   'landing.geo.radiusLabel': 'Promień wyszukiwania',
   'landing.geo.useMyLocation': '📍 Szukaj w mojej okolicy',
+  'landing.hero.subtitle':
+    'Fryzjer, barber, paznokcie, masaż, fizjoterapia — sprawdź realne wolne terminy i zarezerwuj online, bez dzwonienia i czekania na odpowiedź.',
+  'landing.hero.title': 'Zarezerwuj wizytę w kilka kliknięć',
+  'landing.how.step1.text':
+    'Szukaj po kategorii, mieście lub frazie — albo pozwól nam znaleźć firmy w Twojej okolicy.',
+  'landing.how.step1.title': 'Znajdź firmę',
+  'landing.how.step2.text':
+    'Zobacz cennik i realne wolne godziny wybranego specjalisty, bez telefonów i czekania.',
+  'landing.how.step2.title': 'Wybierz termin',
+  'landing.how.step3.text':
+    'Potwierdzenie dostaniesz mailem, a wizytę odwołasz lub przełożysz w swoim panelu.',
+  'landing.how.step3.title': 'Zarezerwuj',
+  'landing.how.title': 'Jak to działa',
   'landing.query.placeholder': 'np. strzyżenie',
   'landing.search': 'Szukaj',
   'landing.tagline': 'Znajdź firmę i zarezerwuj wizytę online.',
