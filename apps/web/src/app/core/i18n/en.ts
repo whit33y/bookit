@@ -451,6 +451,11 @@ export const en: Dictionary = {
   'language.groupLabel': 'Język / Language',
 
   // ── Strona główna (public/landing) ──────────────────────────────────
+  'landing.business.cta': 'Create a business profile',
+  'landing.business.text':
+    'Put your schedule online, take bookings around the clock and keep your calendar in one place. Creating a profile is free.',
+  'landing.business.title': 'Do you run a service business?',
+  'landing.categories.title': 'Browse categories',
   'landing.category.all': 'All categories',
   'landing.city.placeholder': 'e.g. Kraków',
   'landing.error.categories': 'Could not load the category list. {detail}',
@@ -466,6 +471,19 @@ export const en: Dictionary = {
   'landing.geo.locating': 'Finding your location…',
   'landing.geo.radiusLabel': 'Search radius',
   'landing.geo.useMyLocation': '📍 Search near me',
+  'landing.hero.subtitle':
+    'Hairdressers, barbers, nails, massage, physiotherapy — see real availability and book online, with no phone calls and no waiting for a reply.',
+  'landing.hero.title': 'Book an appointment in a few clicks',
+  'landing.how.step1.text':
+    'Search by category, city or keyword — or let us find the businesses closest to you.',
+  'landing.how.step1.title': 'Find a business',
+  'landing.how.step2.text':
+    'See the price list and the real free hours of the specialist you picked, with no phone calls.',
+  'landing.how.step2.title': 'Pick a time',
+  'landing.how.step3.text':
+    'You get a confirmation by email, and you can cancel or reschedule from your own panel.',
+  'landing.how.step3.title': 'Book it',
+  'landing.how.title': 'How it works',
   'landing.query.placeholder': 'e.g. haircut',
   'landing.search': 'Search',
   'landing.tagline': 'Find a business and book online.',

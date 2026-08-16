@@ -6,7 +6,7 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { GeolocationResult, GeolocationService } from '../../shared/geolocation';
-import { setValue } from '../testing-helpers';
+import { setValue, settle } from '../testing-helpers';
 import Landing from './landing';
 
 const CATEGORIES = [
@@ -174,5 +174,110 @@ describe('Landing', () => {
     expect(el.textContent).toContain('Twoja przeglądarka nie obsługuje geolokalizacji');
     expect(button.disabled).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('ma dokładnie jeden <h1> — nagłówek hero', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/categories').flush(CATEGORIES);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const headings = el.querySelectorAll('h1');
+    expect(headings.length).toBe(1);
+    expect(headings[0].textContent).toContain('Zarezerwuj wizytę');
+  });
+
+  it('renderuje kategorie jako linki do /search z parametrem category', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/categories').flush(CATEGORIES);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const tiles = [
+      ...el.querySelectorAll<HTMLAnchorElement>('[aria-labelledby="landing-categories-h"] a'),
+    ];
+    expect(tiles.map((a) => a.getAttribute('href'))).toEqual([
+      '/search?category=fryzjer',
+      '/search?category=kosmetyczka',
+    ]);
+    expect(tiles.map((a) => a.textContent?.trim().replace(/\s*›$/, ''))).toEqual([
+      'Fryzjer',
+      'Kosmetyczka',
+    ]);
+  });
+
+  it('błąd /categories chowa sekcję kategorii, ale formularz nadal nawiguje', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne('/api/categories')
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    const navigate = vi
+      .spyOn(TestBed.inject(Router), 'navigate')
+      .mockResolvedValue(true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[aria-labelledby="landing-categories-h"]')).toBeNull();
+    expect(el.textContent).toContain('Nie udało się wczytać listy kategorii');
+
+    setValue(el.querySelector('#city') as HTMLInputElement, 'Kraków');
+    await fixture.whenStable();
+    el.querySelector('form')?.dispatchEvent(
+      new Event('submit', { cancelable: true }),
+    );
+
+    expect(navigate).toHaveBeenCalledWith(['/search'], {
+      queryParams: { city: 'Kraków' },
+    });
+  });
+
+  it('pokazuje sekcję „Jak to działa" z trzema krokami', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/categories').flush(CATEGORIES);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[aria-labelledby="landing-how-h"]');
+    expect(section?.querySelector('#landing-how-h')?.textContent).toContain(
+      'Jak to działa',
+    );
+    expect(section?.querySelectorAll('li').length).toBe(3);
+    expect(section?.textContent).toContain('Znajdź firmę');
+    expect(section?.textContent).toContain('Wybierz termin');
+    expect(section?.textContent).toContain('Zarezerwuj');
+  });
+
+  it('pokazuje sekcję CTA dla firm z linkiem do /create-business', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/categories').flush(CATEGORIES);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const section = el.querySelector('[aria-labelledby="landing-business-h"]');
+    const cta = section?.querySelector('a');
+    // przez /register z returnUrl, nie prosto na /create-business: ta trasa jest za authGuard,
+    // a CTA mówi do niezalogowanych — inaczej lądowaliby na gołym formularzu logowania
+    expect(cta?.getAttribute('href')).toBe(
+      '/register?returnUrl=%2Fcreate-business',
+    );
+    expect(cta?.textContent?.trim()).toBe('Załóż profil firmy');
+  });
+
+  it('trzyma miejsce na kategorie w trakcie ładowania, potem podmienia je na linki', async () => {
+    const { fixture, http } = await setup();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const selector = '[aria-labelledby="landing-categories-h"]';
+    expect(el.querySelector(selector)?.getAttribute('aria-busy')).toBe('true');
+    // placeholdery zajmują miejsce, ale nie są jeszcze celami nawigacji
+    expect(el.querySelectorAll(`${selector} li`).length).toBeGreaterThan(0);
+    expect(el.querySelectorAll(`${selector} a`).length).toBe(0);
+
+    http.expectOne('/api/categories').flush(CATEGORIES);
+    await settle(fixture);
+
+    expect(el.querySelector(selector)?.hasAttribute('aria-busy')).toBe(false);
+    expect(el.querySelectorAll(`${selector} a`).length).toBe(2);
   });
 });
