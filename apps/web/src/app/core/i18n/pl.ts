@@ -312,11 +312,14 @@ export const pl = {
   'businessDashboard.calendar': 'Kalendarz',
   'businessDashboard.employees': 'Pracownicy',
   'businessDashboard.pending': 'Oczekujące rezerwacje',
-  'businessDashboard.pendingWithCount': '({count})',
+  'businessDashboard.pendingWithCount.few': '{count} oczekujące rezerwacje',
+  'businessDashboard.pendingWithCount.many': '{count} oczekujących rezerwacji',
+  'businessDashboard.pendingWithCount.one': '{count} oczekująca rezerwacja',
+  'businessDashboard.pendingWithCount.other': '{count} oczekujących rezerwacji',
   'businessDashboard.services': 'Usługi',
   'businessDashboard.settings': 'Ustawienia firmy',
   'businessDashboard.stats': 'Statystyki',
-  'businessDashboard.title': 'Panel firmy',
+  'businessDashboard.title': 'Pulpit firmy',
 
   // ── Uwierzytelnianie (public/login, register, forgot-password, reset-password) ──
   'auth.backToLogin': 'Wróć do logowania',

@@ -19,6 +19,8 @@ _Unikaj_: dashboard, strona główna panelu
 **Kafelek**:
 Pojedynczy blok pulpitu: tytuł, podgląd danych swojej podstrony i wejście na nią.
 Cały kafelek jest jednym linkiem — nie zawiera akcji ani zagnieżdżonych odnośników.
+Jedyny wyjątek to ponowienie nieudanego pobrania: to naprawa żądania, nie decyzja firmy
+(decyzje zapadają na podstronach).
 _Unikaj_: karta, widget, tile
 
 ### Rezerwacje
