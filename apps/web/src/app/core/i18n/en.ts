@@ -314,11 +314,14 @@ export const en: Dictionary = {
   'businessDashboard.calendar': 'Calendar',
   'businessDashboard.employees': 'Staff',
   'businessDashboard.pending': 'Pending bookings',
-  'businessDashboard.pendingWithCount': '({count})',
+  'businessDashboard.pendingWithCount.few': '{count} pending bookings',
+  'businessDashboard.pendingWithCount.many': '{count} pending bookings',
+  'businessDashboard.pendingWithCount.one': '{count} pending booking',
+  'businessDashboard.pendingWithCount.other': '{count} pending bookings',
   'businessDashboard.services': 'Services',
   'businessDashboard.settings': 'Business settings',
   'businessDashboard.stats': 'Statistics',
-  'businessDashboard.title': 'Business panel',
+  'businessDashboard.title': 'Business dashboard',
 
   // ── Uwierzytelnianie (public/login, register, forgot-password, reset-password) ──
   'auth.backToLogin': 'Back to sign in',

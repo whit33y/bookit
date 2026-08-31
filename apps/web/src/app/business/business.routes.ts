@@ -2,7 +2,7 @@ import { Route } from '@angular/router';
 import { roleGuard } from '../core/auth/auth.guard';
 
 export default [
-  { path: '', loadComponent: () => import('./dashboard') },
+  { path: '', loadComponent: () => import('./dashboard/dashboard') },
   {
     // kalendarz wspólny dla OWNER i EMPLOYEE — kto widzi kolumny/wybór pracownika,
     // rozstrzyga rola wewnątrz komponentu (#32)
