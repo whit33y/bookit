@@ -40,6 +40,9 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
   // ich nie koordynuje, więc test tylko domyka to, co poszło w eter
   const http = TestBed.inject(HttpTestingController);
   for (const req of http.match((r) =>
+  // kafelki z podglądem (#133) pobierają dane same, każdy własnym żądaniem — pulpit ich nie
+  // koordynuje, więc test tylko domyka to, co poszło w eter
+  for (const req of TestBed.inject(HttpTestingController).match((r) =>
     r.url.startsWith('/api/businesses/mine/bookings'),
   )) {
     req.flush([]);
@@ -52,6 +55,8 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
   }
   fixture.detectChanges();
   return { fixture, statsRequests, el: fixture.nativeElement as HTMLElement };
+  fixture.detectChanges();
+  return { fixture, el: fixture.nativeElement as HTMLElement };
 }
 
 const tiles = (el: HTMLElement) => [

@@ -10,6 +10,11 @@ import StatsTile from './stats-tile';
  * Pulpit firmy (#132) — siatka kafelków, przez które wchodzi się na podstrony panelu.
  * Kalendarz, oczekujące rezerwacje (#133) i statystyki (#134) mają już własne podglądy,
  * reszta kafelków czeka na dane (#135 usługi/pracownicy/ustawienia). Każdy kafelek z podglądem
+
+/**
+ * Pulpit firmy (#132) — siatka kafelków, przez które wchodzi się na podstrony panelu.
+ * Kalendarz i oczekujące rezerwacje mają już własne podglądy (#133), reszta kafelków czeka
+ * na dane (#134 statystyki, #135 usługi/pracownicy/ustawienia). Każdy kafelek z podglądem
  * pobiera dane sam i trzyma własne stany — błąd jednego nie gasi pozostałych.
  *
  * Kafelki wypisane wprost, a nie generowane z listy danych: kolejność jest wymaganiem, a każdy
@@ -22,6 +27,7 @@ import StatsTile from './stats-tile';
 @Component({
   selector: 'app-business-dashboard',
   imports: [DashboardTile, CalendarTile, PendingTile, StatsTile],
+  imports: [DashboardTile, CalendarTile, PendingTile],
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
