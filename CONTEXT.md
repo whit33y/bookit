@@ -30,6 +30,13 @@ Nagłówek kafelka liczy osobno cały dzisiejszy dzień, więc agenda i ta liczb
 się zgadzać.
 _Unikaj_: plan dnia, harmonogram, lista wizyt
 
+**Ostrzeżenie kafelka**:
+Podgląd kafelka zastąpiony komunikatem z zachętą, gdy zero znaczy „firma nie działa": brak
+aktywnych usług albo aktywnych pracowników — bez usług klient nie ma czego zarezerwować,
+bez pracowników nie ma u kogo. Odróżnia się od stanu pustego, który mówi tylko „na razie nic
+tu nie ma" (brak wizyt na dziś, brak oczekujących rezerwacji).
+_Unikaj_: błąd, alert, stan pusty
+
 ### Rezerwacje
 
 **Oczekująca rezerwacja**:

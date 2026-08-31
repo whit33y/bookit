@@ -15,8 +15,8 @@ const CONTENT = 'Dziś 3 wizyty';
       [link]="link()"
       [state]="state()"
       [errorMessage]="errorMessage()"
-      [emptyTitle]="emptyTitle()"
-      [emptyCta]="emptyCta()"
+      [noticeTitle]="noticeTitle()"
+      [noticeCta]="noticeCta()"
       (retry)="retries.update((n) => n + 1)"
     >
       <p>{{ CONTENT }}</p>
@@ -29,8 +29,8 @@ class TileHost {
   readonly link = signal('/business/calendar');
   readonly state = signal<TileState>('content');
   readonly errorMessage = signal('');
-  readonly emptyTitle = signal('');
-  readonly emptyCta = signal('');
+  readonly noticeTitle = signal('');
+  readonly noticeCta = signal('');
   readonly retries = signal(0);
 }
 
@@ -117,14 +117,31 @@ describe('DashboardTile', () => {
   it('w stanie pustym pokazuje app-empty-state z CTA, nadal bez drugiego linku', async () => {
     const { el } = await render((host) => {
       host.state.set('empty');
-      host.emptyTitle.set('Brak wizyt na dziś.');
-      host.emptyCta.set('Otwórz kalendarz');
+      host.noticeTitle.set('Brak wizyt na dziś.');
+      host.noticeCta.set('Otwórz kalendarz');
     });
     const text = el.textContent ?? '';
 
     expect(text).toContain('Brak wizyt na dziś.');
     expect(text).toContain('Otwórz kalendarz');
     // CTA jest tekstem, nie odnośnikiem — kafelek już linkuje w to samo miejsce
+    expect(focusable(el)).toHaveLength(1);
+  });
+
+  it('ostrzeżenie czyta te same wejścia co stan pusty, ale nie jest stanem pustym', async () => {
+    const { el } = await render((host) => {
+      host.state.set('warning');
+      host.noticeTitle.set('Nie masz aktywnych usług.');
+      host.noticeCta.set('Dodaj pierwszą usługę');
+    });
+    const text = el.textContent ?? '';
+
+    expect(text).toContain('Nie masz aktywnych usług.');
+    expect(text).toContain('Dodaj pierwszą usługę');
+    expect(text).not.toContain(CONTENT);
+    // waga ostrzeżenia idzie zdaniem, nie samym kolorem (WCAG 1.4.1) — a app-empty-state
+    // powiedziałoby „nic tu nie ma", gdy chodzi o „bez tego firma nie działa"
+    expect(el.querySelector('app-empty-state')).toBeNull();
     expect(focusable(el)).toHaveLength(1);
   });
 

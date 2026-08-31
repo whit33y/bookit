@@ -19,19 +19,8 @@ import AppFormField, {
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import type { Employee } from './employee-response';
 
-// lustrzane typy backendu (employeeSelect w findAll, #17)
-interface LinkedUser {
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-}
-interface Employee {
-  id: string;
-  name: string;
-  isActive: boolean;
-  user: LinkedUser | null;
-}
 /** Lustro @MaxLength(100) z CreateEmployeeDto (#17). */
 const EMPLOYEE_NAME_MAX_LENGTH = 100;
 

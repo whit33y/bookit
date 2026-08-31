@@ -22,6 +22,8 @@ import {
   depositAmountCents,
   depositError,
 } from '../../shared/deposit';
+import type { Employee } from '../employees/employee-response';
+import type { Service, ServiceEmployee } from './service-response';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
@@ -38,28 +40,6 @@ const PRICE_MAX = 1_000_000;
 /** „1 000 000" po polsku, „1,000,000" po angielsku — separator tysięcy wg języka UI. */
 const priceFormatter = () => numberFormat({ maximumFractionDigits: 0 });
 
-// lustrzane typy backendu (serviceSelect + employees w findAll, #16/#18/#21)
-interface ServiceEmployee {
-  id: string;
-  name: string;
-}
-interface Service {
-  id: string;
-  name: string;
-  description: string | null;
-  durationMin: number;
-  priceCents: number;
-  isActive: boolean;
-  // zaliczka (#50/#114) — oba pola null = usługa płatna w całości na miejscu
-  depositType: DepositType | null;
-  depositValue: number | null;
-  employees: ServiceEmployee[];
-}
-// GET /businesses/mine/employees zwraca więcej pól — bierzemy id + name do multi-selecta
-interface Employee {
-  id: string;
-  name: string;
-}
 // DELETE zwraca deactivated: true (dezaktywacja, z pełną usługą) lub false (twarde usunięcie)
 interface DeleteResult {
   id: string;
@@ -695,7 +675,9 @@ export default class BusinessServices {
     ])
       .then(([services, employees]) => {
         this.services.set(services);
-        this.employees.set(employees.map((e) => ({ id: e.id, name: e.name })));
+        // cała odpowiedź, bez przycinania do id+name: lista wyboru czyta tylko te dwa pola,
+        // ale typ jest wspólny z `employee-response.ts`
+        this.employees.set(employees);
       })
       .catch((err: unknown) => {
         this.loadError.set(

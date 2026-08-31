@@ -67,8 +67,8 @@ interface AgendaItem {
       link="/business/calendar"
       [state]="state()"
       [errorMessage]="serverError() ?? ''"
-      [emptyTitle]="i18n.t('businessDashboard.calendarEmpty')"
-      [emptyCta]="i18n.t('businessDashboard.calendarCta')"
+      [noticeTitle]="i18n.t('businessDashboard.calendarEmpty')"
+      [noticeCta]="i18n.t('businessDashboard.calendarCta')"
       (retry)="onRetry()"
     >
       <p class="font-semibold">{{ headline() }}</p>

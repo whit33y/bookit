@@ -15,10 +15,18 @@ import { numberFormat } from '../core/i18n/intl';
 @Pipe({ name: 'pricePln', pure: false })
 export class PricePlnPipe implements PipeTransform {
   transform(priceCents: number): string {
-    return numberFormat({
-      style: 'currency',
-      currency: 'PLN',
-      minimumFractionDigits: priceCents % 100 ? 2 : 0,
-    }).format(priceCents / 100);
+    return formatPricePln(priceCents);
   }
+}
+
+/**
+ * To samo formatowanie poza szablonem — dla miejsc, które składają tekst w `computed()`
+ * (kafelek usług na pulpicie, #135). Pipe deleguje tutaj, żeby cena nie miała dwóch zapisów.
+ */
+export function formatPricePln(priceCents: number): string {
+  return numberFormat({
+    style: 'currency',
+    currency: 'PLN',
+    minimumFractionDigits: priceCents % 100 ? 2 : 0,
+  }).format(priceCents / 100);
 }

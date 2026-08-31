@@ -20,19 +20,8 @@ import AppMap from '../../shared/map/map';
 import { GeocodingService } from '../../shared/geocoding';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import type { Business } from './business-response';
 
-// odpowiedź GET /businesses/mine (businessSelect) — tylko pola potrzebne formularzowi
-interface Business {
-  name: string;
-  description: string | null;
-  phone: string | null;
-  street: string;
-  city: string;
-  postalCode: string | null;
-  lat: number;
-  lng: number;
-  cancellationHours: number;
-}
 
 // Lustrzane do UpdateBusinessDto (apps/api) — patterny i długości takie same.
 const POSTAL_CODE = /^\d{2}-\d{3}$/;

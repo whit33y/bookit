@@ -4,8 +4,14 @@ import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
 
-/** Stan podglądu kafelka. Kafelek jest prezentacyjny — o stanie decyduje ten, kto pobiera dane. */
-export type TileState = 'loading' | 'error' | 'empty' | 'content';
+/**
+ * Stan podglądu kafelka. Kafelek jest prezentacyjny — o stanie decyduje ten, kto pobiera dane.
+ *
+ * `empty` i `warning` niosą to samo (komunikat + CTA) i różnią się wyłącznie wagą: brak wizyt
+ * na dziś jest normalny, brak aktywnych usług czy pracowników znaczy, że klient niczego nie
+ * zarezerwuje (#135). Dlatego oba czytają te same `noticeTitle`/`noticeCta`.
+ */
+export type TileState = 'loading' | 'error' | 'empty' | 'warning' | 'content';
 
 /**
  * Skorupa kafelka pulpitu firmy (#132): tytuł, link na całości i slot na podgląd danych.
@@ -21,7 +27,8 @@ export type TileState = 'loading' | 'error' | 'empty' | 'content';
  * Wyjątkiem jest `app-error-state`: ma `relative`, żeby wyjść nad nakładkę i dać się kliknąć.
  * To jedyny dodatkowy przystanek tabulatora w kafelku i jedyna akcja — ponowienie pobrania nie
  * jest decyzją biznesową (te zapadają na podstronach), tylko naprawą nieudanego żądania.
- * CTA w stanie pustym jest z tego powodu tekstem, a nie odnośnikiem — kafelek już tam prowadzi.
+ * CTA w stanie pustym i ostrzegawczym jest z tego powodu tekstem, a nie odnośnikiem — kafelek
+ * już tam prowadzi.
  */
 @Component({
   selector: 'app-dashboard-tile',
@@ -55,14 +62,26 @@ export type TileState = 'loading' | 'error' | 'empty' | 'content';
             />
           }
           @case ('empty') {
-            <app-empty-state [title]="emptyTitle()">
-              @if (emptyCta(); as cta) {
+            <app-empty-state [title]="noticeTitle()">
+              @if (noticeCta(); as cta) {
                 <span
                   class="mt-2 inline-block text-sm font-semibold text-brand-700"
                   >{{ cta }} ›</span
                 >
               }
             </app-empty-state>
+          }
+          @case ('warning') {
+            <!-- Bursztyn jak plakietka statusu PENDING, ale ostrzeżenie niesie treść zdania,
+                 nie kolor — sam odcień nie mówi nic czytnikowi ekranu (WCAG 1.4.1). -->
+            <p
+              class="rounded-lg bg-amber-50 px-3.5 py-2.5 font-medium text-amber-700"
+            >
+              {{ noticeTitle() }}
+              @if (noticeCta(); as cta) {
+                <span class="mt-1 block font-semibold">{{ cta }} ›</span>
+              }
+            </p>
           }
           @default {
             <ng-content />
@@ -81,7 +100,9 @@ export default class DashboardTile {
   readonly state = input<TileState>('content');
   /** Komunikat po `apiErrorMessage()`, jak w pozostałych ekranach panelu. */
   readonly errorMessage = input('');
-  readonly emptyTitle = input('');
-  readonly emptyCta = input('');
+  /** Komunikat stanu pustego albo ostrzeżenia — o wadze decyduje `state`, nie treść. */
+  readonly noticeTitle = input('');
+  /** Zachęta pod komunikatem, tekstem: kafelek jest już linkiem tam, gdzie ona prowadzi. */
+  readonly noticeCta = input('');
   readonly retry = output<void>();
 }
