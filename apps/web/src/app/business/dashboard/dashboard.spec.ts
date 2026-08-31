@@ -1,6 +1,11 @@
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import BusinessDashboard from './dashboard';
 
 const fakeJwt = (payload: object) =>
@@ -29,6 +34,14 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
     fakeJwt({ sub: '1', email: 'a@b.pl', role }),
   );
   const fixture = TestBed.createComponent(BusinessDashboard);
+  fixture.detectChanges();
+  // kafelki z podglądem (#133) pobierają dane same, każdy własnym żądaniem — pulpit ich nie
+  // koordynuje, więc test tylko domyka to, co poszło w eter
+  for (const req of TestBed.inject(HttpTestingController).match((r) =>
+    r.url.startsWith('/api/businesses/mine/bookings'),
+  )) {
+    req.flush([]);
+  }
   fixture.detectChanges();
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
@@ -60,8 +73,16 @@ describe('BusinessDashboard', () => {
     localStorage.clear();
     await TestBed.configureTestingModule({
       imports: [BusinessDashboard],
-      providers: [provideRouter([{ path: '**', children: [] }])],
+      providers: [
+        provideRouter([{ path: '**', children: [] }]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
+  });
+
+  afterEach(() => {
+    TestBed.inject(HttpTestingController).verify();
   });
 
   it('OWNER widzi sześć kafelków w ustalonej kolejności', () => {

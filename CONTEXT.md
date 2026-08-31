@@ -23,6 +23,13 @@ Jedyny wyjątek to ponowienie nieudanego pobrania: to naprawa żądania, nie dec
 (decyzje zapadają na podstronach).
 _Unikaj_: karta, widget, tile
 
+**Agenda**:
+Lista najbliższych nadchodzących wizyt w kafelku kalendarza, licząc od teraz, a nie od
+początku dnia. Mówi, co dalej — także z kolejnych dni, gdy dziś nic już nie zostało.
+Nagłówek kafelka liczy osobno cały dzisiejszy dzień, więc agenda i ta liczba nie muszą
+się zgadzać.
+_Unikaj_: plan dnia, harmonogram, lista wizyt
+
 ### Rezerwacje
 
 **Oczekująca rezerwacja**:
