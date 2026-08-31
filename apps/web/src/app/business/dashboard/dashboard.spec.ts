@@ -6,6 +6,7 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { businessStatsResponse } from '../stats/testing-helpers';
 import BusinessDashboard from './dashboard';
 
 const fakeJwt = (payload: object) =>
@@ -35,15 +36,22 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
   );
   const fixture = TestBed.createComponent(BusinessDashboard);
   fixture.detectChanges();
-  // kafelki z podglądem (#133) pobierają dane same, każdy własnym żądaniem — pulpit ich nie
-  // koordynuje, więc test tylko domyka to, co poszło w eter
-  for (const req of TestBed.inject(HttpTestingController).match((r) =>
+  // kafelki z podglądem (#133, #134) pobierają dane same, każdy własnym żądaniem — pulpit
+  // ich nie koordynuje, więc test tylko domyka to, co poszło w eter
+  const http = TestBed.inject(HttpTestingController);
+  for (const req of http.match((r) =>
     r.url.startsWith('/api/businesses/mine/bookings'),
   )) {
     req.flush([]);
   }
+  const statsRequests = http.match((r) =>
+    r.url.startsWith('/api/businesses/mine/stats'),
+  );
+  for (const req of statsRequests) {
+    req.flush(businessStatsResponse());
+  }
   fixture.detectChanges();
-  return { fixture, el: fixture.nativeElement as HTMLElement };
+  return { fixture, statsRequests, el: fixture.nativeElement as HTMLElement };
 }
 
 const tiles = (el: HTMLElement) => [
@@ -103,6 +111,16 @@ describe('BusinessDashboard', () => {
     for (const link of OWNER_ONLY_LINKS) {
       expect(hrefs(el)).not.toContain(link);
     }
+  });
+
+  // kafelek statystyk (#134) czyta `GET /businesses/mine/stats`, endpoint spod @Roles(OWNER) —
+  // dla EMPLOYEE nie może się nawet zamontować, bo żądanie wróciłoby 403 i kafelek pokazałby
+  // błąd zamiast po prostu nie istnieć
+  it('EMPLOYEE nie widzi kafelka statystyk i nie odpala żądania o statystyki', () => {
+    const { el, statsRequests } = setup('EMPLOYEE');
+
+    expect(el.querySelector('app-dashboard-stats-tile')).toBeNull();
+    expect(statsRequests).toHaveLength(0);
   });
 
   it('siatka ma 1 kolumnę na telefonie, 2 na tablecie i 3 na desktopie', () => {

@@ -12,13 +12,13 @@ import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
 import { isCalendarDate } from '../calendar/calendar-date';
 import {
+  type BookingStatus,
   STATUS_CLASSES,
   STATUS_KEYS,
 } from '../calendar/booking-details-dialog';
 import { buildStatsQueryParams, readStatsParams, statsPath } from './stats-params';
 import {
   STATS_PRESETS,
-  StatsGranularity,
   StatsPreset,
   StatsRange,
   bucketLabel,
@@ -27,48 +27,7 @@ import {
   rangeLabel,
   shiftAnchor,
 } from './stats-range';
-
-// lustrzane typy backendu (BusinessStats z apps/api/.../stats/stats.service.ts, #56)
-type BookingStatus = keyof typeof STATUS_KEYS;
-type StatusCounts = Record<BookingStatus, number>;
-
-interface SeriesBucket {
-  bucket: string;
-  total: number;
-  byStatus: StatusCounts;
-}
-
-interface EmployeeOccupancy {
-  employeeId: string;
-  name: string;
-  bookings: number;
-  bookedMinutes: number;
-  capacityMinutes: number;
-  occupancyPercent: number | null;
-}
-
-interface TopService {
-  serviceId: string;
-  name: string;
-  bookings: number;
-  revenueCents: number;
-}
-
-interface BusinessStatsResponse {
-  range: { from: string; to: string; granularity: StatsGranularity };
-  totals: {
-    bookings: number;
-    byStatus: StatusCounts;
-    completedBookings: number;
-    completedRevenueCents: number;
-    bookedMinutes: number;
-    capacityMinutes: number;
-    occupancyPercent: number | null;
-  };
-  series: SeriesBucket[];
-  employees: EmployeeOccupancy[];
-  topServices: TopService[];
-}
+import type { BusinessStatsResponse } from './stats-response';
 
 /**
  * Kolejność i kolory serii wykresu. Kolejność od „najbardziej pozytywnej": zakończone na dole
