@@ -310,8 +310,13 @@ export const pl = {
 
   // ── Panel firmy — pulpit (business/dashboard) ───────────────────────
   'businessDashboard.calendar': 'Kalendarz',
+  'businessDashboard.calendarCta': 'Otwórz kalendarz',
+  'businessDashboard.calendarEmpty': 'Brak wizyt w najbliższych dniach.',
+  'businessDashboard.calendarNoUpcoming': 'Brak kolejnych wizyt.',
   'businessDashboard.employees': 'Pracownicy',
   'businessDashboard.pending': 'Oczekujące rezerwacje',
+  'businessDashboard.pendingCta': 'Rozpatrz rezerwacje',
+  'businessDashboard.pendingEmpty': 'Brak oczekujących rezerwacji.',
   'businessDashboard.pendingWithCount.few': '{count} oczekujące rezerwacje',
   'businessDashboard.pendingWithCount.many': '{count} oczekujących rezerwacji',
   'businessDashboard.pendingWithCount.one': '{count} oczekująca rezerwacja',
@@ -320,6 +325,11 @@ export const pl = {
   'businessDashboard.settings': 'Ustawienia firmy',
   'businessDashboard.stats': 'Statystyki',
   'businessDashboard.title': 'Pulpit firmy',
+  'businessDashboard.todayCount.few': 'Dziś: {count} wizyty',
+  'businessDashboard.todayCount.many': 'Dziś: {count} wizyt',
+  'businessDashboard.todayCount.one': 'Dziś: {count} wizyta',
+  'businessDashboard.todayCount.other': 'Dziś: {count} wizyt',
+  'businessDashboard.todayNone': 'Dziś brak wizyt',
 
   // ── Uwierzytelnianie (public/login, register, forgot-password, reset-password) ──
   'auth.backToLogin': 'Wróć do logowania',

@@ -10,6 +10,7 @@ import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
 import { CalendarBooking } from '../calendar/booking-details-dialog';
+import { mineBookingsUrl } from '../mine-bookings';
 import { PendingCountStore, pendingRange } from '../pending-count-store';
 
 /** Lista rezerwacji PENDING z akcjami akceptuj/odrzuć/odwołaj (#33). GET /businesses/mine/bookings
@@ -256,11 +257,8 @@ export default class PendingBookings {
     }
     this.serverError.set(null);
     try {
-      const { from, to } = pendingRange();
       const all = await firstValueFrom(
-        this.api.get<CalendarBooking[]>(
-          `/businesses/mine/bookings?${new URLSearchParams({ from, to })}`,
-        ),
+        this.api.get<CalendarBooking[]>(mineBookingsUrl(pendingRange())),
       );
       const pending = all.filter((b) => b.status === 'PENDING');
       this.bookings.set(pending);

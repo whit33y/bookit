@@ -4,6 +4,7 @@ import { ApiClient } from '../core/api-client';
 import { AuthStore } from '../core/auth/auth-store';
 import { todayInBusinessTz } from '../shared/business-time';
 import { addDays } from './calendar/calendar-date';
+import { mineBookingsUrl, type BookingRange } from './mine-bookings';
 
 const LOOKBACK_DAYS = 60;
 const LOOKAHEAD_DAYS = 180;
@@ -12,7 +13,7 @@ const LOOKAHEAD_DAYS = 180;
  *  filtra po statusie i wymaga from/to, więc bierzemy szerokie okno wokół dziś i filtrujemy
  *  PENDING po stronie klienta. Wyeksportowane, żeby lista oczekujących używała dokładnie tego
  *  samego zakresu co licznik w nawigacji. */
-export function pendingRange(): { from: string; to: string } {
+export function pendingRange(): BookingRange {
   const today = todayInBusinessTz();
   return { from: addDays(today, -LOOKBACK_DAYS), to: addDays(today, LOOKAHEAD_DAYS) };
 }
@@ -62,12 +63,9 @@ export class PendingCountStore {
       return;
     }
     const id = ++this.requestId;
-    const { from, to } = pendingRange();
     try {
       const bookings = await firstValueFrom(
-        this.api.get<MinimalBooking[]>(
-          `/businesses/mine/bookings?${new URLSearchParams({ from, to })}`,
-        ),
+        this.api.get<MinimalBooking[]>(mineBookingsUrl(pendingRange())),
       );
       // odpowiedź nieaktualna — coś świeższego (set/decrement albo kolejny refresh) już wygrało
       if (id !== this.requestId) return;

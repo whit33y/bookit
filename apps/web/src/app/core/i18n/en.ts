@@ -312,8 +312,13 @@ export const en: Dictionary = {
 
   // ── Panel firmy — pulpit (business/dashboard) ───────────────────────
   'businessDashboard.calendar': 'Calendar',
+  'businessDashboard.calendarCta': 'Open the calendar',
+  'businessDashboard.calendarEmpty': 'No visits in the coming days.',
+  'businessDashboard.calendarNoUpcoming': 'No further visits.',
   'businessDashboard.employees': 'Staff',
   'businessDashboard.pending': 'Pending bookings',
+  'businessDashboard.pendingCta': 'Review bookings',
+  'businessDashboard.pendingEmpty': 'No pending bookings.',
   'businessDashboard.pendingWithCount.few': '{count} pending bookings',
   'businessDashboard.pendingWithCount.many': '{count} pending bookings',
   'businessDashboard.pendingWithCount.one': '{count} pending booking',
@@ -322,6 +327,11 @@ export const en: Dictionary = {
   'businessDashboard.settings': 'Business settings',
   'businessDashboard.stats': 'Statistics',
   'businessDashboard.title': 'Business dashboard',
+  'businessDashboard.todayCount.few': 'Today: {count} visits',
+  'businessDashboard.todayCount.many': 'Today: {count} visits',
+  'businessDashboard.todayCount.one': 'Today: {count} visit',
+  'businessDashboard.todayCount.other': 'Today: {count} visits',
+  'businessDashboard.todayNone': 'No visits today',
 
   // ── Uwierzytelnianie (public/login, register, forgot-password, reset-password) ──
   'auth.backToLogin': 'Back to sign in',
