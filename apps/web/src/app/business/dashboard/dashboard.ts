@@ -2,15 +2,17 @@ import { Component, computed, inject } from '@angular/core';
 import { AuthStore } from '../../core/auth/auth-store';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import CalendarTile from './calendar-tile';
-import DashboardTile from './dashboard-tile';
+import EmployeesTile from './employees-tile';
 import PendingTile from './pending-tile';
+import ServicesTile from './services-tile';
+import SettingsTile from './settings-tile';
 import StatsTile from './stats-tile';
 
 /**
  * Pulpit firmy (#132) — siatka kafelków, przez które wchodzi się na podstrony panelu.
- * Kalendarz, oczekujące rezerwacje (#133) i statystyki (#134) mają już własne podglądy,
- * reszta kafelków czeka na dane (#135 usługi/pracownicy/ustawienia). Każdy kafelek z podglądem
- * pobiera dane sam i trzyma własne stany — błąd jednego nie gasi pozostałych.
+ * Kalendarz i oczekujące rezerwacje (#133), statystyki (#134) oraz usługi, pracownicy
+ * i ustawienia firmy (#135) mają własne podglądy. Każdy kafelek pobiera dane sam i trzyma
+ * własne stany — błąd jednego nie gasi pozostałych.
  *
  * Kafelki wypisane wprost, a nie generowane z listy danych: kolejność jest wymaganiem, a każdy
  * z podglądem jest osobnym komponentem z własnym pobieraniem — pętla nie miałaby po czym
@@ -21,7 +23,14 @@ import StatsTile from './stats-tile';
  */
 @Component({
   selector: 'app-business-dashboard',
-  imports: [DashboardTile, CalendarTile, PendingTile, StatsTile],
+  imports: [
+    CalendarTile,
+    PendingTile,
+    StatsTile,
+    ServicesTile,
+    EmployeesTile,
+    SettingsTile,
+  ],
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
@@ -40,22 +49,13 @@ import StatsTile from './stats-tile';
             <app-dashboard-stats-tile />
           </li>
           <li>
-            <app-dashboard-tile
-              [heading]="i18n.t('businessDashboard.services')"
-              link="/business/services"
-            />
+            <app-dashboard-services-tile />
           </li>
           <li>
-            <app-dashboard-tile
-              [heading]="i18n.t('businessDashboard.employees')"
-              link="/business/employees"
-            />
+            <app-dashboard-employees-tile />
           </li>
           <li>
-            <app-dashboard-tile
-              [heading]="i18n.t('businessDashboard.settings')"
-              link="/business/settings"
-            />
+            <app-dashboard-settings-tile />
           </li>
         }
       </ul>

@@ -6,6 +6,9 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { employeeResponse } from '../employees/testing-helpers';
+import { serviceResponse } from '../services/testing-helpers';
+import { businessResponse } from '../settings/testing-helpers';
 import { businessStatsResponse } from '../stats/testing-helpers';
 import BusinessDashboard from './dashboard';
 
@@ -36,7 +39,7 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
   );
   const fixture = TestBed.createComponent(BusinessDashboard);
   fixture.detectChanges();
-  // kafelki z podglądem (#133, #134) pobierają dane same, każdy własnym żądaniem — pulpit
+  // kafelki z podglądem (#133–#135) pobierają dane same, każdy własnym żądaniem — pulpit
   // ich nie koordynuje, więc test tylko domyka to, co poszło w eter
   const http = TestBed.inject(HttpTestingController);
   for (const req of http.match((r) =>
@@ -44,14 +47,37 @@ function setup(role: 'OWNER' | 'EMPLOYEE') {
   )) {
     req.flush([]);
   }
+  // endpointy spod @Roles(OWNER): dla EMPLOYEE żadne z tych żądań nie ma prawa polecieć
   const statsRequests = http.match((r) =>
     r.url.startsWith('/api/businesses/mine/stats'),
   );
   for (const req of statsRequests) {
     req.flush(businessStatsResponse());
   }
+  const servicesRequests = http.match('/api/businesses/mine/services');
+  for (const req of servicesRequests) {
+    req.flush([serviceResponse()]);
+  }
+  const employeesRequests = http.match('/api/businesses/mine/employees');
+  for (const req of employeesRequests) {
+    req.flush([employeeResponse()]);
+  }
+  const businessRequests = http.match('/api/businesses/mine');
+  for (const req of businessRequests) {
+    req.flush(businessResponse());
+  }
   fixture.detectChanges();
-  return { fixture, statsRequests, el: fixture.nativeElement as HTMLElement };
+  return {
+    fixture,
+    statsRequests,
+    ownerOnlyRequests: [
+      ...statsRequests,
+      ...servicesRequests,
+      ...employeesRequests,
+      ...businessRequests,
+    ],
+    el: fixture.nativeElement as HTMLElement,
+  };
 }
 
 const tiles = (el: HTMLElement) => [
@@ -116,11 +142,20 @@ describe('BusinessDashboard', () => {
   // kafelek statystyk (#134) czyta `GET /businesses/mine/stats`, endpoint spod @Roles(OWNER) —
   // dla EMPLOYEE nie może się nawet zamontować, bo żądanie wróciłoby 403 i kafelek pokazałby
   // błąd zamiast po prostu nie istnieć
-  it('EMPLOYEE nie widzi kafelka statystyk i nie odpala żądania o statystyki', () => {
-    const { el, statsRequests } = setup('EMPLOYEE');
+  it('EMPLOYEE nie widzi kafelków spod @Roles(OWNER) i nie odpala ich żądań', () => {
+    const { el, ownerOnlyRequests } = setup('EMPLOYEE');
 
     expect(el.querySelector('app-dashboard-stats-tile')).toBeNull();
-    expect(statsRequests).toHaveLength(0);
+    expect(el.querySelector('app-dashboard-services-tile')).toBeNull();
+    expect(el.querySelector('app-dashboard-employees-tile')).toBeNull();
+    expect(el.querySelector('app-dashboard-settings-tile')).toBeNull();
+    expect(ownerOnlyRequests).toHaveLength(0);
+  });
+
+  it('OWNER dostaje po jednym żądaniu na kafelek spod @Roles(OWNER)', () => {
+    expect(setup('OWNER').ownerOnlyRequests).toHaveLength(
+      OWNER_ONLY_LINKS.length,
+    );
   });
 
   it('siatka ma 1 kolumnę na telefonie, 2 na tablecie i 3 na desktopie', () => {

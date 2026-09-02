@@ -6,6 +6,7 @@ import { formatDate, formatTime } from '../../shared/business-time';
 import { CalendarBooking } from '../calendar/booking-details-dialog';
 import { byStartsAt, mineBookingsUrl } from '../mine-bookings';
 import { pendingRange } from '../pending-count-store';
+import CountPreview, { type PreviewItem } from './count-preview';
 import DashboardTile, { type TileState } from './dashboard-tile';
 
 /** Ile oczekujących pokazuje próbka pod liczbą (#133: „2–3 najbliższe"). */
@@ -33,15 +34,6 @@ function nearestPending(
   ];
 }
 
-/** Jedna pozycja próbki, gotowa do wyświetlenia — jak w kafelku kalendarza, formatowanie
- *  siedzi w `computed()`, nie w szablonie. */
-interface PendingItem {
-  id: string;
-  client: string;
-  service: string;
-  when: string;
-}
-
 /**
  * Kafelek oczekujących rezerwacji na pulpicie firmy (#133): liczba `PENDING` i próbka
  * najbliższych do rozpatrzenia.
@@ -56,10 +48,12 @@ interface PendingItem {
  * milczy przy błędzie, kafelek musi go pokazać razem z ponowieniem.
  *
  * Rozpatrywanie zostaje na `/business/pending`: kafelek pokazuje, nie decyduje.
+ *
+ * Układ „liczba + próbka" dzieli z kafelkami usług i pracowników (#135) — `CountPreview`.
  */
 @Component({
   selector: 'app-dashboard-pending-tile',
-  imports: [DashboardTile],
+  imports: [DashboardTile, CountPreview],
   host: { class: 'block h-full' },
   template: `
     <app-dashboard-tile
@@ -67,24 +61,14 @@ interface PendingItem {
       link="/business/pending"
       [state]="state()"
       [errorMessage]="serverError() ?? ''"
-      [emptyTitle]="i18n.t('businessDashboard.pendingEmpty')"
-      [emptyCta]="i18n.t('businessDashboard.pendingCta')"
+      [noticeTitle]="i18n.t('businessDashboard.pendingEmpty')"
+      [noticeCta]="i18n.t('businessDashboard.pendingCta')"
       (retry)="onRetry()"
     >
-      <p class="font-semibold">
-        {{ i18n.plural('businessDashboard.pendingWithCount', count()) }}
-      </p>
-
-      <ul class="mt-3 flex flex-col gap-2">
-        @for (item of preview(); track item.id) {
-          <li class="min-w-0">
-            <span class="block truncate font-medium">{{ item.client }}</span>
-            <span class="block truncate text-stone-600"
-              >{{ item.service }} · {{ item.when }}</span
-            >
-          </li>
-        }
-      </ul>
+      <app-dashboard-count-preview
+        [headline]="i18n.plural('businessDashboard.pendingWithCount', count())"
+        [items]="preview()"
+      />
     </app-dashboard-tile>
   `,
 })
@@ -104,14 +88,15 @@ export default class PendingTile {
 
   protected readonly count = computed(() => this.pending().length);
 
-  protected readonly preview = computed<PendingItem[]>(() =>
+  /** Formatowanie siedzi w `computed()`, nie w szablonie — jak w kafelku kalendarza; dzięki
+   *  temu próbka przelicza się też po zmianie języka (czyta `Intl`, #57). */
+  protected readonly preview = computed<PreviewItem[]>(() =>
     this.pending()
       .slice(0, PENDING_PREVIEW_LIMIT)
       .map((booking) => ({
         id: booking.id,
-        client: `${booking.client.firstName} ${booking.client.lastName}`,
-        service: booking.service.name,
-        when: `${formatDate(booking.startsAt)}, ${formatTime(booking.startsAt)}`,
+        primary: `${booking.client.firstName} ${booking.client.lastName}`,
+        secondary: `${booking.service.name} · ${formatDate(booking.startsAt)}, ${formatTime(booking.startsAt)}`,
       })),
   );
 
