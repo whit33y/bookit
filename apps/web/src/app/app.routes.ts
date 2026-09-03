@@ -30,7 +30,8 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./public/reset-password/reset-password'),
   },
   {
-    // dostępne dla każdego zalogowanego (CLIENT zakłada firmę); OWNER z firmą dostaje 409 przy submit
+    // dostępne dla każdego zalogowanego: komponent sam rozpoznaje stan zgłoszenia (#142) —
+    // formularz, ekran „czeka na akceptację" albo przekierowanie do panelu po akceptacji
     path: 'create-business',
     canActivate: [authGuard],
     loadComponent: () => import('./business/create-business/create-business'),

@@ -226,9 +226,19 @@ export const pl = {
     'Nie znaleziono adresu na mapie. Sprawdź dane i spróbuj ponownie.',
   'businessForm.geocode.searching': 'Szukam…',
   'createBusiness.categoryPlaceholder': 'Wybierz kategorię',
+  'createBusiness.error.load':
+    'Nie udało się sprawdzić statusu Twojego zgłoszenia. {detail}',
   'createBusiness.field.category': 'Kategoria',
   'createBusiness.geocode.required':
     'Najpierw znajdź adres na mapie — bez współrzędnych nie można założyć firmy.',
+  'createBusiness.loading': 'Sprawdzanie zgłoszenia…',
+  'createBusiness.pending.description':
+    'Zgłoszenie trafiło do administratora i czeka na decyzję. Damy Ci znać, gdy zostanie rozpatrzone — na razie nie trzeba nic robić.',
+  'createBusiness.pending.title': 'Zgłoszenie czeka na akceptację',
+  'createBusiness.rejected.hint':
+    'Możesz wypełnić formularz od nowa — wyślemy nowe zgłoszenie.',
+  'createBusiness.rejected.reason': 'Powód: {reason}',
+  'createBusiness.rejected.title': 'Twoje zgłoszenie zostało odrzucone',
   'createBusiness.submit': 'Załóż firmę',
   'createBusiness.submitting': 'Zakładanie…',
   'createBusiness.subtitle': 'Utwórz publiczny profil swojej firmy w BookIt',
