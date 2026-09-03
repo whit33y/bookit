@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
+import { publicBusinessWhere } from '../businesses/public-business';
 import { parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessReviewsQueryDto } from './dto/business-reviews-query.dto';
@@ -81,10 +82,10 @@ export class ReviewsService {
     // ma dać 400 niezależnie od tego, czy firma istnieje, i nie kosztować zapytania do bazy
     const { page, limit, skip } = parsePagination(query);
 
-    // isBlocked w WHERE jak w BusinessesService.findBySlug → zablokowana i nieistniejąca firma
-    // dają identyczne 404 (odczyt recenzji nie zdradza, że firma istnieje)
+    // warunek „firma działa" w WHERE jak w BusinessesService.findBySlug → firma niedziałająca
+    // i nieistniejąca dają identyczne 404 (odczyt recenzji nie zdradza, że firma istnieje)
     const business = await this.prisma.business.findFirst({
-      where: { slug, isBlocked: false },
+      where: { slug, ...publicBusinessWhere },
       select: { id: true },
     });
     if (!business) {

@@ -34,7 +34,7 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 ### MVP
 
 - Rejestracja i logowanie (email + hasło, JWT + refresh, reset hasła mailem)
-- Samoobsługowe zakładanie profilu firmy (od razu widoczna publicznie)
+- Samoobsługowe zgłoszenie firmy — widoczna publicznie dopiero po akceptacji administratora
 - CRUD usług (nazwa, opis, czas trwania, cena informacyjna) i pracowników
 - Tygodniowe grafiki pracowników + urlopy/wyjątki; sloty wyliczane automatycznie
 - Wyszukiwarka: kategoria + miasto + fraza **oraz** geolokalizacja z mapą (Leaflet + OpenStreetMap)
@@ -144,6 +144,13 @@ enum DepositType {
   PERCENT
 }
 
+// Faza 2, zgłoszenia firm (#141)
+enum BusinessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // Faza 2, powiadomienia in-app (#54)
 enum NotificationType {
   BOOKING_CREATED
@@ -232,6 +239,9 @@ model Business {
   lng         Float
   // polityka odwołań: klient może odwołać/przenieść do X godzin przed wizytą
   cancellationHours Int     @default(24)
+  // stan zgłoszenia (#141) — oś niezależna od isBlocked: „czy wpuszczona" vs „czy ukarana"
+  status            BusinessStatus @default(PENDING)
+  rejectionReason   String?
   isBlocked         Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -411,7 +421,8 @@ Moduły w `apps/api/src/app/`:
 | `GET /categories`                                           | publiczne            | słownik kategorii                                                                  |
 | `GET /businesses`                                           | publiczne            | wyszukiwarka: `?category=&city=&q=&lat=&lng=&radiusKm=`                            |
 | `GET /businesses/:slug`                                     | publiczne            | profil firmy z usługami i pracownikami                                             |
-| `POST /businesses`                                          | zalogowany           | założenie firmy (klient staje się właścicielem)                                    |
+| `POST /businesses`                                          | zalogowany           | zgłoszenie firmy (`PENDING`, rola bez zmian; ponawialne po odrzuceniu)             |
+| `GET /businesses/mine/application`                          | zalogowany           | stan własnego zgłoszenia wraz z powodem odrzucenia                                 |
 | `PATCH /businesses/mine`                                    | właściciel           | edycja profilu, polityki odwołań                                                   |
 | `GET/POST/PATCH/DELETE /businesses/mine/services…`          | właściciel           | CRUD usług                                                                         |
 | `GET/POST/PATCH/DELETE /businesses/mine/employees…`         | właściciel           | CRUD pracowników                                                                   |

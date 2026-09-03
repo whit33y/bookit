@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { publicBusinessWhere } from '../businesses/public-business';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   localDayRangeUtc,
@@ -26,10 +27,10 @@ export class AvailabilityService {
   async getSlots(slug: string, query: AvailabilityQueryDto): Promise<AvailableSlot[]> {
     const date = parseLocalDate(query.date);
 
-    // isBlocked w WHERE, nie po fetchu → zablokowana i nieistniejąca dają identyczne 404
-    // (tak jak BusinessesService.findBySlug)
+    // warunek „firma działa" w WHERE, nie po fetchu → firma niedziałająca i nieistniejąca
+    // dają identyczne 404 (tak jak BusinessesService.findBySlug)
     const business = await this.prisma.business.findFirst({
-      where: { slug, isBlocked: false },
+      where: { slug, ...publicBusinessWhere },
       select: { id: true },
     });
     if (!business) {

@@ -14,6 +14,14 @@ enum UserRole {
   ADMIN
 }
 
+// Stan zgłoszenia firmy (#141). Osobna oś od `isBlocked`: status mówi „czy w ogóle wpuszczona",
+// `isBlocked` — „wpuszczona, ale ukarana". Firma działa dopiero jako APPROVED i niezablokowana.
+enum BusinessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -97,23 +105,26 @@ model Category {
 }
 
 model Business {
-  id          String  @id @default(uuid())
-  ownerId     String  @unique
-  categoryId  String
-  name        String
-  slug        String  @unique
-  description String?
-  phone       String?
-  street      String
-  city        String
-  postalCode  String?
-  lat         Float
-  lng         Float
+  id                String         @id @default(uuid())
+  ownerId           String         @unique
+  categoryId        String
+  name              String
+  slug              String         @unique
+  description       String?
+  phone             String?
+  street            String
+  city              String
+  postalCode        String?
+  lat               Float
+  lng               Float
   // polityka odwołań: klient może odwołać/przenieść do X godzin przed wizytą
-  cancellationHours Int      @default(24)
-  isBlocked         Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  cancellationHours Int            @default(24)
+  status            BusinessStatus @default(PENDING)
+  // powód odrzucenia zgłoszenia przez administratora (#143); czyszczony przy ponownym zgłoszeniu
+  rejectionReason   String?
+  isBlocked         Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   owner     User       @relation(fields: [ownerId], references: [id])
   category  Category   @relation(fields: [categoryId], references: [id])
@@ -124,6 +135,8 @@ model Business {
 
   @@index([city])
   @@index([categoryId])
+  // kolejka zgłoszeń administratora (#143) filtruje wyłącznie po statusie
+  @@index([status])
 }
 
 model Employee {

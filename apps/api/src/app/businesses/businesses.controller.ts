@@ -38,15 +38,28 @@ export class BusinessesController {
     return this.businessesService.findMine(user.sub);
   }
 
+  /**
+   * Stan własnego zgłoszenia firmy (#141). Dostępne dla CLIENT-a, bo zgłaszający nie ma jeszcze
+   * roli OWNER — tę daje dopiero akceptacja administratora; OWNER też przechodzi, żeby ta sama
+   * ścieżka odpowiadała po akceptacji. Dwa segmenty, więc nie koliduje z ':slug'.
+   */
+  @Get('mine/application')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.OWNER)
+  findApplication(@CurrentUser() user: AuthUser) {
+    return this.businessesService.findApplication(user.sub);
+  }
+
   // publiczny profil firmy — bez guardów (jak categories)
   @Get(':slug')
   findBySlug(@Param('slug') slug: string) {
     return this.businessesService.findBySlug(slug);
   }
 
-  // ADMIN/EMPLOYEE odpadają na guardzie (403) — założenie firmy nadpisuje rolę,
-  // a schemat ma jedno pole role, więc straciliby swoją. OWNER przechodzi
-  // celowo: dopiero unikalny ownerId daje mu właściwe 409 „masz już firmę”.
+  // Zgłoszenie firmy (#141) — wiersz powstaje w PENDING, rola zgłaszającego się nie zmienia.
+  // ADMIN/EMPLOYEE odpadają na guardzie (403): akceptacja zgłoszenia nadpisze rolę,
+  // a schemat ma jedno pole role, więc straciliby swoją. OWNER przechodzi celowo:
+  // dopiero unikalny ownerId daje mu właściwe 409 „masz już firmę”.
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.OWNER)

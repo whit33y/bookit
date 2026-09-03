@@ -151,7 +151,7 @@ Hasło do **wszystkich** kont: `Haslo123!`
 > wyłącznie na środowisku deweloperskim: przy `NODE_ENV` innym niż `development`/`test`
 > (i innym niż puste) pomija je. Świadome wymuszenie: `SEED_DEMO=1`. Kategorie seedują się zawsze.
 
-Pełna lista 12 kont, 6 firm i zaseedowanych rezerwacji: [docs/users.md](docs/users.md).
+Pełna lista 14 kont, 6 firm, 2 zgłoszeń firm i zaseedowanych rezerwacji: [docs/users.md](docs/users.md).
 
 ## Zmienne środowiskowe
 

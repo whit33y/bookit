@@ -23,6 +23,7 @@ import {
   fitsAnyInterval,
   overlapsAny,
 } from '../availability/slots.util';
+import { publicBusinessWhere } from '../businesses/public-business';
 import { AuthUser } from '../common/types/auth-user';
 import { depositAmountCents } from '../payments/deposit';
 import { PAYMENT_CURRENCY, paymentDeadline } from '../payments/payment-window';
@@ -599,14 +600,15 @@ export class BookingsService {
       throw new BadRequestException('startsAt musi być w przyszłości');
     }
 
-    // Jedno zapytanie na cały scope: usługa aktywna, firma niezablokowana, a w środku
-    // pracownik — aktywny i przypisany do tej usługi. Firma po relacji, nie po fetchu,
-    // więc zablokowana i nieistniejąca dają identyczne 404 (jak w AvailabilityService).
+    // Jedno zapytanie na cały scope: usługa aktywna, firma działająca (wpuszczona i bez
+    // blokady), a w środku pracownik — aktywny i przypisany do tej usługi. Firma po relacji,
+    // nie po fetchu, więc niedziałająca i nieistniejąca dają identyczne 404
+    // (jak w AvailabilityService).
     const service = await this.prisma.service.findFirst({
       where: {
         id: dto.serviceId,
         isActive: true,
-        business: { isBlocked: false },
+        business: publicBusinessWhere,
       },
       select: {
         businessId: true,

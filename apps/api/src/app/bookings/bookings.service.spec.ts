@@ -1,11 +1,5 @@
 import { Logger } from '@nestjs/common';
-import {
-  BookingStatus,
-  DepositType,
-  PaymentStatus,
-  Prisma,
-  UserRole,
-} from '@prisma/client';
+import { BookingStatus, BusinessStatus, DepositType, PaymentStatus, Prisma, UserRole } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addMinutes,
@@ -280,14 +274,15 @@ describe('BookingsService', () => {
   });
 
   describe('scope usługi, pracownika i firmy', () => {
-    it('pyta o usługę aktywną w firmie niezablokowanej, z aktywnym przypisanym pracownikiem', async () => {
+    it('pyta o usługę aktywną w firmie działającej, z aktywnym przypisanym pracownikiem', async () => {
       await create();
 
       expect(serviceFindFirst).toHaveBeenCalledWith({
         where: {
           id: SERVICE_ID,
           isActive: true,
-          business: { isBlocked: false },
+          // firma wpuszczona przez administratora (#141) i bez blokady (#41)
+          business: { isBlocked: false, status: BusinessStatus.APPROVED },
         },
         select: {
           businessId: true,

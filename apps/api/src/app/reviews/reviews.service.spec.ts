@@ -1,4 +1,4 @@
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, BusinessStatus, Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from './reviews.service';
@@ -153,12 +153,13 @@ describe('ReviewsService', () => {
       expect(JSON.stringify(result)).not.toContain('Kowalska');
     });
 
-    it('pyta tylko o niezablokowaną firmę i filtruje recenzje po jej id', async () => {
+    it('pyta tylko o działającą firmę i filtruje recenzje po jej id', async () => {
       await service.listForBusiness('salon', {});
 
       expect(businessFindFirst.mock.calls[0][0].where).toEqual({
         slug: 'salon',
         isBlocked: false,
+        status: BusinessStatus.APPROVED,
       });
       expect(reviewFindMany.mock.calls[0][0].where).toEqual({ businessId: 'b1' });
       expect(reviewGroupBy.mock.calls[0][0].where).toEqual({ businessId: 'b1' });
