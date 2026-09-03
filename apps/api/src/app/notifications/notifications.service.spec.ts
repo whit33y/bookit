@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, NotificationType } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { InAppNotificationsService } from './in-app.service';
@@ -35,20 +35,33 @@ const booking = () => ({
   employee: { name: 'Ola' },
 });
 
+const application = () => ({
+  name: 'Salon Ola',
+  rejectionReason: null as string | null,
+  owner: { id: OWNER_ID, email: 'ola@example.com', firstName: 'Ola' },
+});
+
 describe('NotificationsService', () => {
   let findUnique: ReturnType<typeof vi.fn>;
+  let businessFindUnique: ReturnType<typeof vi.fn>;
   let send: ReturnType<typeof vi.fn>;
   let createForBooking: ReturnType<typeof vi.fn>;
+  let create: ReturnType<typeof vi.fn>;
   let service: NotificationsService;
 
   beforeEach(() => {
     findUnique = vi.fn().mockResolvedValue(booking());
+    businessFindUnique = vi.fn().mockResolvedValue(application());
     send = vi.fn().mockResolvedValue(undefined);
     createForBooking = vi.fn().mockResolvedValue(undefined);
+    create = vi.fn().mockResolvedValue(undefined);
     service = new NotificationsService(
-      { booking: { findUnique } } as unknown as PrismaService,
+      {
+        booking: { findUnique },
+        business: { findUnique: businessFindUnique },
+      } as unknown as PrismaService,
       { send } as unknown as MailService,
-      { createForBooking } as unknown as InAppNotificationsService,
+      { createForBooking, create } as unknown as InAppNotificationsService,
       new ConfigService({ APP_URL: 'http://localhost:4200' }),
     );
   });
@@ -164,6 +177,66 @@ describe('NotificationsService', () => {
       await service.bookingStatusChanged(BOOKING_ID, BookingStatus.COMPLETED);
 
       expect(createForBooking).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('businessDecision', () => {
+    it('akceptacja → mail i wpis in-app do zgłaszającego', async () => {
+      await service.businessDecision('b1', 'APPROVED');
+
+      const message = send.mock.calls[0][0];
+      expect(message.to).toBe('ola@example.com');
+      expect(message.subject).toContain('Zgłoszenie firmy zaakceptowane');
+
+      const [rendered, userId] = create.mock.calls[0];
+      expect(rendered.type).toBe(NotificationType.BUSINESS_APPROVED);
+      expect(rendered.url).toBe('/create-business');
+      expect(userId).toBe(OWNER_ID);
+    });
+
+    it('odrzucenie → powód w mailu, w powiadomieniu tylko odesłanie po niego', async () => {
+      businessFindUnique.mockResolvedValue({
+        ...application(),
+        rejectionReason: 'Adres nie zgadza się z rejestrem',
+      });
+
+      await service.businessDecision('b1', 'REJECTED');
+
+      const message = send.mock.calls[0][0];
+      expect(message.text).toContain('Adres nie zgadza się z rejestrem');
+      expect(message.html).toContain('Adres nie zgadza się z rejestrem');
+
+      const [rendered] = create.mock.calls[0];
+      expect(rendered.type).toBe(NotificationType.BUSINESS_REJECTED);
+      // powód bywa akapitem (500 znaków) — dzwoneczek pokazuje jedno zdanie
+      expect(rendered.body).not.toContain('Adres nie zgadza się z rejestrem');
+    });
+
+    // ten sam kontrakt co przy rezerwacjach: decyzja jest już zapisana i nie da się jej cofnąć
+    it('błąd wysyłki nie przerywa — wpis in-app powstaje mimo padniętego SMTP', async () => {
+      send.mockRejectedValue(new Error('SMTP down'));
+
+      await expect(service.businessDecision('b1', 'APPROVED')).resolves.toBeUndefined();
+
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it('zgłoszenie zniknęło przed wysyłką → cisza, bez wyjątku', async () => {
+      businessFindUnique.mockResolvedValue(null);
+
+      await expect(service.businessDecision('b1', 'APPROVED')).resolves.toBeUndefined();
+
+      expect(send).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('nie pyta bazy o dane, których powiadomienie nie pokazuje', async () => {
+      await service.businessDecision('b1', 'APPROVED');
+
+      const { select } = businessFindUnique.mock.calls[0][0];
+      expect(select.owner.select.email).toBe(true);
+      expect(select.rejectionReason).toBe(true);
+      expect(select.lat).toBeUndefined();
     });
   });
 

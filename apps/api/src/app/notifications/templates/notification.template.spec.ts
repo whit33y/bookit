@@ -1,7 +1,10 @@
 import { BookingStatus, NotificationType } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import { BookingEventData } from './booking-event';
-import { renderBookingNotification } from './notification.template';
+import {
+  renderBookingNotification,
+  renderBusinessApplicationNotification,
+} from './notification.template';
 
 const BOOKING_ID = 'b1';
 
@@ -113,5 +116,28 @@ describe('renderBookingNotification', () => {
     expect(
       renderBookingNotification(BookingStatus.PENDING, BOOKING_ID, data()),
     ).toBeNull();
+  });
+});
+
+describe('renderBusinessApplicationNotification', () => {
+  const application = { name: 'Salon Ola', rejectionReason: null, owner: { firstName: 'Ola' } };
+
+  it('obie decyzje prowadzą na formularz zgłoszenia', () => {
+    expect(renderBusinessApplicationNotification('APPROVED', application)).toMatchObject({
+      type: NotificationType.BUSINESS_APPROVED,
+      url: '/create-business',
+    });
+    expect(renderBusinessApplicationNotification('REJECTED', application)).toMatchObject({
+      type: NotificationType.BUSINESS_REJECTED,
+      url: '/create-business',
+    });
+  });
+
+  it('nazwa firmy nie stoi przed czasownikiem — rodzaj niesie rzeczownik przed nią', () => {
+    const approved = renderBusinessApplicationNotification('APPROVED', application);
+    const rejected = renderBusinessApplicationNotification('REJECTED', application);
+
+    expect(approved.body).toContain('Firma Salon Ola');
+    expect(rejected.body).toContain('Zgłoszenie firmy Salon Ola');
   });
 });

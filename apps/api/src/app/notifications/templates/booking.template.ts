@@ -1,7 +1,7 @@
 import { BookingStatus } from '@prisma/client';
 import { formatDateTimeRange, formatDuration, formatPrice } from '../format';
 import { BookingEvent, BookingEventData } from './booking-event';
-import { RenderedEmail, escapeHtml } from './email';
+import { RenderedEmail, emailParagraph, emailShell, escapeHtml } from './email';
 
 type Row = [label: string, value: string];
 
@@ -44,8 +44,8 @@ const renderText = (heading: string, intro: string, rows: Row[], cta: string): s
     '— BookIt',
   ].join('\n');
 
-// Style inline, bo klienty pocztowe wycinają <style> z <head>; układ celowo prosty
-// (nagłówek, tabelka, link) — to powiadomienie transakcyjne, nie newsletter.
+// Środek oprawy (emailShell): akapit wprowadzenia i tabelka z danymi wizyty — jedyne, czym
+// mail o rezerwacji różni się od pozostałych.
 const renderHtml = (
   heading: string,
   intro: string,
@@ -53,21 +53,21 @@ const renderHtml = (
   cta: string,
   ctaUrl: string,
 ): string =>
-  [
-    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2933;">',
-    `<h2 style="font-size:18px;margin:0 0 12px;">${escapeHtml(heading)}</h2>`,
-    `<p style="margin:0 0 16px;">${escapeHtml(intro)}</p>`,
-    '<table style="border-collapse:collapse;margin-bottom:16px;">',
-    ...rows.map(
-      ([label, value]) =>
-        `<tr><td style="padding:4px 16px 4px 0;color:#616e7c;">${escapeHtml(label)}</td>` +
-        `<td style="padding:4px 0;"><strong>${escapeHtml(value)}</strong></td></tr>`,
-    ),
-    '</table>',
-    `<p style="margin:0 0 16px;"><a href="${escapeHtml(ctaUrl)}">${escapeHtml(cta)}</a></p>`,
-    '<p style="margin:0;color:#616e7c;">— BookIt</p>',
-    '</div>',
-  ].join('');
+  emailShell(
+    heading,
+    [
+      emailParagraph(intro),
+      '<table style="border-collapse:collapse;margin-bottom:16px;">',
+      ...rows.map(
+        ([label, value]) =>
+          `<tr><td style="padding:4px 16px 4px 0;color:#616e7c;">${escapeHtml(label)}</td>` +
+          `<td style="padding:4px 0;"><strong>${escapeHtml(value)}</strong></td></tr>`,
+      ),
+      '</table>',
+    ].join(''),
+    cta,
+    ctaUrl,
+  );
 
 /**
  * Treść maila dla zdarzenia rezerwacji albo `null`, gdy zdarzenie nie ma adresata

@@ -55,6 +55,10 @@ enum NotificationType {
   BOOKING_CANCELLED_BY_CLIENT
   BOOKING_CANCELLED_BY_BUSINESS
   BOOKING_REMINDER
+  // decyzje administratora o zgłoszeniu firmy (#143) — pierwsze powiadomienia bez wizyty,
+  // korzystają z nullowalnego `Notification.bookingId`
+  BUSINESS_APPROVED
+  BUSINESS_REJECTED
 }
 
 model User {

@@ -20,7 +20,7 @@ Haslo123!
 
 | Rola         | E-mail                                            | Imię i nazwisko    | Po zalogowaniu ląduje na | Co może                                                                        |
 | ------------ | ------------------------------------------------- | ------------------ | ------------------------ | ------------------------------------------------------------------------------ |
-| **ADMIN**    | `admin@bookit.pl`                                 | Admin Bookit       | `/admin`                 | panel admina: listy firm i użytkowników, blokowanie firm                       |
+| **ADMIN**    | `admin@bookit.pl`                                 | Admin Bookit       | `/admin`                 | panel admina: listy firm i użytkowników, kolejka zgłoszeń, blokowanie firm     |
 | **OWNER**    | `wlasciciel@bookit.pl`                            | Anna Kowalska      | `/business`              | panel „Studio Fryzur „Nożyczki”": usługi, pracownicy, grafik, kalendarz        |
 | **OWNER**    | `wlasciciel2@bookit.pl` … `wlasciciel6@bookit.pl` | —                  | `/business`              | właściciele pozostałych pięciu firm                                            |
 | **EMPLOYEE** | `pracownik@bookit.pl`                             | Marek Wiśniewski   | `/business`              | kalendarz i oczekujące rezerwacje „Nożyczek"                                   |
@@ -65,6 +65,10 @@ i nie robi nic, dopóki administrator jej nie zaakceptuje (#141). Ich autorzy zo
 Odrzucone zgłoszenie niesie powód (`rejectionReason`) i da się je wysłać ponownie —
 `POST /businesses` nadpisuje wtedy ten sam wiersz i wraca do `PENDING`. Żadne z nich nie jest
 widoczne publicznie: ani w wyszukiwarce, ani pod `/:slug`, ani przy zakładaniu rezerwacji.
+
+`PENDING`-owe „Studio Brwi «Linia»" czeka w kolejce zgłoszeń administratora
+(`GET /admin/business-applications`, #143) — jest co zaakceptować albo odrzucić z powodem,
+a decyzja idzie do zgłaszającego mailem i dzwoneczkiem.
 
 Każda firma ma 2–3 aktywne usługi (30–90 min, 50–250 zł) i 1–2 pracowników z grafikiem
 pn–pt, a część także w soboty (godziny różnią się między pracownikami, żeby kalendarz nie był

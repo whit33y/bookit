@@ -93,6 +93,8 @@ Platforma rezerwacji wizyt u specjalistów (fryzjer, barber, paznokcie, fizjoter
 ### Epik: Administracja
 
 - Jako **admin** przeglądam listę firm i użytkowników.
+- Jako **admin** rozpatruję kolejkę zgłoszeń: akceptuję firmę (właściciel dostaje rolę OWNER)
+  albo odrzucam z powodem, który zgłaszający widzi i może poprawić.
 - Jako **admin** blokuję firmę naruszającą zasady — znika z wyszukiwarki, nie przyjmuje rezerwacji.
 
 ---
@@ -406,7 +408,7 @@ Moduły w `apps/api/src/app/`:
 | `bookings`      | tworzenie/akceptacja/odwoływanie rezerwacji, maszyna stanów                                       |
 | `notifications` | wysyłka emaili (Nodemailer) + cron przypomnień (`@nestjs/schedule`) + powiadomienia in-app (Faza 2) |
 | `payments`      | zaliczki: `PaymentIntent` przy rezerwacji, webhook Stripe, cron wygaszania nieopłaconych (Faza 2) |
-| `admin`         | listy firm/użytkowników, blokowanie                                                               |
+| `admin`         | listy firm/użytkowników, kolejka zgłoszeń i decyzje o nich, blokowanie                            |
 | `prisma`        | `PrismaService` (globalny)                                                                        |
 
 ### Kontrakt API (REST, prefix `/api`)
@@ -439,8 +441,10 @@ Moduły w `apps/api/src/app/`:
 | `GET /notifications`                                        | zalogowany           | powiadomienia in-app z paginacją + licznik nieprzeczytanych (Faza 2)               |
 | `GET /notifications/unread-count`                           | zalogowany           | sam licznik nieprzeczytanych — endpoint odpytywany pollingiem (Faza 2)              |
 | `POST /notifications/:id/read` / `POST /notifications/read-all` | zalogowany       | oznaczenie jednego / wszystkich jako przeczytane (Faza 2)                           |
-| `GET /admin/businesses` / `GET /admin/users`                | admin                | listy z paginacją                                                                  |
+| `GET /admin/businesses` / `GET /admin/users`                | admin                | listy z paginacją; firmy domyślnie tylko `APPROVED`, filtr `?status=`               |
 | `POST /admin/businesses/:id/block` / `unblock`              | admin                | moderacja                                                                          |
+| `GET /admin/business-applications`                          | admin                | kolejka zgłoszeń: wyłącznie `PENDING`, najstarsze pierwsze (Faza 2)                 |
+| `POST /admin/business-applications/:id/approve` / `reject`  | admin                | decyzja o zgłoszeniu; `reject` wymaga `{ reason }` (Faza 2)                          |
 
 Konwencje: DTO z walidacją `class-validator`, globalny `ValidationPipe`, guardy `JwtAuthGuard` + `RolesGuard`, błędy jako standardowe kody HTTP.
 

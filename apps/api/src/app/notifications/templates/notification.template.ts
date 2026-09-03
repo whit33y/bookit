@@ -5,6 +5,11 @@ import {
   BookingEvent,
   BookingEventData,
 } from './booking-event';
+import {
+  BUSINESS_APPLICATION_URL,
+  BusinessApplicationData,
+  BusinessApplicationDecision,
+} from './business-application';
 
 /** Wiersz do zapisu w tabeli Notification — bez userId, którego szablon nie zna. */
 export interface RenderedNotification {
@@ -115,3 +120,30 @@ export const renderBookingNotification = (
       return null;
   }
 };
+
+/**
+ * Treść powiadomienia in-app o decyzji administratora w sprawie zgłoszenia firmy (#143).
+ * Pierwsze powiadomienie, które nie dotyczy wizyty — stąd osobna funkcja, a nie kolejna
+ * gałąź w renderBookingNotification: dane wejściowe nie mają z rezerwacją nic wspólnego,
+ * a `null` (zdarzenie bez adresata) tu nie występuje — decyzja zawsze ma do kogo pójść.
+ *
+ * Powód odrzucenia zostaje w mailu i na formularzu: dzwoneczek pokazuje jedno zdanie,
+ * a powód bywa akapitem (do 500 znaków).
+ */
+export const renderBusinessApplicationNotification = (
+  decision: BusinessApplicationDecision,
+  data: BusinessApplicationData,
+): RenderedNotification =>
+  decision === 'APPROVED'
+    ? {
+        type: NotificationType.BUSINESS_APPROVED,
+        title: 'Zgłoszenie firmy zaakceptowane',
+        body: `Firma ${data.name} działa już na BookIt. Twoje konto ma panel firmy.`,
+        url: BUSINESS_APPLICATION_URL,
+      }
+    : {
+        type: NotificationType.BUSINESS_REJECTED,
+        title: 'Zgłoszenie firmy odrzucone',
+        body: `Zgłoszenie firmy ${data.name} nie zostało przyjęte. Zobacz powód i zgłoś firmę jeszcze raz.`,
+        url: BUSINESS_APPLICATION_URL,
+      };
