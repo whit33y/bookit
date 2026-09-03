@@ -26,6 +26,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   phone: null,
   role: 'CLIENT',
   isBlocked: false,
+  mustChangePassword: false,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -321,6 +322,82 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
+    });
+  });
+
+  describe('changePassword (#144)', () => {
+    const claims = (accessToken: string) =>
+      JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
+
+    it('konto z wymuszoną zmianą hasła niesie flagę w access tokenie', async () => {
+      prisma.user.findUnique.mockResolvedValue(user({ mustChangePassword: true }));
+
+      const tokens = await service.login({
+        email: 'jan@example.com',
+        password: 'poprawne-haslo',
+      });
+
+      expect(claims(tokens.accessToken).mustChangePassword).toBe(true);
+    });
+
+    it('złe obecne hasło → 400, hasło niezmienione', async () => {
+      prisma.user.findUnique.mockResolvedValue(user({ mustChangePassword: true }));
+
+      await expect(
+        service.changePassword('user-1', {
+          currentPassword: 'zle-haslo',
+          newPassword: 'nowe-haslo-123',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('nowe hasło identyczne z obecnym → 400 (flaga zostaje)', async () => {
+      prisma.user.findUnique.mockResolvedValue(user({ mustChangePassword: true }));
+
+      await expect(
+        service.changePassword('user-1', {
+          currentPassword: 'poprawne-haslo',
+          newPassword: 'poprawne-haslo',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('poprawne hasło → nowy hash, wyczyszczona flaga i tokeny bez niej', async () => {
+      prisma.user.findUnique.mockResolvedValue(user({ mustChangePassword: true }));
+      prisma.user.update.mockImplementation(({ data }: { data: object }) =>
+        Promise.resolve(user({ mustChangePassword: false, ...data })),
+      );
+
+      const tokens = await service.changePassword('user-1', {
+        currentPassword: 'poprawne-haslo',
+        newPassword: 'nowe-haslo-123',
+      });
+
+      const updated = prisma.user.update.mock.calls[0][0];
+      expect(updated.where).toEqual({ id: 'user-1' });
+      expect(updated.data.mustChangePassword).toBe(false);
+      expect(
+        bcrypt.compareSync('nowe-haslo-123', updated.data.passwordHash),
+      ).toBe(true);
+      expect(claims(tokens.accessToken).mustChangePassword).toBe(false);
+    });
+
+    it('zmiana hasła unieważnia wcześniejsze sesje', async () => {
+      prisma.user.findUnique.mockResolvedValue(user());
+      prisma.user.update.mockResolvedValue(user());
+
+      await service.changePassword('user-1', {
+        currentPassword: 'poprawne-haslo',
+        newPassword: 'nowe-haslo-123',
+      });
+
+      // najpierw kasujemy wszystkie tokeny usera, dopiero potem issueTokens tworzy nowy
+      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect(prisma.refreshToken.create).toHaveBeenCalledOnce();
     });
   });
 });

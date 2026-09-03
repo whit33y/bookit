@@ -49,6 +49,17 @@ export class ForgotPasswordDto {
   email!: string;
 }
 
+export class ChangePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  newPassword!: string;
+}
+
 export class ResetPasswordDto {
   @IsString()
   @IsNotEmpty()

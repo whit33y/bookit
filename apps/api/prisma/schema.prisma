@@ -62,16 +62,21 @@ enum NotificationType {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  phone        String?
-  role         UserRole @default(CLIENT)
-  isBlocked    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String
+  firstName          String
+  lastName           String
+  phone              String?
+  role               UserRole @default(CLIENT)
+  isBlocked          Boolean  @default(false)
+  // Konto założone „za kogoś" (#144: administrator zakłada konto kolejnemu administratorowi)
+  // dostaje hasło od kogoś innego, więc do zmiany hasła nie wolno go dopuścić dalej niż do
+  // własnego profilu. Flaga jest ogólna, nie sprawdzeniem roli — ten sam strażnik obsłuży
+  // każde kolejne źródło takich kont.
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   business      Business?
   employee      Employee?

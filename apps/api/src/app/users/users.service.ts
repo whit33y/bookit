@@ -12,6 +12,9 @@ const profileSelect = {
   phone: true,
   role: true,
   isBlocked: true,
+  // #144: front pyta o profil również spod flagi (to jedna z dwóch dozwolonych tras),
+  // więc stąd dowiaduje się, że zamiast panelu ma pokazać formularz zmiany hasła
+  mustChangePassword: true,
   createdAt: true,
 } satisfies Prisma.UserSelect;
 
