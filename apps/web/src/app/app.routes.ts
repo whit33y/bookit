@@ -1,7 +1,12 @@
 import { Route } from '@angular/router';
-import { authGuard, guestGuard, roleGuard } from './core/auth/auth.guard';
+import {
+  authGuard,
+  guestGuard,
+  passwordChangeGuard,
+  roleGuard,
+} from './core/auth/auth.guard';
 
-export const appRoutes: Route[] = [
+const routes: Route[] = [
   { path: '', loadComponent: () => import('./public/landing/landing') },
   {
     // literalna ścieżka — musi być przed ':slug', inaczej trasa parametryczna
@@ -37,6 +42,13 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./business/create-business/create-business'),
   },
   {
+    // wymuszona zmiana hasła (#146): trasa dla każdego zalogowanego, bo zmiana hasła nie
+    // jest przywilejem roli — konto spod flagi tylko nie może z niej wyjść (passwordChangeGuard)
+    path: 'change-password',
+    canActivate: [authGuard],
+    loadComponent: () => import('./public/change-password/change-password'),
+  },
+  {
     path: 'client',
     canActivate: [authGuard],
     loadChildren: () => import('./client/client.routes'),
@@ -70,3 +82,16 @@ export const appRoutes: Route[] = [
   },
   { path: '**', loadComponent: () => import('./public/not-found/not-found') },
 ];
+
+/**
+ * `passwordChangeGuard` doklejony do każdej trasy najwyższego poziomu (#146) zamiast
+ * wpisywania go w każdą z osobna: „z każdej trasy" znaczy naprawdę z każdej, a lista rośnie —
+ * ręczne powtórzenie prędzej czy później zgubiłoby nową trasę. Guardy dzieci lazy siedzą
+ * pod tymi trasami, więc poddrzewa są objęte razem z rodzicem.
+ *
+ * Idzie pierwszy: konto spod flagi ma trafić na zmianę hasła, a nie na `/login` z roleGuarda.
+ */
+export const appRoutes: Route[] = routes.map((route) => ({
+  ...route,
+  canActivate: [passwordChangeGuard, ...(route.canActivate ?? [])],
+}));

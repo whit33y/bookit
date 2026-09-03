@@ -2,13 +2,19 @@ import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import {
   ActivatedRouteSnapshot,
+  Router,
   RouterStateSnapshot,
   UrlTree,
   convertToParamMap,
   provideRouter,
 } from '@angular/router';
-import { homeFor } from './auth-store';
-import { authGuard, guestGuard, roleGuard } from './auth.guard';
+import { AuthStore, homeFor } from './auth-store';
+import {
+  authGuard,
+  guestGuard,
+  passwordChangeGuard,
+  roleGuard,
+} from './auth.guard';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -150,5 +156,59 @@ describe('homeFor', () => {
     expect(homeFor('OWNER')).toBe('/business');
     expect(homeFor('EMPLOYEE')).toBe('/business');
     expect(homeFor('ADMIN')).toBe('/admin');
+  });
+});
+
+describe('passwordChangeGuard', () => {
+  const runGuard = (url: string) =>
+    TestBed.runInInjectionContext(() =>
+      passwordChangeGuard(snapshotWith(), { url } as RouterStateSnapshot),
+    );
+
+  const login = (mustChangePassword?: boolean) =>
+    localStorage.setItem(
+      'bookit.accessToken',
+      fakeJwt({ sub: '1', email: 'admin@bookit.pl', role: 'ADMIN', mustChangePassword }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient()],
+    });
+  });
+
+  it('wpuszcza konto bez flagi', () => {
+    login(false);
+    expect(runGuard('/admin')).toBe(true);
+  });
+
+  it('wpuszcza niezalogowanego — nie ma czego zmieniać', () => {
+    expect(runGuard('/login')).toBe(true);
+  });
+
+  it('konto spod flagi odbija z dowolnej trasy na zmianę hasła', () => {
+    login(true);
+    for (const url of ['/admin', '/admin/users', '/client', '/']) {
+      const result = runGuard(url);
+      expect(result).toBeInstanceOf(UrlTree);
+      expect(result.toString()).toBe('/change-password');
+    }
+  });
+
+  it('przepuszcza sam ekran zmiany hasła — inaczej redirect byłby pętlą', () => {
+    login(true);
+    expect(runGuard('/change-password')).toBe(true);
+  });
+
+  it('odbija też wtedy, gdy flagę zgłosiło 403, a nie token', () => {
+    login(false);
+    const store = TestBed.inject(AuthStore);
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    store.requirePasswordChange();
+
+    const result = runGuard('/admin');
+    expect(result).toBeInstanceOf(UrlTree);
+    expect(result.toString()).toBe('/change-password');
   });
 });

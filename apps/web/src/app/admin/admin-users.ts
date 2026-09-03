@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { I18nStore } from '../core/i18n/i18n-store';
 import type { TranslationKey } from '../core/i18n/pl';
 import { formatDate } from '../shared/business-time';
@@ -42,6 +43,7 @@ const ROLE_KEYS: Record<UserRole, TranslationKey> = {
 @Component({
   selector: 'app-admin-users',
   imports: [
+    RouterLink,
     AdminToolbar,
     Pagination,
     AdminStatusBadge,
@@ -50,8 +52,15 @@ const ROLE_KEYS: Record<UserRole, TranslationKey> = {
     EmptyState,
   ],
   template: `
+    <a
+      routerLink="/admin/users/new"
+      class="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+    >
+      {{ i18n.t('admin.newAdmin.link') }}
+    </a>
+
     <app-admin-toolbar
-      class="mt-6 block"
+      class="mt-4 block"
       [q]="list.params().q"
       [blocked]="list.params().blocked"
       [searchLabel]="i18n.t('admin.users.searchLabel')"

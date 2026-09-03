@@ -115,6 +115,51 @@ describe('authInterceptor', () => {
     expect(localStorage.getItem('bookit.accessToken')).toBeNull();
   });
 
+  it('403 „musisz zmienić hasło" prowadzi na ekran zmiany hasła, nie na wylogowanie', async () => {
+    const navigateByUrl = vi
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
+    let error: unknown;
+    http.get('/api/bookings').subscribe({ error: (e) => (error = e) });
+
+    httpMock.expectOne('/api/bookings').flush(
+      {
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Musisz zmienić hasło, zanim zrobisz cokolwiek innego',
+      },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await flushMicrotasks();
+
+    expect(navigateByUrl).toHaveBeenCalledWith('/change-password');
+    expect(store.mustChangePassword()).toBe(true);
+    expect(store.isLoggedIn()).toBe(true);
+    expect(error).toBeTruthy();
+  });
+
+  it('zwykłe 403 (zła rola) zostaje błędem żądania', async () => {
+    const navigateByUrl = vi
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
+    let error: unknown;
+    http.get('/api/admin/users').subscribe({ error: (e) => (error = e) });
+
+    httpMock.expectOne('/api/admin/users').flush(
+      {
+        statusCode: 403,
+        code: 'FORBIDDEN',
+        message: 'Brak uprawnień',
+      },
+      { status: 403, statusText: 'Forbidden' },
+    );
+    await flushMicrotasks();
+
+    expect(navigateByUrl).not.toHaveBeenCalled();
+    expect(store.mustChangePassword()).toBe(false);
+    expect(error).toBeTruthy();
+  });
+
   it('401 z /api/auth/* nie odpala refresha', () => {
     let error: unknown;
     http
