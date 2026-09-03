@@ -17,6 +17,7 @@ import { AdminService } from './admin.service';
 import { AdminApplicationsQueryDto } from './dto/admin-applications-query.dto';
 import { AdminBusinessesQueryDto } from './dto/admin-businesses-query.dto';
 import { AdminUsersQueryDto } from './dto/admin-users-query.dto';
+import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { RejectApplicationDto } from './dto/reject-application.dto';
 
 // guardy na poziomie klasy — cała sekcja /admin jest wyłącznie dla ADMIN (bez tokena 401, zła rola 403)
@@ -34,6 +35,13 @@ export class AdminController {
   @Get('users')
   listUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminService.listUsers(query);
+  }
+
+  // Jedyna trasa, którą powstaje konto administratora (#144) — stąd 201 i brak @HttpCode,
+  // w odróżnieniu od decyzji niżej, które niczego nie tworzą.
+  @Post('users')
+  createUser(@Body() dto: CreateAdminUserDto) {
+    return this.adminService.createAdmin(dto);
   }
 
   // Kolejka zgłoszeń (#143) osobno od rejestru firm, a nie jako `?status=PENDING` na liście

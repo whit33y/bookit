@@ -1,7 +1,12 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
-import { NAME_MAX_LENGTH, RegisterDto } from '../../auth/dto/auth.dto';
+import { CreateAdminUserDto } from '../../admin/dto/create-admin-user.dto';
+import {
+  ChangePasswordDto,
+  NAME_MAX_LENGTH,
+  RegisterDto,
+} from '../../auth/dto/auth.dto';
 import {
   CITY_MAX_LENGTH,
   CreateBusinessDto,
@@ -99,5 +104,43 @@ describe('walidacja DTO — przypadki brzegowe (#45)', () => {
         priceCents: 8000,
       }),
     ).resolves.toEqual({});
+  });
+
+  describe('konto administratora i zmiana hasła (#144)', () => {
+    const validAdmin = {
+      email: 'admin@bookit.pl',
+      password: 'startowe-haslo1',
+      firstName: 'Ola',
+      lastName: 'Nowak',
+    };
+
+    it('poprawne dane przechodzą, telefon jest opcjonalny', async () => {
+      await expect(failedFields(CreateAdminUserDto, validAdmin)).resolves.toEqual({});
+      await expect(
+        failedFields(CreateAdminUserDto, { ...validAdmin, phone: '+48 600 700 800' }),
+      ).resolves.toEqual({});
+    });
+
+    it('hasło ma te same granice co przy rejestracji', async () => {
+      const short = { ...validAdmin, password: 'krotkie' };
+      expect(await failedFields(CreateAdminUserDto, short)).toEqual(
+        await failedFields(RegisterDto, { ...validRegister, password: 'krotkie' }),
+      );
+
+      // bcrypt liczy tylko 72 bajty — dłuższe hasło odpada na wejściu, jak w RegisterDto
+      const long = { ...validAdmin, password: 'a'.repeat(73) };
+      expect(await failedFields(CreateAdminUserDto, long)).toEqual({
+        password: ['maxLength'],
+      });
+    });
+
+    it('zmiana hasła wymaga obecnego hasła i nowego o długości jak przy rejestracji', async () => {
+      expect(
+        await failedFields(ChangePasswordDto, { currentPassword: '', newPassword: 'krotkie' }),
+      ).toEqual({
+        currentPassword: ['isNotEmpty'],
+        newPassword: ['minLength'],
+      });
+    });
   });
 });

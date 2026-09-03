@@ -1,7 +1,12 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AllowedDuringPasswordChange } from '../common/decorators/password-change.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AuthUser } from '../common/types/auth-user';
 import { AuthService } from './auth.service';
 import {
+  ChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   RefreshDto,
@@ -36,6 +41,19 @@ export class AuthController {
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.authService.forgotPassword(dto);
     return { message: 'Jeśli konto istnieje, wysłaliśmy link do resetu hasła' };
+  }
+
+  // Zalogowany zmienia sobie hasło — inaczej niż reset-password, który identyfikuje
+  // użytkownika tokenem z maila. Otwarte dla konta z wymuszoną zmianą hasła (#144),
+  // bo to jedyne wyjście z tego stanu.
+  @Post('change-password')
+  @HttpCode(200)
+  // Throttler jak przy pozostałych trasach hasłowych: `currentPassword` jest polem do
+  // zgadywania, więc limit obowiązuje mimo tokenu.
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @AllowedDuringPasswordChange()
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user.sub, dto);
   }
 
   @Post('reset-password')

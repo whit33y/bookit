@@ -1,4 +1,5 @@
 import { BusinessStatus, Prisma, UserRole } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminService } from './admin.service';
@@ -22,6 +23,7 @@ describe('AdminService', () => {
   let businessFindUniqueOrThrow: ReturnType<typeof vi.fn>;
   let userFindMany: ReturnType<typeof vi.fn>;
   let userCount: ReturnType<typeof vi.fn>;
+  let userCreate: ReturnType<typeof vi.fn>;
   let userUpdateMany: ReturnType<typeof vi.fn>;
   let events: { approved: ReturnType<typeof vi.fn>; rejected: ReturnType<typeof vi.fn> };
   let service: AdminService;
@@ -56,6 +58,9 @@ describe('AdminService', () => {
     );
     userFindMany = vi.fn().mockResolvedValue([]);
     userCount = vi.fn().mockResolvedValue(0);
+    userCreate = vi
+      .fn()
+      .mockImplementation(({ data }) => Promise.resolve({ id: 'u2', ...data }));
     userUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       business: {
@@ -66,7 +71,12 @@ describe('AdminService', () => {
         findUnique: businessFindUnique,
         findUniqueOrThrow: businessFindUniqueOrThrow,
       },
-      user: { findMany: userFindMany, count: userCount, updateMany: userUpdateMany },
+      user: {
+        findMany: userFindMany,
+        count: userCount,
+        create: userCreate,
+        updateMany: userUpdateMany,
+      },
       // transakcja bez bazy: callback dostaje ten sam klient, więc test sprawdza kolejność
       // i argumenty zapisów, a atomowość zostaje po stronie Prismy
       $transaction: vi.fn(),
@@ -321,6 +331,41 @@ describe('AdminService', () => {
       const { select } = businessFindUniqueOrThrow.mock.calls[0][0];
       expect(select).toEqual(businessFindMany.mock.calls[0][0].select);
       expect(select.status).toBe(true);
+    });
+  });
+
+  describe('createAdmin (#144)', () => {
+    const dto = {
+      email: '  NOWY@Example.COM ',
+      password: 'startowe-haslo1',
+      firstName: 'Ola',
+      lastName: 'Nowak',
+    };
+
+    it('zakłada konto ADMIN z wymuszoną zmianą hasła i znormalizowanym emailem', async () => {
+      const created = await service.createAdmin(dto);
+
+      const { data, select } = userCreate.mock.calls[0][0];
+      expect(data.email).toBe('nowy@example.com');
+      expect(data.role).toBe(UserRole.ADMIN);
+      expect(data.mustChangePassword).toBe(true);
+      // hash, nie hasło — i nie wraca w odpowiedzi, bo select jest jawny
+      expect(bcrypt.compareSync(dto.password, data.passwordHash)).toBe(true);
+      expect(select.passwordHash).toBeUndefined();
+      expect(created).toMatchObject({ role: UserRole.ADMIN, mustChangePassword: true });
+    });
+
+    it('zajęty email → 409 (bez awansu istniejącego konta)', async () => {
+      userCreate.mockRejectedValue(prismaError('P2002'));
+
+      await expect(service.createAdmin(dto)).rejects.toMatchObject({ status: 409 });
+      expect(userUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('inny błąd bazy przechodzi dalej', async () => {
+      userCreate.mockRejectedValue(prismaError('P1001'));
+
+      await expect(service.createAdmin(dto)).rejects.toMatchObject({ code: 'P1001' });
     });
   });
 

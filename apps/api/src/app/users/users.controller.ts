@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AllowedDuringPasswordChange } from '../common/decorators/password-change.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthUser } from '../common/types/auth-user';
@@ -12,7 +13,10 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // Otwarte dla konta z wymuszoną zmianą hasła (#144) — front musi wiedzieć, kim jest
+  // zalogowany i co ma zrobić. PATCH już nie: edycja profilu to „cokolwiek innego".
   @Get('me')
+  @AllowedDuringPasswordChange()
   getMe(@CurrentUser() user: AuthUser) {
     return this.usersService.getMe(user.sub);
   }

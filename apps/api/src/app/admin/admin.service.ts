@@ -5,12 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { BusinessStatus, Prisma, UserRole } from '@prisma/client';
+import { hashPassword, normalizeEmail } from '../common/credentials';
 import { parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessApplicationEventsService } from './business-application-events.service';
 import { AdminApplicationsQueryDto } from './dto/admin-applications-query.dto';
 import { AdminBusinessesQueryDto } from './dto/admin-businesses-query.dto';
 import { AdminUsersQueryDto } from './dto/admin-users-query.dto';
+import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { RejectApplicationDto } from './dto/reject-application.dto';
 
 // dane potrzebne do moderacji: właściciel (kontakt), status blokady, daty i skala działalności;
@@ -48,6 +50,9 @@ const adminUserSelect = {
   phone: true,
   role: true,
   isBlocked: true,
+  // #144: konto z niezmienionym hasłem startowym jeszcze nie działa — lista administratora
+  // pokazuje to obok blokady, bo to druga oś tego samego pytania „czy to konto działa"
+  mustChangePassword: true,
   createdAt: true,
   business: { select: { id: true, slug: true, name: true, isBlocked: true } },
 } satisfies Prisma.UserSelect;
@@ -140,6 +145,45 @@ export class AdminService {
     ]);
 
     return { items, total, page, limit };
+  }
+
+  /**
+   * Konto kolejnego administratora (#144). Zawsze rola ADMIN i zawsze `mustChangePassword`:
+   * hasło ustawia ktoś inny niż właściciel konta, więc do czasu jego zmiany strażnik nie
+   * wpuszcza nowego administratora nigdzie poza własny profil i zmianę hasła.
+   *
+   * Zajęty e-mail to 409, a nie awans istniejącego konta na administratora: adresy
+   * administratorów są wewnętrzne, więc kolizja z kontem klienta jest pomyłką, a nie
+   * scenariuszem. Rozstrzyga o tym unikalny indeks (P2002), nie odczyt przed zapisem —
+   * dwa równoległe żądania z tym samym adresem inaczej założyłyby dwa konta.
+   */
+  async createAdmin(dto: CreateAdminUserDto) {
+    const passwordHash = await hashPassword(dto.password);
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          email: normalizeEmail(dto.email),
+          passwordHash,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+          role: UserRole.ADMIN,
+          mustChangePassword: true,
+        },
+        select: adminUserSelect,
+      });
+      // ślad audytowy jak przy decyzjach o zgłoszeniach — id konta, bez hasła
+      this.logger.log(`Utworzono konto administratora ${user.id}`);
+      return user;
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException('Konto z tym adresem email już istnieje');
+      }
+      throw e;
+    }
   }
 
   /**
