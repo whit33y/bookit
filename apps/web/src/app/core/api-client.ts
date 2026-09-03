@@ -96,6 +96,15 @@ export function apiErrorMessage(err: unknown): string {
   return translate('api.error.generic');
 }
 
+/**
+ * Czy błąd to odpowiedź HTTP o jednym z podanych statusów. Dla ścieżek, które na status
+ * *reagują*, a nie tylko pokazują komunikat: 404/409 z decyzji o zgłoszeniu znaczy „ktoś to
+ * już rozpatrzył", więc wiersz wypada z kolejki zgłoszeń (#145).
+ */
+export function isApiStatus(err: unknown, ...statuses: number[]): boolean {
+  return err instanceof HttpErrorResponse && statuses.includes(err.status);
+}
+
 /** Cienki wrapper na HttpClient z bazowym prefiksem /api (proxy dev → :3000). */
 @Service()
 export class ApiClient {
