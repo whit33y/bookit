@@ -28,6 +28,15 @@ import { ACTIVE_LINK, INACTIVE_LINK } from '../shared/nav/nav-link-classes';
           {{ i18n.t('admin.nav.businesses') }}
         </a>
         <a
+          routerLink="business-applications"
+          routerLinkActive=""
+          #applicationsLink="routerLinkActive"
+          [class]="applicationsLink.isActive ? activeLink : inactiveLink"
+          [attr.aria-current]="applicationsLink.isActive ? 'page' : null"
+        >
+          {{ i18n.t('admin.nav.applications') }}
+        </a>
+        <a
           routerLink="users"
           routerLinkActive=""
           #usersLink="routerLinkActive"

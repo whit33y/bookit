@@ -64,6 +64,19 @@ describe('readListParams + buildListQuery', () => {
     );
   });
 
+  it('lista bez filtrów zna z URL-a tylko stronę (kolejka zgłoszeń)', () => {
+    // AdminApplicationsQueryDto nie ma pola `blocked`, a ValidationPipe działa
+    // z forbidNonWhitelisted — przepisany z rejestru firm URL kończyłby się kodem 400
+    const params = readListParams(
+      convertToParamMap({ q: 'salon', blocked: 'true', page: '4' }),
+      { filters: false },
+    );
+    expect(params).toEqual({ q: '', blocked: null, page: 4 });
+    expect(adminListPath('business-applications', params)).toBe(
+      '/admin/business-applications?page=4',
+    );
+  });
+
   it('buduje ścieżkę bez znaku zapytania, gdy nie ma filtrów', () => {
     const empty = readListParams(convertToParamMap({}));
     expect(adminListPath('businesses', empty)).toBe('/admin/businesses');

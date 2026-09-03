@@ -3,18 +3,22 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../core/api-client';
-import { AdminListParams, adminListPath, readListParams } from './admin-list-params';
+import {
+  AdminListParams,
+  EMPTY_LIST_PARAMS,
+  AdminListOptions,
+  adminListPath,
+  readListParams,
+} from './admin-list-params';
 import { AdminFilters } from './admin-toolbar';
 
-/** Koperta paginacji zwracana przez oba endpointy `GET /admin/*`. */
+/** Koperta paginacji zwracana przez każdy endpoint `GET /admin/*`. */
 interface AdminListResponse<T> {
   items: T[];
   total: number;
   page: number;
   limit: number;
 }
-
-const EMPTY_PARAMS: AdminListParams = { q: '', blocked: null, page: null };
 
 /** Stan listy admina wystawiany komponentowi (tylko do odczytu + intencje użytkownika). */
 export interface AdminList<T> {
@@ -40,7 +44,7 @@ export interface AdminList<T> {
 }
 
 /**
- * Wspólny silnik obu tabel admina: URL (`?q&blocked&page`) jest jedynym źródłem prawdy, każda
+ * Wspólny silnik list admina: URL (`?q&blocked&page`) jest jedynym źródłem prawdy, każda
  * jego zmiana przeładowuje listę. Ten sam wzorzec co `public/search/search.ts` — dzięki temu
  * link do przefiltrowanej listy działa, „wstecz" cofa filtr, a odświeżenie strony nic nie gubi.
  *
@@ -49,6 +53,7 @@ export interface AdminList<T> {
  */
 export function createAdminList<T extends { id: string }>(
   resource: string,
+  options: AdminListOptions = {},
 ): AdminList<T> {
   const api = inject(ApiClient);
   const route = inject(ActivatedRoute);
@@ -60,7 +65,7 @@ export function createAdminList<T extends { id: string }>(
   const total = signal(0);
   const page = signal(1);
   const limit = signal(20);
-  const params = signal<AdminListParams>(EMPTY_PARAMS);
+  const params = signal<AdminListParams>(EMPTY_LIST_PARAMS);
 
   // rośnie przy każdym load() — odpowiedź na nieaktualne zapytanie (np. szybka zmiana strony
   // przy wolnej sieci) nie może nadpisać świeższych wyników
@@ -105,7 +110,7 @@ export function createAdminList<T extends { id: string }>(
   // parametrów, więc bez subskrypcji filtr z linku nie zadziałałby
   route.queryParamMap
     .pipe(takeUntilDestroyed())
-    .subscribe((queryParams) => load(readListParams(queryParams)));
+    .subscribe((queryParams) => load(readListParams(queryParams, options)));
 
   return {
     loading: loading.asReadonly(),

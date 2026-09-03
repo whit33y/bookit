@@ -10,6 +10,10 @@ export default [
       { path: '', pathMatch: 'full', redirectTo: 'businesses' },
       { path: 'businesses', loadComponent: () => import('./admin-businesses') },
       { path: 'users', loadComponent: () => import('./admin-users') },
+      {
+        path: 'business-applications',
+        loadComponent: () => import('./admin-business-applications'),
+      },
     ],
   },
 ] satisfies Route[];

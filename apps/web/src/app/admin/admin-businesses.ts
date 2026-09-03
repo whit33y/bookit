@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient, apiErrorMessage } from '../core/api-client';
+import { ApiClient } from '../core/api-client';
 import { I18nStore } from '../core/i18n/i18n-store';
 import { translate } from '../core/i18n/translate';
 import { formatDate } from '../shared/business-time';
@@ -9,6 +9,7 @@ import EmptyState from '../shared/ui/empty-state';
 import ErrorState from '../shared/ui/error-state';
 import LoadingState from '../shared/ui/loading-state';
 import { createAdminList } from './admin-list';
+import { createRowActions } from './admin-row-actions';
 import Pagination from '../shared/ui/pagination';
 import AdminStatusBadge from './admin-status-badge';
 import AdminToolbar from './admin-toolbar';
@@ -61,7 +62,7 @@ interface PendingAction {
     />
 
     <!-- zmiana badge'a w wierszu jest niema dla czytnika ekranu — ogłaszamy ją osobno -->
-    <p class="sr-only" role="status">{{ statusMessage() }}</p>
+    <p class="sr-only" role="status">{{ actions.statusMessage() }}</p>
 
     @if (list.loading()) {
       <app-loading-state paddingClass="py-16 text-center" />
@@ -199,7 +200,7 @@ interface PendingAction {
                   <td class="px-4 py-3.5 text-right sm:px-6">
                     <button
                       type="button"
-                      [disabled]="isBusy(b.id)"
+                      [disabled]="actions.isBusy(b.id)"
                       [attr.aria-label]="
                         b.isBlocked
                           ? i18n.t('admin.businesses.unblockAria', { name: b.name })
@@ -219,7 +220,7 @@ interface PendingAction {
                           : i18n.t('admin.businesses.block')
                       }}
                     </button>
-                    @if (errorFor(b.id); as msg) {
+                    @if (actions.errorFor(b.id); as msg) {
                       <span
                         role="alert"
                         class="mt-1.5 block text-[13px] font-medium text-rose-600"
@@ -265,16 +266,11 @@ export default class AdminBusinesses {
   protected readonly formatDate = formatDate;
 
   protected readonly pendingAction = signal<PendingAction | null>(null);
-  protected readonly statusMessage = signal('');
-  // błąd otagowany id firmy, żeby wyrenderować go w jej wierszu, a nie nad całą tabelą;
-  // naraz może istnieć jeden — modal dopuszcza tylko jedną akcję w danym momencie
-  private readonly actionError = signal<{ id: string; message: string } | null>(null);
-  // zbiór, nie pojedyncze id: dwa wiersze mogą być w locie równolegle
-  private readonly busy = signal<ReadonlySet<string>>(new Set());
+  protected readonly actions = createRowActions();
 
   protected readonly dialogBusy = computed(() => {
     const pending = this.pendingAction();
-    return pending !== null && this.busy().has(pending.id);
+    return pending !== null && this.actions.isBusy(pending.id);
   });
 
   protected readonly dialogHeading = computed(() =>
@@ -307,17 +303,8 @@ export default class AdminBusinesses {
       : translate('admin.businesses.dialog.unblockBusy'),
   );
 
-  protected isBusy(id: string): boolean {
-    return this.busy().has(id);
-  }
-
-  protected errorFor(id: string): string | null {
-    const error = this.actionError();
-    return error?.id === id ? error.message : null;
-  }
-
   protected onRequestToggle(business: AdminBusiness): void {
-    this.actionError.set(null);
+    this.actions.clearError();
     this.pendingAction.set({
       id: business.id,
       name: business.name,
@@ -331,21 +318,16 @@ export default class AdminBusinesses {
 
   private async runAction(): Promise<void> {
     const pending = this.pendingAction();
-    if (!pending || this.isBusy(pending.id)) {
+    if (!pending) {
       return;
     }
 
-    this.actionError.set(null);
-    this.setBusy(pending.id, true);
-    try {
+    await this.actions.run(pending.id, async () => {
       const action = pending.block ? 'block' : 'unblock';
       // odpowiedź to pełna firma w kształcie wiersza listy — backend zwraca ją właśnie po to,
       // żebyśmy podmienili wiersz bez ponownego GET-a (AC: status aktualizuje się od razu)
       const updated = await firstValueFrom(
-        this.api.post<AdminBusiness>(
-          `/admin/businesses/${pending.id}/${action}`,
-          {},
-        ),
+        this.api.post<AdminBusiness>(`/admin/businesses/${pending.id}/${action}`, {}),
       );
       const blockedFilter = this.list.params().blocked;
       if (blockedFilter !== null && String(updated.isBlocked) !== blockedFilter) {
@@ -355,19 +337,13 @@ export default class AdminBusinesses {
       } else {
         this.list.replaceItem(updated);
       }
-      this.statusMessage.set(
-        updated.isBlocked
-          ? translate('admin.businesses.blockedMessage', { name: updated.name })
-          : translate('admin.businesses.unblockedMessage', { name: updated.name }),
-      );
-    } catch (err) {
-      // 404 („Nie znaleziono firmy") trafia tu tak samo jak awaria sieci — w obu przypadkach
-      // wiersz zostaje w dotychczasowym stanie, bo nic o nim nie wiemy na pewno
-      this.actionError.set({ id: pending.id, message: apiErrorMessage(err) });
-    } finally {
-      this.setBusy(pending.id, false);
-      this.closeIfStillPending(pending.id);
-    }
+      return updated.isBlocked
+        ? translate('admin.businesses.blockedMessage', { name: updated.name })
+        : translate('admin.businesses.unblockedMessage', { name: updated.name });
+    });
+    // 404 („Nie znaleziono firmy") kończy się tak samo jak awaria sieci: komunikat w wierszu,
+    // firma bez zmian — w obu przypadkach nic o niej nie wiemy na pewno
+    this.closeIfStillPending(pending.id);
   }
 
   /** Zamyka modal tylko wtedy, gdy wciąż dotyczy tej samej firmy — użytkownik mógł w trakcie
@@ -376,17 +352,5 @@ export default class AdminBusinesses {
     if (this.pendingAction()?.id === id) {
       this.pendingAction.set(null);
     }
-  }
-
-  private setBusy(id: string, value: boolean): void {
-    this.busy.update((ids) => {
-      const next = new Set(ids);
-      if (value) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
   }
 }

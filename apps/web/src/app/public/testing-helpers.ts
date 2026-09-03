@@ -1,7 +1,11 @@
 import { ComponentFixture } from '@angular/core/testing';
 
-/** Wpisuje wartość jak użytkownik — event 'input' aktualizuje Signal Forms. */
-export const setValue = (input: HTMLInputElement, value: string) => {
+/** Wpisuje wartość jak użytkownik — event 'input' aktualizuje Signal Forms. Także dla
+ *  `<textarea>`: z punktu widzenia formularza to ten sam kontrakt (value + input). */
+export const setValue = (
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+) => {
   input.value = value;
   input.dispatchEvent(new Event('input'));
 };
