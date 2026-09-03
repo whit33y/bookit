@@ -1,4 +1,4 @@
-import { BookingStatus, PrismaClient } from '@prisma/client';
+import { BookingStatus, BusinessStatus, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
   BOOKING_EVENT_RECIPIENT,
@@ -8,9 +8,11 @@ import { renderBookingNotification } from '../../src/app/notifications/templates
 import { planDemoBookings, planDemoTimeOffs } from './demo-bookings';
 import {
   CATEGORIES,
+  DEMO_APPLICATIONS,
   DEMO_BUSINESSES,
   DEMO_PASSWORD,
   DEMO_USERS,
+  DemoApplication,
   DemoBusiness,
   DemoEmployee,
 } from './demo-data';
@@ -97,6 +99,10 @@ const seedBusiness = async (
     lng: business.lng,
     cancellationHours: business.cancellationHours,
     isBlocked: business.isBlocked ?? false,
+    // firmy demo są już wpuszczone (#141) — mają ofertę, grafiki i rezerwacje, więc muszą
+    // być widoczne publicznie; zgłoszenia czekające na decyzję siedzą w DEMO_APPLICATIONS
+    status: BusinessStatus.APPROVED,
+    rejectionReason: null,
     categoryId,
   };
 
@@ -155,6 +161,42 @@ const replaceWorkingHours = async (
   await prisma.workingHours.deleteMany({ where: { employeeId } });
   await prisma.workingHours.createMany({
     data: employee.workingHours.map((wh) => ({ employeeId, ...wh })),
+  });
+};
+
+/**
+ * Zgłoszenia firm (#141) — ten sam `Business`, tylko bez oferty i pracowników. Klucz po
+ * `ownerId` jak przy firmach: zgłaszający też ma najwyżej jeden wiersz.
+ */
+const seedApplication = async (
+  prisma: PrismaClient,
+  application: DemoApplication,
+  applicantId: string,
+  categoryId: string,
+): Promise<void> => {
+  const data = {
+    slug: application.slug,
+    name: application.name,
+    description: application.description,
+    phone: application.phone,
+    street: application.street,
+    city: application.city,
+    postalCode: application.postalCode,
+    lat: application.lat,
+    lng: application.lng,
+    cancellationHours: application.cancellationHours,
+    isBlocked: false,
+    status: application.status,
+    // jawne null, nie undefined: zgłoszenie ponownie wysłane traci powód odrzucenia,
+    // a Prisma pominęłaby undefined i zostawiła stary
+    rejectionReason: application.rejectionReason ?? null,
+    categoryId,
+  };
+
+  await prisma.business.upsert({
+    where: { ownerId: applicantId },
+    update: data,
+    create: { ...data, ownerId: applicantId },
   });
 };
 
@@ -231,6 +273,20 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
       });
       serviceIds.set(`${business.slug}/${service.name}`, saved.id);
     }
+  }
+
+  for (const application of DEMO_APPLICATIONS) {
+    const applicantId = userIds.get(application.applicantEmail);
+    if (!applicantId) {
+      throw new Error(
+        `Dane demo: brak zgłaszającego ${application.applicantEmail}`,
+      );
+    }
+    const category = await prisma.category.findUniqueOrThrow({
+      where: { slug: application.categorySlug },
+    });
+
+    await seedApplication(prisma, application, applicantId, category.id);
   }
 
   const employeeIdList = [...employeeIds.values()];
@@ -346,6 +402,7 @@ export const seedDemo = async (prisma: PrismaClient): Promise<void> => {
 
   console.log(
     `Dane demo: ${DEMO_USERS.length} użytkowników, ${DEMO_BUSINESSES.length} firm, ` +
+      `${DEMO_APPLICATIONS.length} zgłoszeń firm, ` +
       `${employeeIds.size} pracowników, ${serviceIds.size} usług, ` +
       `${bookings.length} rezerwacji (usunięto poprzednie: ${removed}), ` +
       `${reviewCount} recenzji, ${notificationCount} powiadomień.`,

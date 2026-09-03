@@ -48,3 +48,37 @@ _Unikaj_: nadchodząca rezerwacja, nowa rezerwacja
 Rezerwacja o statusie `CONFIRMED` lub `PENDING`, której termin dopiero nastąpi.
 Porządkuje ją czas, nie status — w odróżnieniu od oczekującej rezerwacji.
 _Unikaj_: oczekująca wizyta, przyszła rezerwacja
+
+### Zgłoszenia firm
+
+**Zgłoszenie firmy**:
+Firma w stanie `PENDING` — czeka na decyzję administratora i nie działa: nie ma jej
+w wyszukiwarce ani w profilach, nie da się w niej rezerwować, a zgłaszający pozostaje
+klientem, dopóki administrator nie zaakceptuje. Jeden użytkownik ma najwyżej jedno
+zgłoszenie, a po akceptacji ten sam rekord jest już działającą firmą.
+_Unikaj_: wniosek, firma oczekująca, nowa firma
+
+**Kolejka zgłoszeń**:
+Lista zgłoszeń czekających na decyzję administratora — praca do wykonania, która ma się
+wyzerować. Odróżnia się od rejestru firm, który pokazuje firmy działające i służy
+przeglądaniu, nie decydowaniu.
+_Unikaj_: lista firm, moderacja
+
+**Odrzucenie zgłoszenia**:
+Decyzja administratora o niewpuszczeniu firmy na platformę, zawsze z powodem. Zgłaszający
+może wypełnić formularz od nowa — odrzucenie nie zamyka drogi. Odróżnia się od blokady
+firmy, która dotyczy firmy już działającej.
+_Unikaj_: blokada, zawieszenie
+
+**Firma działająca**:
+Firma widoczna i rezerwowalna publicznie: zaakceptowane zgłoszenie (`APPROVED`) bez blokady
+(`isBlocked = false`). Oba warunki naraz — to jeden predykat, którym filtrują wszystkie
+ścieżki publiczne: wyszukiwarka, profil po slugu, dostępność terminów, recenzje i zakładanie
+rezerwacji.
+_Unikaj_: firma aktywna, firma publiczna, firma widoczna
+
+**Blokada firmy**:
+Kara nałożona na firmę już działającą (`isBlocked`): znika z wyszukiwarki i profilu,
+nie przyjmuje nowych rezerwacji, ale zachowuje rezerwacje już złożone i rolę właściciela.
+Niezależna od stanu zgłoszenia — to dwie osie, wpuszczenie i kara.
+_Unikaj_: odrzucenie, dezaktywacja

@@ -1,4 +1,9 @@
-import { BookingStatus, DepositType, UserRole } from '@prisma/client';
+import {
+  BookingStatus,
+  BusinessStatus,
+  DepositType,
+  UserRole,
+} from '@prisma/client';
 
 /**
  * Deklaratywny opis danych demo — bez ani jednego wywołania Prismy, żeby dało się go
@@ -76,6 +81,22 @@ export interface DemoBusiness {
   employees: DemoEmployee[];
   services: DemoService[];
 }
+
+/**
+ * Zgłoszenie firmy (#141) — wiersz `Business` bez oferty i pracowników, czekający na decyzję
+ * administratora albo już odrzucony. Osobna lista od `DEMO_BUSINESSES`, bo zgłoszenie nie jest
+ * jeszcze firmą: nie ma usług ani grafików, a jego autor pozostaje klientem.
+ */
+export type DemoApplication = Omit<
+  DemoBusiness,
+  'ownerEmail' | 'isBlocked' | 'employees' | 'services'
+> & {
+  /** konto zgłaszającego — rola CLIENT, dopiero akceptacja (#143) zrobi z niego właściciela */
+  applicantEmail: string;
+  status: typeof BusinessStatus.PENDING | typeof BusinessStatus.REJECTED;
+  /** wyłącznie przy REJECTED — odrzucenie zawsze niesie powód */
+  rejectionReason?: string;
+};
 
 /**
  * Urlop opisany dniami roboczymi pracownika — `demo-bookings.ts` zamienia go na instanty.
@@ -205,6 +226,27 @@ export const DEMO_OWNERS: DemoUser[] = [
   },
 ];
 
+/**
+ * Konta, które złożyły zgłoszenie firmy (#141). Zostają CLIENT-ami — rolę OWNER daje dopiero
+ * akceptacja administratora, więc panelu firmy jeszcze nie widzą.
+ */
+export const DEMO_APPLICANTS: DemoUser[] = [
+  {
+    email: 'zgloszenie@bookit.pl',
+    firstName: 'Michał',
+    lastName: 'Zawadzki',
+    phone: '600500500',
+    role: UserRole.CLIENT,
+  },
+  {
+    email: 'zgloszenie2@bookit.pl',
+    firstName: 'Karolina',
+    lastName: 'Baran',
+    phone: '600500501',
+    role: UserRole.CLIENT,
+  },
+];
+
 export const DEMO_EMPLOYEE_USERS: DemoUser[] = [
   {
     email: 'pracownik@bookit.pl',
@@ -227,6 +269,7 @@ export const DEMO_USERS: DemoUser[] = [
   ...DEMO_OWNERS,
   ...DEMO_EMPLOYEE_USERS,
   ...DEMO_CLIENTS,
+  ...DEMO_APPLICANTS,
 ];
 
 /**
@@ -520,6 +563,48 @@ export const DEMO_BUSINESSES: DemoBusiness[] = [
         employeeNames: ['Weronika Sikora'],
       },
     ],
+  },
+];
+
+/**
+ * Zgłoszenia firm dla kolejki administratora (#143) i dla ścieżki zgłaszającego (#142):
+ * jedno czeka na decyzję, drugie zostało odrzucone z powodem — na odrzuconym da się przeklikać
+ * ponowne wysłanie formularza, które nadpisuje ten sam wiersz.
+ */
+export const DEMO_APPLICATIONS: DemoApplication[] = [
+  {
+    slug: 'studio-brew-linia',
+    name: 'Studio Brwi „Linia”',
+    description:
+      'Stylizacja i laminacja brwi. Zgłoszenie czeka na decyzję administratora.',
+    phone: '426334455',
+    street: 'Piotrkowska 90',
+    city: 'Łódź',
+    postalCode: '90-103',
+    lat: 51.7625,
+    lng: 19.4563,
+    categorySlug: 'kosmetyczka',
+    cancellationHours: 24,
+    applicantEmail: 'zgloszenie@bookit.pl',
+    status: BusinessStatus.PENDING,
+  },
+  {
+    slug: 'studio-tatuazu-igla',
+    name: 'Studio Tatuażu „Igła”',
+    description:
+      'Tatuaże autorskie i przykrywanie blizn. Zgłoszenie odrzucone przez administratora.',
+    phone: '523334455',
+    street: 'Stary Rynek 3',
+    city: 'Bydgoszcz',
+    postalCode: '85-105',
+    lat: 53.1219,
+    lng: 18.0003,
+    categorySlug: 'tatuaz',
+    cancellationHours: 24,
+    applicantEmail: 'zgloszenie2@bookit.pl',
+    status: BusinessStatus.REJECTED,
+    rejectionReason:
+      'Podany adres nie istnieje, a numer telefonu nie odpowiada. Prosimy o poprawne dane kontaktowe.',
   },
 ];
 

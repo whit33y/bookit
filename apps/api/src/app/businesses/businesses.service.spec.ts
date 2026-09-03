@@ -1,4 +1,4 @@
-import { Prisma, UserRole } from '@prisma/client';
+import { BusinessStatus, Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
@@ -23,39 +23,39 @@ const prismaError = (code: string, target?: string[]) =>
   });
 
 describe('BusinessesService', () => {
-  let tx: {
-    business: { create: ReturnType<typeof vi.fn> };
-    user: { update: ReturnType<typeof vi.fn> };
-  };
   let findFirst: ReturnType<typeof vi.fn>;
   let findUnique: ReturnType<typeof vi.fn>;
+  let create: ReturnType<typeof vi.fn>;
   let update: ReturnType<typeof vi.fn>;
   let findMany: ReturnType<typeof vi.fn>;
   let count: ReturnType<typeof vi.fn>;
   let queryRaw: ReturnType<typeof vi.fn>;
+  let userUpdate: ReturnType<typeof vi.fn>;
   let statsFor: ReturnType<typeof vi.fn>;
   let service: BusinessesService;
 
   // firma bez recenzji — tyle dokleja się domyślnie do każdego wyniku (#47)
   const noStats = { avgRating: null, reviewCount: 0 };
 
+  // publiczne ścieżki widzą wyłącznie firmę wpuszczoną i niezablokowaną (#141)
+  const publicWhere = { isBlocked: false, status: BusinessStatus.APPROVED };
+
   beforeEach(() => {
-    tx = {
-      business: { create: vi.fn().mockResolvedValue({ id: 'b1' }) },
-      user: { update: vi.fn() },
-    };
     findFirst = vi.fn();
-    findUnique = vi.fn();
+    // domyślnie zgłaszający nie ma jeszcze żadnego wiersza
+    findUnique = vi.fn().mockResolvedValue(null);
+    create = vi.fn().mockResolvedValue({ id: 'b1' });
     update = vi.fn();
     findMany = vi.fn().mockResolvedValue([]);
     count = vi.fn().mockResolvedValue(0);
     queryRaw = vi.fn();
+    userUpdate = vi.fn();
     // domyślnie żadna firma nie ma recenzji — groupBy nie zwraca dla nich wierszy
     statsFor = vi.fn().mockResolvedValue(new Map());
     const prisma = {
-      $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
       $queryRaw: queryRaw,
-      business: { findFirst, findUnique, update, findMany, count },
+      business: { findFirst, findUnique, create, update, findMany, count },
+      user: { update: userUpdate },
     };
     service = new BusinessesService(
       prisma as unknown as PrismaService,
@@ -69,7 +69,7 @@ describe('BusinessesService', () => {
     const result = await service.findBySlug('salon');
 
     const arg = findFirst.mock.calls[0][0];
-    expect(arg.where).toEqual({ slug: 'salon', isBlocked: false });
+    expect(arg.where).toEqual({ slug: 'salon', ...publicWhere });
     expect(arg.select.ownerId).toBeUndefined();
     expect(arg.select.isBlocked).toBeUndefined();
     // publiczny profil pokazuje tylko aktywne usługi i pracowników (AC #11)
@@ -129,25 +129,72 @@ describe('BusinessesService', () => {
     });
   });
 
-  it('tworzy firmę ze slugiem bez polskich znaków i awansuje usera na OWNER', async () => {
+  it('zapisuje zgłoszenie w PENDING ze slugiem bez polskich znaków i nie rusza roli usera', async () => {
     const result = await service.create('user-1', dto);
 
-    const arg = tx.business.create.mock.calls[0][0];
+    const arg = create.mock.calls[0][0];
     expect(arg.data).toMatchObject({
       slug: 'salon-pieknosci-lucja',
       ownerId: 'user-1',
       name: dto.name,
+      status: BusinessStatus.PENDING,
+      rejectionReason: null,
     });
+    // rola przychodzi dopiero z akceptacją administratora (#143) — zgłoszenie jej nie rusza
+    expect(userUpdate).not.toHaveBeenCalled();
     expect(arg.select.ownerId).toBeUndefined();
-    expect(tx.user.update).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: { role: UserRole.OWNER },
-    });
+    // zgłaszający ma zobaczyć stan swojej sprawy
+    expect(arg.select.status).toBe(true);
+    expect(arg.select.rejectionReason).toBe(true);
     expect(result).toEqual({ id: 'b1' });
   });
 
-  it('druga firma tego samego usera → 409', async () => {
-    tx.business.create.mockRejectedValue(prismaError('P2002', ['ownerId']));
+  it('ponowne zgłoszenie przy PENDING → 409, bez zapisu', async () => {
+    findUnique.mockResolvedValue({ id: 'b1', status: BusinessStatus.PENDING });
+
+    await expect(service.create('user-1', dto)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('zgłoszenie przy działającej firmie (APPROVED) → 409', async () => {
+    findUnique.mockResolvedValue({ id: 'b1', status: BusinessStatus.APPROVED });
+
+    await expect(service.create('user-1', dto)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('ponowne zgłoszenie po odrzuceniu nadpisuje ten sam wiersz i czyści powód', async () => {
+    findUnique.mockResolvedValue({ id: 'b1', status: BusinessStatus.REJECTED });
+    update.mockResolvedValue({ id: 'b1', status: BusinessStatus.PENDING });
+
+    const result = await service.create('user-1', dto);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    const arg = update.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'b1' });
+    expect(arg.data).toMatchObject({
+      slug: 'salon-pieknosci-lucja',
+      status: BusinessStatus.PENDING,
+      rejectionReason: null,
+      // nowe zgłoszenie w całości: pola pominięte w formularzu czyszczą poprzednie wartości
+      description: null,
+      phone: null,
+      postalCode: null,
+      cancellationHours: 24,
+    });
+    // ownerId zostaje ten sam — wiersz jest kluczowany po nim, nie zakładamy drugiego
+    expect(arg.data.ownerId).toBeUndefined();
+    expect(result).toEqual({ id: 'b1', status: BusinessStatus.PENDING });
+  });
+
+  it('wyścig dwóch zgłoszeń tego samego usera (P2002 ownerId) → 409', async () => {
+    create.mockRejectedValue(prismaError('P2002', ['ownerId']));
 
     await expect(service.create('user-1', dto)).rejects.toMatchObject({
       status: 409,
@@ -155,23 +202,46 @@ describe('BusinessesService', () => {
   });
 
   it('kolizja sluga → ponowna próba z sufiksem', async () => {
-    tx.business.create
+    create
       .mockRejectedValueOnce(prismaError('P2002', ['slug']))
       .mockResolvedValueOnce({ id: 'b2' });
 
     const result = await service.create('user-1', dto);
 
-    expect(tx.business.create.mock.calls[1][0].data.slug).toMatch(
+    expect(create.mock.calls[1][0].data.slug).toMatch(
       /^salon-pieknosci-lucja-[0-9a-f]{4}$/,
     );
     expect(result).toEqual({ id: 'b2' });
   });
 
   it('nieistniejąca kategoria (P2003) → 400', async () => {
-    tx.business.create.mockRejectedValue(prismaError('P2003'));
+    create.mockRejectedValue(prismaError('P2003'));
 
     await expect(service.create('user-1', dto)).rejects.toMatchObject({
       status: 400,
+    });
+  });
+
+  it('findApplication zwraca stan zgłoszenia razem z powodem odrzucenia', async () => {
+    findUnique.mockResolvedValue({
+      id: 'b1',
+      status: BusinessStatus.REJECTED,
+      rejectionReason: 'Adres nie istnieje',
+    });
+
+    const result = await service.findApplication('user-1');
+
+    const arg = findUnique.mock.calls[0][0];
+    expect(arg.where).toEqual({ ownerId: 'user-1' });
+    expect(arg.select.status).toBe(true);
+    expect(arg.select.rejectionReason).toBe(true);
+    expect(arg.select.ownerId).toBeUndefined();
+    expect(result).toMatchObject({ status: BusinessStatus.REJECTED });
+  });
+
+  it('findApplication → 404, gdy user nic nie zgłaszał', async () => {
+    await expect(service.findApplication('user-1')).rejects.toMatchObject({
+      status: 404,
     });
   });
 
@@ -197,16 +267,16 @@ describe('BusinessesService', () => {
   });
 
   describe('search', () => {
-    it('bez filtrów i bez geo: isBlocked wykluczone, sortowanie alfabetyczne, domyślna paginacja', async () => {
+    it('bez filtrów i bez geo: niedziałające firmy wykluczone, sortowanie alfabetyczne, domyślna paginacja', async () => {
       await service.search({});
 
       expect(findMany.mock.calls[0][0]).toMatchObject({
-        where: { isBlocked: false },
+        where: publicWhere,
         orderBy: { name: 'asc' },
         skip: 0,
         take: 20,
       });
-      expect(count.mock.calls[0][0]).toEqual({ where: { isBlocked: false } });
+      expect(count.mock.calls[0][0]).toEqual({ where: publicWhere });
     });
 
     it('łączy category/city/q w jeden where (AND); city case-insensitive', async () => {
@@ -216,7 +286,7 @@ describe('BusinessesService', () => {
 
       const where = findMany.mock.calls[0][0].where;
       expect(where).toEqual({
-        isBlocked: false,
+        ...publicWhere,
         category: { slug: 'fryzjer' },
         city: { equals: 'Warszawa', mode: 'insensitive' },
         OR: [
@@ -333,6 +403,26 @@ describe('BusinessesService', () => {
         page: 1,
         limit: 20,
       });
+    });
+
+    it('ścieżka geograficzna filtruje te same firmy co alfabetyczna (status i blokada w SQL)', async () => {
+      queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: 0 }]);
+
+      await service.search({ lat: '52.23', lng: '21.01' });
+
+      // warunki wchodzą do zapytania jako zagnieżdżony fragment Prisma.Sql (tekst + parametry)
+      const fragments = queryRaw.mock.calls[0]
+        .slice(1)
+        .filter(
+          (value: unknown): value is Prisma.Sql =>
+            typeof value === 'object' && value !== null && 'sql' in value,
+        );
+      const sql = fragments.map((fragment) => fragment.sql).join(' ');
+      expect(sql).toContain('"isBlocked" = false');
+      expect(sql).toContain('"status"');
+      expect(fragments.flatMap((fragment) => fragment.values)).toContain(
+        BusinessStatus.APPROVED,
+      );
     });
 
     it('ścieżka geograficzna też dokleja statystyki ocen (bez podselektu w SQL)', async () => {

@@ -1,4 +1,4 @@
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, BusinessStatus } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
 import { AvailabilityService } from './availability.service';
@@ -186,12 +186,16 @@ describe('AvailabilityService', () => {
     ]);
   });
 
-  it('firma zablokowana lub nieistniejąca → 404, bez dalszych zapytań', async () => {
+  it('firma niedziałająca (zgłoszenie, blokada) lub nieistniejąca → 404, bez dalszych zapytań', async () => {
     businessFindFirst.mockResolvedValue(null);
 
     await expect(get()).rejects.toMatchObject({ status: 404 });
     expect(businessFindFirst).toHaveBeenCalledWith({
-      where: { slug: 'salon-x', isBlocked: false },
+      where: {
+        slug: 'salon-x',
+        isBlocked: false,
+        status: BusinessStatus.APPROVED,
+      },
       select: { id: true },
     });
     expect(serviceFindFirst).not.toHaveBeenCalled();

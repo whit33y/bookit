@@ -28,8 +28,10 @@ Haslo123!
 | **CLIENT**   | `klient@bookit.pl`                                | Kinga Nowak        | `/client`                | wyszukiwanie firm, rezerwacje, „Moje wizyty" (pełny przekrój statusów)         |
 | **CLIENT**   | `klient2@bookit.pl`                               | Bartosz Wróbel     | `/client`                | dodatkowy klient, żeby panel firmy nie pokazywał wszędzie tego samego nazwiska |
 | **CLIENT**   | `klient3@bookit.pl`                               | Zofia Duda         | `/client`                | jw.                                                                            |
+| **CLIENT**   | `zgloszenie@bookit.pl`                            | Michał Zawadzki    | `/client`                | zgłosił firmę — zgłoszenie czeka na decyzję administratora (`PENDING`)         |
+| **CLIENT**   | `zgloszenie2@bookit.pl`                           | Karolina Baran     | `/client`                | jego zgłoszenie zostało odrzucone (`REJECTED`) — można je wysłać ponownie      |
 
-Razem 12 kont. Do przeglądu aplikacji wystarczą cztery pierwsze wiersze — reszta istnieje,
+Razem 14 kont. Do przeglądu aplikacji wystarczą cztery pierwsze wiersze — reszta istnieje,
 bo `Business.ownerId` jest `@unique` (każda firma musi mieć własnego właściciela) i żeby
 rezerwacje w kalendarzu należały do różnych osób.
 
@@ -46,7 +48,23 @@ rezerwacje w kalendarzu należały do różnych osób.
 
 Współrzędne są prawdziwe — wyszukiwanie po odległości i piny na mapie mają sens.
 **`salon-azor` jest zablokowany** (`isBlocked = true`): panel admina ma co odblokować,
-a wyszukiwarka i availability tej firmy nie pokazują.
+a wyszukiwarka i availability tej firmy nie pokazują. Wszystkie sześć firm ma
+`status = APPROVED` — działają, bo są wpuszczone na platformę.
+
+## Zgłoszenia firm
+
+Dwa wiersze `Business` bez oferty i pracowników — firma powstaje w stanie `PENDING`
+i nie robi nic, dopóki administrator jej nie zaakceptuje (#141). Ich autorzy zostają
+`CLIENT`-ami: rola `OWNER` przychodzi dopiero z akceptacją.
+
+| Slug                  | Nazwa                    | Miasto    | Zgłaszający              | Stan       |
+| --------------------- | ------------------------ | --------- | ------------------------ | ---------- |
+| `studio-brew-linia`   | Studio Brwi „Linia”      | Łódź      | `zgloszenie@bookit.pl`   | `PENDING`  |
+| `studio-tatuazu-igla` | Studio Tatuażu „Igła”    | Bydgoszcz | `zgloszenie2@bookit.pl`  | `REJECTED` |
+
+Odrzucone zgłoszenie niesie powód (`rejectionReason`) i da się je wysłać ponownie —
+`POST /businesses` nadpisuje wtedy ten sam wiersz i wraca do `PENDING`. Żadne z nich nie jest
+widoczne publicznie: ani w wyszukiwarce, ani pod `/:slug`, ani przy zakładaniu rezerwacji.
 
 Każda firma ma 2–3 aktywne usługi (30–90 min, 50–250 zł) i 1–2 pracowników z grafikiem
 pn–pt, a część także w soboty (godziny różnią się między pracownikami, żeby kalendarz nie był

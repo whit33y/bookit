@@ -1,8 +1,9 @@
-import { BookingStatus, DepositType } from '@prisma/client';
+import { BookingStatus, BusinessStatus, DepositType } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import { depositError } from '../../src/app/payments/deposit';
 import {
   CATEGORIES,
+  DEMO_APPLICATIONS,
   DEMO_BOOKINGS,
   DEMO_BUSINESSES,
   DEMO_TIME_OFFS,
@@ -15,7 +16,12 @@ const duplicates = (values: string[]): string[] =>
 describe('dane demo', () => {
   it('e-maile i slugi są unikalne', () => {
     expect(duplicates(DEMO_USERS.map((u) => u.email))).toEqual([]);
-    expect(duplicates(DEMO_BUSINESSES.map((b) => b.slug))).toEqual([]);
+    expect(
+      duplicates([
+        ...DEMO_BUSINESSES.map((b) => b.slug),
+        ...DEMO_APPLICATIONS.map((a) => a.slug),
+      ]),
+    ).toEqual([]);
     expect(duplicates(CATEGORIES.map((c) => c.slug))).toEqual([]);
   });
 
@@ -147,6 +153,52 @@ describe('dane demo', () => {
     expect(blocked.length).toBeGreaterThan(0);
     for (const spec of DEMO_BOOKINGS) {
       expect(blocked).not.toContain(spec.businessSlug);
+    }
+  });
+
+  // #143 dostaje kolejkę do rozpatrzenia, #142 — widok stanu własnego zgłoszenia
+  it('jest co najmniej jedno zgłoszenie PENDING czekające na decyzję administratora', () => {
+    const pending = DEMO_APPLICATIONS.filter(
+      (a) => a.status === BusinessStatus.PENDING,
+    );
+
+    expect(pending.length).toBeGreaterThan(0);
+  });
+
+  it('zgłoszenia mają konto zgłaszającego w roli CLIENT, kategorię i osobnego właściciela', () => {
+    const ownerEmails = DEMO_BUSINESSES.map((b) => b.ownerEmail);
+    const slugs = CATEGORIES.map((c) => c.slug);
+
+    // Business.ownerId jest @unique — zgłaszający nie może mieć już firmy
+    expect(duplicates(DEMO_APPLICATIONS.map((a) => a.applicantEmail))).toEqual(
+      [],
+    );
+
+    for (const application of DEMO_APPLICATIONS) {
+      const applicant = DEMO_USERS.find(
+        (u) => u.email === application.applicantEmail,
+      );
+      // zgłoszenie nie nadaje roli — OWNER przychodzi dopiero z akceptacją (#141)
+      expect(applicant?.role, application.slug).toBe('CLIENT');
+      expect(ownerEmails).not.toContain(application.applicantEmail);
+      expect(slugs).toContain(application.categorySlug);
+    }
+  });
+
+  it('powód odrzucenia jest dokładnie przy zgłoszeniach REJECTED', () => {
+    for (const application of DEMO_APPLICATIONS) {
+      expect(
+        Boolean(application.rejectionReason),
+        application.slug,
+      ).toBe(application.status === BusinessStatus.REJECTED);
+    }
+  });
+
+  it('zgłoszenia nie mają rezerwacji ani urlopów — publicznie nie istnieją', () => {
+    const applicationSlugs = DEMO_APPLICATIONS.map((a) => a.slug);
+
+    for (const spec of [...DEMO_BOOKINGS, ...DEMO_TIME_OFFS]) {
+      expect(applicationSlugs).not.toContain(spec.businessSlug);
     }
   });
 
