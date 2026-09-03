@@ -180,4 +180,17 @@ describe('AdminUsers', () => {
 
     expect(html(fixture).querySelector('[role="alert"]')).toBeNull();
   });
+
+  it('prowadzi do formularza nowego administratora', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne((r) => r.url.startsWith('/api/admin/users'))
+      .flush(response([user()]));
+    fixture.detectChanges();
+
+    const link = html(fixture).querySelector<HTMLAnchorElement>(
+      'a[href="/admin/users/new"]',
+    );
+    expect(link?.textContent).toContain('Dodaj administratora');
+  });
 });

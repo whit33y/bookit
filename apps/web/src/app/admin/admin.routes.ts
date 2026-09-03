@@ -10,6 +10,9 @@ export default [
       { path: '', pathMatch: 'full', redirectTo: 'businesses' },
       { path: 'businesses', loadComponent: () => import('./admin-businesses') },
       { path: 'users', loadComponent: () => import('./admin-users') },
+      // przed segmentem parametrycznym nic tu nie stoi, ale kolejność zostawiamy czytelną:
+      // formularz jest podstroną listy użytkowników, bo stamtąd się na niego wchodzi
+      { path: 'users/new', loadComponent: () => import('./new-admin') },
       {
         path: 'business-applications',
         loadComponent: () => import('./admin-business-applications'),

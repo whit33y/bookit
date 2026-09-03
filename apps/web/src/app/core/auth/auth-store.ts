@@ -16,9 +16,15 @@ export interface AuthUser {
   sub: string;
   email: string;
   role: UserRole;
+  /** Wymuszona zmiana hasła (#144) — flaga jedzie w tokenie, więc front zna ją bez
+   *  dodatkowego żądania. Opcjonalna, bo tokeny wydane przed #144 tego pola nie mają. */
+  mustChangePassword?: boolean;
   /** Standardowe pole JWT — unix timestamp wygaśnięcia (sekundy). */
   exp?: number;
 }
+
+/** Ekran wymuszonej zmiany hasła (#146) — cel przekierowań z guarda i z interceptora. */
+export const CHANGE_PASSWORD_PATH = '/change-password';
 
 /** Strona domowa dla roli — cel redirectów po logowaniu/rejestracji. */
 export function homeFor(role: UserRole): string {
@@ -73,12 +79,22 @@ export class AuthStore {
     localStorage.getItem(REFRESH_KEY),
   );
 
+  /** Flaga zapalona przez odpowiedź 403 „musisz zmienić hasło" (#146), a nie przez token.
+   *  Potrzebna, bo konto może dostać flagę w bazie już po wydaniu tokenu — wtedy token
+   *  jej nie niesie, a mimo to każde żądanie wraca z 403. */
+  private readonly forcedPasswordChange = signal(false);
+
   readonly accessToken = this.accessTokenSignal.asReadonly();
   readonly user = computed<AuthUser | null>(() => {
     const token = this.accessTokenSignal();
     return token ? decodeJwt(token) : null;
   });
   readonly isLoggedIn = computed(() => this.user() !== null);
+  /** Czy konto jest zamknięte w ekranie zmiany hasła: albo mówi to token, albo powiedziało
+   *  to 403 z dowolnego żądania. */
+  readonly mustChangePassword = computed(
+    () => this.user()?.mustChangePassword === true || this.forcedPasswordChange(),
+  );
 
   private refreshPromise: Promise<void> | null = null;
 
@@ -145,7 +161,35 @@ export class AuthStore {
     });
   }
 
+  /** Konto z niezmienionym hasłem startowym dostaje 403 na wszystkim poza własnym profilem
+   *  i zmianą hasła — wołane z interceptora, żeby użytkownik zobaczył formularz zamiast
+   *  komunikatu „brak uprawnień" przy każdej akcji. Nawigacja jest tutaj, a nie w guardzie,
+   *  bo 403 przychodzi zwykle bez żadnej nawigacji (żądanie z otwartego już ekranu), więc
+   *  guard nie miałby się kiedy uruchomić. */
+  requirePasswordChange(): void {
+    this.forcedPasswordChange.set(true);
+    void this.router.navigateByUrl(CHANGE_PASSWORD_PATH);
+  }
+
+  /**
+   * Zmiana hasła przez zalogowanego (#146). Backend oddaje nową parę tokenów, bo flaga
+   * jedzie w access tokenie — bez wymiany użytkownik zostałby zablokowany własnym, wciąż
+   * ważnym tokenem. Po zmianie ląduje na stronie domowej swojej roli (dla ADMIN‑a `/admin`).
+   */
+  async changePassword(dto: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
+    const pair = await firstValueFrom(
+      this.api.post<TokenPair>('/auth/change-password', dto),
+    );
+    this.setTokens(pair);
+    this.forcedPasswordChange.set(false);
+    await this.goHome();
+  }
+
   private clearTokens(): void {
+    this.forcedPasswordChange.set(false);
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     this.accessTokenSignal.set(null);

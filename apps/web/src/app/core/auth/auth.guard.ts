@@ -1,6 +1,12 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { AuthStore, UserRole, homeFor, safeReturnUrl } from './auth-store';
+import {
+  AuthStore,
+  CHANGE_PASSWORD_PATH,
+  UserRole,
+  homeFor,
+  safeReturnUrl,
+} from './auth-store';
 
 /** Wpuszcza tylko niezalogowanych (login/register); inaczej redirect na returnUrl albo
  *  na stronę domową roli. Wygasły access token nie blokuje /login — inaczej martwa sesja
@@ -43,3 +49,18 @@ export function roleGuard(...roles: UserRole[]): CanActivateFn {
         });
   };
 }
+
+/**
+ * Konto z wymuszoną zmianą hasła (#146) nie wychodzi poza ekran zmiany hasła — dopóki jej
+ * nie dokona, każda trasa odbija na `/change-password`. Guard siedzi na wszystkich trasach
+ * najwyższego poziomu (patrz `app.routes.ts`), więc obejmuje też poddrzewa lazy.
+ *
+ * Sam ekran zmiany hasła przepuszcza — inaczej redirect wpadłby w pętlę.
+ */
+export const passwordChangeGuard: CanActivateFn = (_route, state) => {
+  const store = inject(AuthStore);
+  if (!store.mustChangePassword() || state.url.startsWith(CHANGE_PASSWORD_PATH)) {
+    return true;
+  }
+  return inject(Router).createUrlTree([CHANGE_PASSWORD_PATH]);
+};
