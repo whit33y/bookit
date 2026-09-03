@@ -10,7 +10,10 @@ export type NotificationType =
   | 'BOOKING_DECLINED'
   | 'BOOKING_CANCELLED_BY_CLIENT'
   | 'BOOKING_CANCELLED_BY_BUSINESS'
-  | 'BOOKING_REMINDER';
+  | 'BOOKING_REMINDER'
+  // decyzje administratora o zgłoszeniu firmy (#143) — jedyne typy z pustym bookingId
+  | 'BUSINESS_APPROVED'
+  | 'BUSINESS_REJECTED';
 
 export interface AppNotification {
   id: string;

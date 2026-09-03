@@ -6,6 +6,9 @@ import { InAppNotificationsService } from './in-app.service';
 import { MailService } from './mail.service';
 import { BOOKING_EVENT_RECIPIENT, BookingEvent } from './templates/booking-event';
 import { renderBookingEmail } from './templates/booking.template';
+import { BusinessApplicationDecision } from './templates/business-application';
+import { renderBusinessApplicationEmail } from './templates/business-application.template';
+import { renderBusinessApplicationNotification } from './templates/notification.template';
 import { renderPasswordResetEmail } from './templates/password-reset.template';
 
 // Komplet danych do treści powiadomienia jednym zapytaniem — email klienta i właściciela firmy
@@ -34,6 +37,14 @@ const bookingEventSelect = {
   service: { select: { name: true, durationMin: true, priceCents: true } },
   employee: { select: { name: true } },
 } satisfies Prisma.BookingSelect;
+
+// Komplet danych do powiadomienia o decyzji w sprawie zgłoszenia (#143). Adresatem jest
+// zawsze zgłaszający, więc `owner` niesie i adres (mail), i id (kanał in-app).
+const businessDecisionSelect = {
+  name: true,
+  rejectionReason: true,
+  owner: { select: { id: true, email: true, firstName: true } },
+} satisfies Prisma.BusinessSelect;
 
 /**
  * Powiadomienia o zdarzeniach rezerwacji: mail (#37) i wpis in-app (#54). Jedyny konsument
@@ -94,17 +105,14 @@ export class NotificationsService {
       return false;
     }
 
-    const booking = await this.prisma.booking
-      .findUnique({ where: { id: bookingId }, select: bookingEventSelect })
-      .catch((e: unknown) => {
-        this.logger.error(
-          `Nie udało się pobrać rezerwacji ${bookingId} dla powiadomienia ${event}`,
-          e instanceof Error ? e.stack : String(e),
-        );
-        return null;
-      });
+    const booking = await this.load(
+      this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: bookingEventSelect,
+      }),
+      `rezerwacji ${bookingId} dla powiadomienia ${event}`,
+    );
     if (!booking) {
-      this.logger.warn(`Rezerwacja ${bookingId} zniknęła przed wysłaniem powiadomienia`);
       return false;
     }
 
@@ -121,6 +129,48 @@ export class NotificationsService {
     }
 
     return emailSent;
+  }
+
+  /** Kanał mailowy decyzji. Nie rzuca — jak sendBookingEmail. */
+  private async sendBusinessDecisionEmail(
+    businessId: string,
+    decision: BusinessApplicationDecision,
+    business: Prisma.BusinessGetPayload<{ select: typeof businessDecisionSelect }>,
+  ): Promise<void> {
+    try {
+      const message = renderBusinessApplicationEmail(
+        decision,
+        business,
+        this.config.getOrThrow<string>('APP_URL'),
+      );
+      await this.mail.send({ to: business.owner.email, ...message });
+      this.logger.log(`Powiadomienie ${decision} dla zgłoszenia ${businessId} wysłane`);
+    } catch (e) {
+      this.logger.error(
+        `Nie udało się wysłać powiadomienia ${decision} dla zgłoszenia ${businessId}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+  }
+
+  /**
+   * Odczyt danych do powiadomienia. Zdarzenie niesie samo id, więc każdy kanał zaczyna od
+   * dobrania reszty — i każdy musi przeżyć oba nieszczęścia: błąd bazy i wiersz, którego już
+   * nie ma (operacja odwołana albo skasowana, zanim wysyłka doszła do głosu). Oba kończą się
+   * tak samo: wpis w logu i `null`, nigdy wyjątek — patrz kontrakt w docblocku klasy.
+   */
+  private async load<T>(query: Promise<T | null>, subject: string): Promise<T | null> {
+    const row = await query.catch((e: unknown) => {
+      this.logger.error(
+        `Nie udało się pobrać ${subject}`,
+        e instanceof Error ? e.stack : String(e),
+      );
+      return null;
+    });
+    if (!row) {
+      this.logger.warn(`Brak ${subject} — powiadomienie nie powstanie`);
+    }
+    return row;
   }
 
   /** Sam kanał mailowy. Nie rzuca — patrz kontrakt w docblocku klasy. */
@@ -154,6 +204,41 @@ export class NotificationsService {
       );
       return false;
     }
+  }
+
+  /**
+   * Decyzja administratora w sprawie zgłoszenia firmy (#143): mail i wpis in-app do
+   * zgłaszającego. Ten sam kontrakt co przy rezerwacjach — **nigdy nie odrzuca**, bo decyzja
+   * jest już zapisana i zamknięta (akceptacji się nie cofa), a nieudany SMTP nie może zamienić
+   * jej sukcesu w błąd. Dlatego wołający robi `void`.
+   *
+   * Dane czytamy tu, nie w admin/: payload zdarzenia to samo id, jak w BookingEventsService.
+   */
+  async businessDecision(
+    businessId: string,
+    decision: BusinessApplicationDecision,
+  ): Promise<void> {
+    const business = await this.load(
+      this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: businessDecisionSelect,
+      }),
+      `zgłoszenia ${businessId} dla powiadomienia ${decision}`,
+    );
+    if (!business) {
+      return;
+    }
+
+    await this.sendBusinessDecisionEmail(businessId, decision, business);
+
+    // Wpis in-app powstaje niezależnie od maila: decyzji nikt nie powtórzy, więc padnięty
+    // SMTP nie może zostawić zgłaszającego bez śladu (jak przy zdarzeniach rezerwacji
+    // innych niż REMINDER).
+    await this.inApp.create(
+      renderBusinessApplicationNotification(decision, business),
+      business.owner.id,
+      `${decision} dla zgłoszenia ${businessId}`,
+    );
   }
 
   /** Link resetu hasła (#4) — w przeciwieństwie do powiadomień rezerwacji rzuca przy błędzie. */

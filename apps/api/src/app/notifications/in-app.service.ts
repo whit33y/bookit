@@ -3,7 +3,10 @@ import { Prisma } from '@prisma/client';
 import { PaginationQuery, parsePagination } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingEvent, BookingEventData } from './templates/booking-event';
-import { renderBookingNotification } from './templates/notification.template';
+import {
+  RenderedNotification,
+  renderBookingNotification,
+} from './templates/notification.template';
 
 // Wszystko, co pokazuje dzwoneczek. `userId` zostaje w środku — klient dostaje wyłącznie
 // swoje powiadomienia, więc powtarzanie go w odpowiedzi nic nie wnosi.
@@ -25,9 +28,9 @@ const DEFAULT_LIMIT = 10;
  * Powiadomienia in-app (#54): drugi kanał obok maila. Zapis idzie z NotificationsService
  * (przy tych samych zdarzeniach rezerwacji), odczyt z NotificationsController.
  *
- * Kontrakt zapisu jest ten sam co w kanale mailowym: `createForBooking` **nigdy nie rzuca**.
- * Powiadomienie jest efektem ubocznym już zapisanej operacji na rezerwacji i nie może
- * zamienić jej sukcesu w błąd. Metody odczytu zachowują się odwrotnie — obsługują żądanie
+ * Kontrakt zapisu jest ten sam co w kanale mailowym: `create` i `createForBooking`
+ * **nigdy nie rzucają**. Powiadomienie jest efektem ubocznym już zapisanej operacji
+ * (rezerwacji albo decyzji o zgłoszeniu firmy) i nie może zamienić jej sukcesu w błąd. Metody odczytu zachowują się odwrotnie — obsługują żądanie
  * HTTP, więc błąd jest tam jedyną prawdziwą odpowiedzią.
  */
 @Injectable()
@@ -48,14 +51,30 @@ export class InAppNotificationsService {
       return;
     }
 
+    await this.create(rendered, userId, `${event} dla rezerwacji ${bookingId}`, bookingId);
+  }
+
+  /**
+   * Zapis gotowego powiadomienia. `bookingId` jest opcjonalne, bo od #143 powiadomienia
+   * bywają niezwiązane z wizytą (decyzja o zgłoszeniu firmy) — kolumna jest nullowalna.
+   * `logLabel` trafia wyłącznie do logu, żeby nieudany zapis dało się przypiąć do zdarzenia,
+   * którego dotyczył.
+   */
+  async create(
+    rendered: RenderedNotification,
+    userId: string,
+    logLabel: string,
+    bookingId: string | null = null,
+  ): Promise<void> {
     try {
       await this.prisma.notification.create({
         data: { ...rendered, userId, bookingId },
       });
     } catch (e) {
-      // Patrz docblock klasy: nieudany zapis powiadomienia nie unieważnia rezerwacji.
+      // Patrz docblock klasy: nieudany zapis powiadomienia nie unieważnia operacji,
+      // która je wywołała.
       this.logger.error(
-        `Nie udało się zapisać powiadomienia ${event} dla rezerwacji ${bookingId}`,
+        `Nie udało się zapisać powiadomienia ${logLabel}`,
         e instanceof Error ? e.stack : String(e),
       );
     }
