@@ -225,9 +225,19 @@ export const en: Dictionary = {
     'That address was not found on the map. Check the details and try again.',
   'businessForm.geocode.searching': 'Searching…',
   'createBusiness.categoryPlaceholder': 'Choose a category',
+  'createBusiness.error.load':
+    'We could not check the status of your application. {detail}',
   'createBusiness.field.category': 'Category',
   'createBusiness.geocode.required':
     'Find the address on the map first — a business cannot be created without coordinates.',
+  'createBusiness.loading': 'Checking your application…',
+  'createBusiness.pending.description':
+    'Your application has been sent to an administrator and is waiting for a decision. We will let you know once it is reviewed — there is nothing else to do for now.',
+  'createBusiness.pending.title': 'Application awaiting approval',
+  'createBusiness.rejected.hint':
+    'You can fill in the form again — we will send a new application.',
+  'createBusiness.rejected.reason': 'Reason: {reason}',
+  'createBusiness.rejected.title': 'Your application was rejected',
   'createBusiness.submit': 'Create business',
   'createBusiness.submitting': 'Creating…',
   'createBusiness.subtitle': 'Create a public profile for your business on BookIt',
