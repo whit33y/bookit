@@ -82,3 +82,20 @@ Kara nałożona na firmę już działającą (`isBlocked`): znika z wyszukiwarki
 nie przyjmuje nowych rezerwacji, ale zachowuje rezerwacje już złożone i rolę właściciela.
 Niezależna od stanu zgłoszenia — to dwie osie, wpuszczenie i kara.
 _Unikaj_: odrzucenie, dezaktywacja
+
+### Wizerunek firmy
+
+**Logo firmy**:
+Kwadratowy znak firmy pokazywany przy jej nazwie — na profilu publicznym i w wynikach
+wyszukiwarki. Wgrywany wyłącznie przez właściciela w ustawieniach panelu, opcjonalny.
+_Unikaj_: awatar, zdjęcie profilowe, profilówka
+
+**Okładka profilu**:
+Szeroki pas graficzny nad nagłówkiem profilu firmy. Opcjonalny, wgrywany w tym samym
+miejscu co logo firmy i widoczny wyłącznie na profilu.
+_Unikaj_: tło, baner, hero, cover
+
+**Monogram**:
+Zastępnik pokazywany, gdy firma nie ma logo firmy ani okładki profilu: gradient marki
+z inicjałami nazwy. Stan domyślny każdej firmy, nie brak danych do uzupełnienia.
+_Unikaj_: placeholder, awatar zastępczy, inicjały
