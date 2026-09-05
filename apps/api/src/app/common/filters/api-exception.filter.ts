@@ -25,6 +25,8 @@ const FRAMEWORK_MESSAGES = new Set([
   'not found',
   'conflict',
   'too many requests',
+  // multer przy przekroczeniu limitu rozmiaru (#153) — angielski komunikat biblioteki
+  'file too large',
   'throttlerexception: too many requests',
   'internal server error',
 ]);
