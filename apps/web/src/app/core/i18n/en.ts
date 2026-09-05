@@ -266,6 +266,35 @@ export const en: Dictionary = {
   'schedule.weekday.wednesday': 'Wednesday',
 
   // ── Panel firmy — ustawienia i zakładanie firmy ─────────────────────
+  'appearance.alt.cover': '{name} profile cover',
+  'appearance.alt.logo': '{name} logo',
+  'appearance.cover': 'Profile cover',
+  'appearance.coverHint':
+    'A wide strip above the profile header. JPG, PNG or WebP, up to {max} MB.',
+  'appearance.error.remove': 'Could not remove the image. {detail}',
+  'appearance.error.tooLarge': 'The file is too large — the limit is {max} MB.',
+  'appearance.error.type':
+    'Unsupported file format. Upload a JPG, PNG or WebP image.',
+  'appearance.error.unreadable':
+    'Could not read the file. Check whether the image is damaged.',
+  'appearance.error.upload': 'Could not upload the image. {detail}',
+  'appearance.logo': 'Business logo',
+  'appearance.logoHint':
+    'A square mark next to the business name. JPG, PNG or WebP, up to {max} MB.',
+  'appearance.remove': 'Remove',
+  'appearance.remove.confirm': 'Remove image',
+  'appearance.remove.coverMessage':
+    'The cover will disappear from the business profile — the brand gradient strip comes back in its place.',
+  'appearance.remove.heading': 'Remove the image?',
+  'appearance.remove.logoMessage':
+    'The logo will disappear from the business profile and from search results — the monogram comes back in its place.',
+  'appearance.removing': 'Removing…',
+  'appearance.replace': 'Change file',
+  'appearance.subtitle':
+    'Business logo and profile cover — previewed in the public profile proportions',
+  'appearance.title': 'Appearance',
+  'appearance.upload': 'Upload file',
+  'appearance.uploading': 'Uploading…',
   'businessForm.field.city': 'City',
   'businessForm.field.description': 'Description',
   'businessForm.field.descriptionOptional': '(optional)',

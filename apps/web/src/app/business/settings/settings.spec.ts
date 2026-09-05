@@ -18,6 +18,7 @@ class MapStub {
 
 // odpowiedź GET /businesses/mine (businessSelect)
 const BUSINESS = {
+  id: 'biz-1',
   name: 'Salon Fryzjerski',
   description: 'Opis',
   phone: '',
@@ -27,6 +28,8 @@ const BUSINESS = {
   lat: 50.06,
   lng: 19.94,
   cancellationHours: 24,
+  logoVersion: null,
+  coverVersion: null,
 };
 
 interface Model {
