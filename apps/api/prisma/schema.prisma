@@ -132,6 +132,10 @@ model Business {
   // powód odrzucenia zgłoszenia przez administratora (#143); czyszczony przy ponownym zgłoszeniu
   rejectionReason   String?
   isBlocked         Boolean        @default(false)
+  // Wizerunek firmy (#153): krótki hash treści obrazu, `null` = brak. Odpowiada naraz na
+  // „czy obraz jest" i służy za cache-buster w URL-u; bajty leżą w `BusinessImage`, nigdy tutaj.
+  logoVersion       String?
+  coverVersion      String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -141,11 +145,39 @@ model Business {
   services  Service[]
   bookings  Booking[]
   reviews   Review[]
+  images    BusinessImage[]
 
   @@index([city])
   @@index([categoryId])
   // kolejka zgłoszeń administratora (#143) filtruje wyłącznie po statusie
   @@index([status])
+}
+
+enum BusinessImageKind {
+  LOGO
+  COVER
+}
+
+/// Bajty logo firmy i okładki profilu (#153). Osobna tabela, bo blob w `Business` zaciągałby
+/// się przy każdym `findMany` bez `select` — uzasadnienie w ADR-0001. Jeden wiersz na slot:
+/// `@@unique([businessId, kind])` sprawia, że wgranie nowego obrazu nadpisuje, a nie duplikuje.
+model BusinessImage {
+  id         String            @id @default(uuid())
+  businessId String
+  kind       BusinessImageKind
+  // zawsze image/webp — trzymane jawnie, żeby publiczny GET nie zgadywał nagłówka
+  mime       String
+  // hash treści tych właśnie bajtów. Ta sama wartość ląduje w `Business.logoVersion`, ale ETag
+  // liczy się stąd: gdyby brać go z `Business` osobnym zapytaniem, równoległy PUT między
+  // odczytami wystawiłby stare bajty pod nowym ETagiem — i klient zapisałby tę pomyłkę
+  // w cache na rok (`immutable`).
+  version    String
+  bytes      Bytes
+  updatedAt  DateTime          @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, kind])
 }
 
 model Employee {
