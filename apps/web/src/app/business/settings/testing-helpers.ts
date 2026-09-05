@@ -8,6 +8,7 @@ import type { Business } from './business-response';
 export const businessResponse = (
   overrides: Partial<Business> = {},
 ): Business => ({
+  id: 'biz-1',
   name: 'Salon Ola',
   description: 'Fryzjer damsko-męski',
   phone: '+48 500 600 700',
@@ -17,5 +18,7 @@ export const businessResponse = (
   lat: 52.23,
   lng: 21.01,
   cancellationHours: 24,
+  logoVersion: null,
+  coverVersion: null,
   ...overrides,
 });

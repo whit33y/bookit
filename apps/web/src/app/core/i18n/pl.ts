@@ -267,6 +267,37 @@ export const pl = {
   'schedule.weekday.wednesday': 'Środa',
 
   // ── Panel firmy — ustawienia i zakładanie firmy ─────────────────────
+  // wizerunek firmy (#154): „logo firmy", „okładka profilu", „monogram" — brzmienie z CONTEXT.md
+  'appearance.alt.cover': 'Okładka profilu firmy {name}',
+  'appearance.alt.logo': 'Logo firmy {name}',
+  'appearance.cover': 'Okładka profilu',
+  'appearance.coverHint':
+    'Szeroki pas nad nagłówkiem profilu. JPG, PNG lub WebP, maks. {max} MB.',
+  'appearance.error.remove': 'Nie udało się usunąć obrazu. {detail}',
+  'appearance.error.tooLarge':
+    'Plik jest za duży — maksymalny rozmiar to {max} MB.',
+  'appearance.error.type':
+    'Nieobsługiwany format pliku. Wgraj obraz JPG, PNG lub WebP.',
+  'appearance.error.unreadable':
+    'Nie udało się odczytać pliku. Sprawdź, czy obraz nie jest uszkodzony.',
+  'appearance.error.upload': 'Nie udało się wgrać obrazu. {detail}',
+  'appearance.logo': 'Logo firmy',
+  'appearance.logoHint':
+    'Kwadratowy znak przy nazwie firmy. JPG, PNG lub WebP, maks. {max} MB.',
+  'appearance.remove': 'Usuń',
+  'appearance.remove.confirm': 'Usuń obraz',
+  'appearance.remove.coverMessage':
+    'Okładka zniknie z profilu firmy — w jej miejsce wróci pas z gradientem marki.',
+  'appearance.remove.heading': 'Usunąć obraz?',
+  'appearance.remove.logoMessage':
+    'Logo zniknie z profilu firmy i z wyników wyszukiwania — w jego miejsce wróci monogram.',
+  'appearance.removing': 'Usuwanie…',
+  'appearance.replace': 'Zmień plik',
+  'appearance.subtitle':
+    'Logo firmy i okładka profilu — podgląd w proporcjach profilu publicznego',
+  'appearance.title': 'Wygląd',
+  'appearance.upload': 'Wgraj plik',
+  'appearance.uploading': 'Wgrywanie…',
   'businessForm.field.city': 'Miasto',
   'businessForm.field.description': 'Opis',
   'businessForm.field.descriptionOptional': '(opcjonalnie)',

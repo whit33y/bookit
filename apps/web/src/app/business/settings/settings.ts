@@ -20,6 +20,7 @@ import AppMap from '../../shared/map/map';
 import { GeocodingService } from '../../shared/geocoding';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import BusinessAppearance from './appearance';
 import type { Business } from './business-response';
 
 
@@ -35,7 +36,14 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
 
 @Component({
   selector: 'app-business-settings',
-  imports: [AppFormField, AppMap, FormField, LoadingState, ErrorState],
+  imports: [
+    AppFormField,
+    AppMap,
+    BusinessAppearance,
+    FormField,
+    LoadingState,
+    ErrorState,
+  ],
   template: `
     <div class="flex flex-1 items-center justify-center px-4 py-8">
       <section
@@ -181,6 +189,18 @@ const PHONE = /^\+?[0-9\s-]{7,20}$/;
               }}
             </button>
           </form>
+
+          <!-- wizerunek firmy stoi poza formularzem: obrazy zapisują się własnymi żądaniami
+               od razu po wybraniu pliku, a PATCH /businesses/mine zostaje czystym JSON-em -->
+          @if (business(); as b) {
+            <app-business-appearance
+              class="mt-10 block border-t border-stone-200 pt-8"
+              [businessId]="b.id"
+              [businessName]="b.name"
+              [logoVersion]="b.logoVersion"
+              [coverVersion]="b.coverVersion"
+            />
+          }
         }
       </section>
     </div>
@@ -199,6 +219,9 @@ export default class BusinessSettings {
   protected readonly geocodeError = signal<string | null>(null);
   protected readonly geocoding = signal(false);
   protected readonly saved = signal(false);
+  /** Wczytany profil — sekcja „Wygląd" potrzebuje `id` do adresów obrazków i zapisanej nazwy
+   *  do monogramu; formularz trzyma nazwę edytowaną, która może nie być jeszcze zapisana. */
+  protected readonly business = signal<Business | null>(null);
   // współrzędne aktualne (z prefillu lub geokodowania)
   protected readonly coords = signal<{ lat: number; lng: number } | null>(null);
   protected readonly lat = () => this.coords()?.lat ?? null;
@@ -301,6 +324,7 @@ export default class BusinessSettings {
     this.loadError.set(null);
     firstValueFrom(this.api.get<Business>('/businesses/mine'))
       .then((b) => {
+        this.business.set(b);
         this.model.set({
           name: b.name,
           description: b.description ?? '',
@@ -374,7 +398,11 @@ export default class BusinessSettings {
         ...(m.phone ? { phone: m.phone } : {}),
         ...(m.postalCode ? { postalCode: m.postalCode } : {}),
       };
-      await firstValueFrom(this.api.patch('/businesses/mine', payload));
+      // odpowiedź to zaktualizowany profil — podmieniamy go, żeby podgląd wizerunku pokazywał
+      // monogram ze świeżo zapisanej nazwy, a nie z tej sprzed zapisu
+      this.business.set(
+        await firstValueFrom(this.api.patch<Business>('/businesses/mine', payload)),
+      );
       this.saved.set(true);
     });
   }

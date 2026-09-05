@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
+import { monogramInitials } from '../../shared/business-image';
 import { DepositType, depositAmountCents } from '../../shared/deposit';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
@@ -43,16 +44,6 @@ interface PublicBusiness {
   // agregat recenzji (#47); null to „brak ocen", nigdy 0 — AC #49 zakazuje atrapy „0.0"
   avgRating: number | null;
   reviewCount: number;
-}
-
-/** Inicjały do monogramu — pierwsze litery max dwóch pierwszych słów nazwy. */
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('');
 }
 
 @Component({
@@ -222,9 +213,9 @@ export default class BusinessProfile {
 
   protected readonly monogram = computed(() => {
     const b = this.business();
-    return b ? initials(b.name) : '';
+    return b ? monogramInitials(b.name) : '';
   });
-  protected readonly employeeInitials = initials;
+  protected readonly employeeInitials = monogramInitials;
 
   /** Kwota zaliczki dla usługi albo null. Wspólna reguła zaokrąglania z backendem
    *  (`shared/deposit.ts`) — profil ma pokazywać dokładnie to, co pobierze Stripe. */
