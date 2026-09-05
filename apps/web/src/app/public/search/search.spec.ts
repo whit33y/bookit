@@ -41,6 +41,7 @@ const RESPONSE = {
       lat: 52.23,
       lng: 21.01,
       category: { id: 'c1', name: 'Fryzjer', slug: 'fryzjer' },
+      logoVersion: 'abc123',
       distanceKm: 3.14,
       avgRating: 4.5,
       reviewCount: 12,
@@ -54,6 +55,8 @@ const RESPONSE = {
       lat: 52.24,
       lng: 21.02,
       category: { id: 'c1', name: 'Fryzjer', slug: 'fryzjer' },
+      // firma bez logo — na karcie zostaje monogram (#155)
+      logoVersion: null,
       // firma bez recenzji — backend zwraca null, nigdy 0
       avgRating: null,
       reviewCount: 0,
@@ -123,6 +126,30 @@ describe('Search', () => {
     const cardY = root.querySelector('#card-b2');
     expect(cardY?.querySelector('[role="img"]')).toBeNull();
     expect(cardY?.textContent).not.toContain('0,0');
+  });
+
+  // #155: miniatura na karcie wyniku; okładki profilu w wynikach świadomie nie ma
+  it('karta z logo pokazuje miniaturę z wersją, karta bez logo monogram', async () => {
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses?') && !r.url.includes('/mine'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const logo = root.querySelector('#card-b1 img');
+    // wersja w adresie: obraz jest cache'owany na stałe, więc podmiana musi zmienić URL
+    expect(logo?.getAttribute('src')).toBe(
+      '/api/businesses/b1/images/logo?v=abc123',
+    );
+    expect(logo?.getAttribute('alt')).toBe('Salon X');
+
+    const cardY = root.querySelector('#card-b2');
+    expect(cardY?.querySelector('img')).toBeNull();
+    expect(cardY?.querySelector('app-business-logo')?.textContent?.trim()).toBe('SY');
+    // brak okładki w wynikach — na kartach nie ma żadnego innego obrazu
+    expect(root.querySelectorAll('img')).toHaveLength(1);
   });
 
   it('brak wyników → czytelny komunikat zamiast pustej listy', async () => {
