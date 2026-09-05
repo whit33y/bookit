@@ -39,6 +39,9 @@ const MOCK = {
   lat: 50.05,
   lng: 19.94,
   cancellationHours: 24,
+  // firma bez wizerunku (#155) — stan domyślny: gradient i monogram
+  logoVersion: null,
+  coverVersion: null,
   category: { id: 'c1', name: 'Salon fryzjerski', slug: 'fryzjer' },
   services: [
     {
@@ -124,6 +127,73 @@ describe('BusinessProfile', () => {
     expect(cards.find((c) => c.includes('Strzyżenie męskie'))).not.toContain(
       'Zaliczka',
     );
+  });
+
+  // #155: logo firmy i okładka profilu są od siebie niezależne — firma może mieć jedno z dwóch
+  it('firma bez wizerunku dostaje gradient i monogram', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/businesses/test-slug').flush(MOCK);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelectorAll('img')).toHaveLength(0);
+    expect(root.querySelector('app-business-logo')?.textContent?.trim()).toBe('SF');
+    // dekoracyjny pas nie ma czego ogłaszać czytnikowi ekranu
+    expect(
+      root.querySelector('.bg-brand-gradient')?.getAttribute('aria-hidden'),
+    ).toBe('true');
+  });
+
+  it('firma z logo pokazuje je zamiast monogramu, zachowując gradient bez okładki', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne('/api/businesses/test-slug')
+      .flush({ ...MOCK, logoVersion: 'log1' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const logo = root.querySelector('app-business-logo img');
+    expect(logo?.getAttribute('src')).toBe('/api/businesses/b1/images/logo?v=log1');
+    expect(logo?.getAttribute('alt')).toBe('Studio Fryzur');
+    expect(root.querySelector('app-business-logo')?.textContent?.trim()).toBe('');
+    expect(root.querySelector('.bg-brand-gradient')).not.toBeNull();
+  });
+
+  it('firma z okładką pokazuje ją zamiast gradientu, zachowując monogram bez logo', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne('/api/businesses/test-slug')
+      .flush({ ...MOCK, coverVersion: 'cov1' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const cover = root.querySelector('img');
+    expect(cover?.getAttribute('src')).toBe('/api/businesses/b1/images/cover?v=cov1');
+    // okładka jest dekoracją w miejscu gradientu — nazwę firmy niesie nagłówek i alt logo
+    expect(cover?.getAttribute('alt')).toBe('');
+    expect(root.querySelector('.bg-brand-gradient')).toBeNull();
+    expect(root.querySelector('app-business-logo')?.textContent?.trim()).toBe('SF');
+  });
+
+  // obraz można usunąć między pobraniem profilu a pobraniem bajtów — wtedy 404 nie może
+  // zostawić w nagłówku pustej dziury po pasie
+  it('okładka, która się nie wczytała, wraca do gradientu', async () => {
+    const { fixture, http } = await setup();
+    http
+      .expectOne('/api/businesses/test-slug')
+      .flush({ ...MOCK, coverVersion: 'cov1' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector('img')!.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+
+    expect(root.querySelector('img')).toBeNull();
+    expect(root.querySelector('.bg-brand-gradient')).not.toBeNull();
   });
 
   it('pokazuje średnią ocenę i liczbę opinii w nagłówku', async () => {

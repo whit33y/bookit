@@ -5,10 +5,15 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
-import { monogramInitials } from '../../shared/business-image';
+import {
+  businessCoverUrl,
+  businessLogoUrl,
+  monogramInitials,
+} from '../../shared/business-image';
 import { DepositType, depositAmountCents } from '../../shared/deposit';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
+import BusinessLogo from '../../shared/ui/business-logo';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
@@ -28,6 +33,9 @@ interface PublicBusiness {
   lat: number;
   lng: number;
   cancellationHours: number;
+  // wizerunek firmy (#153) — hash treści albo null, gdy firma nie wgrała tego obrazu
+  logoVersion: string | null;
+  coverVersion: string | null;
   category: { id: string; name: string; slug: string };
   services: {
     id: string;
@@ -50,6 +58,7 @@ interface PublicBusiness {
   selector: 'app-business-profile',
   imports: [
     AppMap,
+    BusinessLogo,
     PricePlnPipe,
     NotFound,
     RouterLink,
@@ -73,13 +82,32 @@ interface PublicBusiness {
     } @else if (business(); as b) {
       <div class="mx-auto w-full max-w-4xl px-4 py-8">
         <article class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-card">
-          <div class="h-32 bg-brand-gradient sm:h-36" aria-hidden="true"></div>
+          <!-- Okładka profilu zastępuje gradient w całości; wysokość pasa jest ta sama w obu
+               wariantach, więc nagłówek nie przeskakuje po wczytaniu obrazu.
+
+               Pusty alt, a nie opis: okładka pełni na stronie dokładnie tę rolę, co gradient,
+               który zastępuje — jest dekoracją nagłówka, a nie nośnikiem informacji (WCAG
+               1.1.1). Tożsamość firmy niesie logo obok, z nazwą w alt. Alt w rodzaju
+               „Okładka profilu firmy X" powtarzałby czytnikowi ekranu nagłówek i nazywał
+               rodzaj pliku — czyli to, czego AC #155 zabrania przy logo. -->
+          @if (showCover()) {
+            <img
+              [src]="coverUrl()"
+              alt=""
+              class="h-32 w-full object-cover sm:h-36"
+              (error)="onCoverError()"
+            />
+          } @else {
+            <div class="h-32 bg-brand-gradient sm:h-36" aria-hidden="true"></div>
+          }
           <div class="p-6 sm:p-8">
             <div class="-mt-14 mb-5 flex flex-wrap items-end gap-4 sm:-mt-16">
-              <span
-                aria-hidden="true"
-                class="grid h-20 w-20 place-items-center rounded-2xl border-4 border-white bg-stone-900 text-2xl font-extrabold text-white shadow-lifted sm:h-24 sm:w-24"
-              >{{ monogram() }}</span>
+              <app-business-logo
+                class="h-20 w-20 rounded-2xl border-4 border-white text-2xl font-extrabold shadow-lifted sm:h-24 sm:w-24"
+                [name]="b.name"
+                [src]="logoUrl()"
+                [eager]="true"
+              />
               <div class="pb-0.5">
                 <h1 class="text-xl font-bold tracking-tight sm:text-2xl">{{ b.name }}</h1>
                 <p class="text-sm font-medium text-stone-500">
@@ -211,11 +239,28 @@ export default class BusinessProfile {
   protected readonly notFound = signal(false);
   protected readonly serverError = signal<string | null>(null);
 
-  protected readonly monogram = computed(() => {
+  // logo i okładka są od siebie niezależne (#155): firma z samym logo dostaje je na gradiencie
+  protected readonly logoUrl = computed(() => {
     const b = this.business();
-    return b ? monogramInitials(b.name) : '';
+    return b ? businessLogoUrl(b) : null;
+  });
+  protected readonly coverUrl = computed(() => {
+    const b = this.business();
+    return b ? businessCoverUrl(b) : null;
   });
   protected readonly employeeInitials = monogramInitials;
+
+  /** Adres okładki, która się nie wczytała — obraz można usunąć między pobraniem profilu
+   *  a pobraniem bajtów. Wtedy pas wraca do gradientu, zamiast zostać pustą dziurą. */
+  private readonly failedCover = signal<string | null>(null);
+
+  protected readonly showCover = computed(
+    () => this.coverUrl() !== null && this.coverUrl() !== this.failedCover(),
+  );
+
+  protected onCoverError(): void {
+    this.failedCover.set(this.coverUrl());
+  }
 
   /** Kwota zaliczki dla usługi albo null. Wspólna reguła zaokrąglania z backendem
    *  (`shared/deposit.ts`) — profil ma pokazywać dokładnie to, co pobierze Stripe. */

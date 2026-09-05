@@ -2,9 +2,8 @@
  * Wizerunek firmy po stronie web (CONTEXT.md): logo firmy i okładka profilu.
  *
  * Bajty leżą w bazie i idą przez API (ADR-0001), więc obraz jest zwykłym URL-em do `<img>`,
- * a nie żądaniem przez `ApiClient`. Moduł stoi w `shared/`, bo dziś czytają go ustawienia firmy
- * (#154), a monogram — także profil publiczny; obrazy na samym profilu i w wynikach
- * wyszukiwarki to osobne zadania, które podepną się pod ten sam adres.
+ * a nie żądaniem przez `ApiClient`. Moduł stoi w `shared/`, bo czytają go ustawienia firmy
+ * (#154) oraz profil publiczny i wyniki wyszukiwarki (#155) — wszystkie pod tym samym adresem.
  */
 
 /** Slot wizerunku — segment ścieżki `/businesses/:id/images/:kind`, lustro `IMAGE_SLOTS` z API. */
@@ -26,6 +25,26 @@ export function businessImageUrl(
   return version === null
     ? null
     : `${API_BASE}/businesses/${businessId}/images/${kind}?v=${encodeURIComponent(version)}`;
+}
+
+/**
+ * Adres logo firmy albo `null`, gdy firma go nie ma (#155). Bierze całą firmę, a nie `id`
+ * i wersję osobno: te pola i tak zawsze podróżują razem, a konsument nie ma wtedy jak pomylić
+ * kolejności argumentów ani podstawić wersji okładki pod logo.
+ */
+export function businessLogoUrl(business: {
+  id: string;
+  logoVersion: string | null;
+}): string | null {
+  return businessImageUrl(business.id, 'logo', business.logoVersion);
+}
+
+/** Adres okładki profilu albo `null`, gdy firma jej nie ma (#155). */
+export function businessCoverUrl(business: {
+  id: string;
+  coverVersion: string | null;
+}): string | null {
+  return businessImageUrl(business.id, 'cover', business.coverVersion);
 }
 
 /**

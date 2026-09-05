@@ -6,7 +6,9 @@ import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import { numberFormat } from '../../core/i18n/intl';
 import { translate } from '../../core/i18n/translate';
+import { businessLogoUrl } from '../../shared/business-image';
 import AppMap, { MapPin } from '../../shared/map/map';
+import BusinessLogo from '../../shared/ui/business-logo';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
@@ -21,6 +23,8 @@ interface SearchResultItem {
   lat: number;
   lng: number;
   category: { id: string; name: string; slug: string };
+  // karta wyniku pokazuje wyłącznie logo firmy — okładka profilu jest elementem profilu (#155)
+  logoVersion: string | null;
   distanceKm?: number;
   // agregat recenzji (#47); null to „brak ocen", nigdy 0 — AC #49 zakazuje atrapy „0.0"
   avgRating: number | null;
@@ -40,7 +44,15 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
 
 @Component({
   selector: 'app-search',
-  imports: [AppMap, RouterLink, LoadingState, ErrorState, EmptyState, RatingStars],
+  imports: [
+    AppMap,
+    BusinessLogo,
+    RouterLink,
+    LoadingState,
+    ErrorState,
+    EmptyState,
+    RatingStars,
+  ],
   template: `
     <div class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:flex-row">
       <section class="lg:w-3/5">
@@ -69,7 +81,7 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
             {{ i18n.plural('search.resultCount', total()) }}
           </p>
           <ul class="flex flex-col gap-4">
-            @for (item of items(); track item.id) {
+            @for (item of cards(); track item.id) {
               <li
                 [id]="'card-' + item.id"
                 tabindex="0"
@@ -82,22 +94,31 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
                     : 'border-stone-200'
                 "
               >
-                <a [routerLink]="'/' + item.slug" class="block">
-                  <h2 class="font-bold">{{ item.name }}</h2>
-                  <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
-                  @if (item.avgRating !== null) {
-                    <app-rating-stars
-                      class="mt-1"
-                      [value]="item.avgRating"
-                      [count]="item.reviewCount"
-                    />
-                  }
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{ item.category.name }} · {{ item.city }}, {{ item.street }}
-                    @if (item.distanceKm !== undefined) {
-                      · {{ distanceLabel(item.distanceKm) }}
+                <a [routerLink]="'/' + item.slug" class="flex items-start gap-4">
+                  <app-business-logo
+                    class="h-14 w-14 rounded-xl text-base font-bold sm:h-16 sm:w-16"
+                    [name]="item.name"
+                    [src]="item.logoUrl"
+                  />
+                  <!-- min-w-0: bez tego długa nazwa rozpycha kolumnę tekstu i na wąskim
+                       ekranie wypycha miniaturę poza kartę zamiast się zawinąć -->
+                  <div class="min-w-0 flex-1">
+                    <h2 class="font-bold">{{ item.name }}</h2>
+                    <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
+                    @if (item.avgRating !== null) {
+                      <app-rating-stars
+                        class="mt-1"
+                        [value]="item.avgRating"
+                        [count]="item.reviewCount"
+                      />
                     }
-                  </p>
+                    <p class="mt-1 text-sm text-stone-500">
+                      {{ item.category.name }} · {{ item.city }}, {{ item.street }}
+                      @if (item.distanceKm !== undefined) {
+                        · {{ distanceLabel(item.distanceKm) }}
+                      }
+                    </p>
+                  </div>
                 </a>
               </li>
             }
@@ -157,6 +178,14 @@ export default class Search {
   protected readonly limit = signal(20);
   protected readonly activeId = signal<string | null>(null);
   protected readonly userLocation = signal<{ lat: number; lng: number } | null>(null);
+
+  /** Wyniki z gotowym adresem logo — kartę interesuje URL, nie hash wersji z API. */
+  protected readonly cards = computed(() =>
+    this.items().map((item) => ({
+      ...item,
+      logoUrl: businessLogoUrl(item),
+    })),
+  );
 
   protected readonly mapPins = computed<MapPin[]>(() =>
     this.items().map((i) => ({ id: i.id, lat: i.lat, lng: i.lng })),
