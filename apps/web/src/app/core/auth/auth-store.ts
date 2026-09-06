@@ -259,6 +259,20 @@ export class AuthStore {
     }
   }
 
+  /**
+   * Podmiana profilu na świeższą wersję, którą zdobył już ekran ustawień konta (#162):
+   * `PATCH /users/me` oddaje zaktualizowany profil, więc ponowne `GET` byłoby drugim
+   * żądaniem po te same dane — a bez podmiany menu pokazywałoby stare imię do najbliższego
+   * pobrania (czyli do zmiany konta albo przeładowania strony).
+   *
+   * Unieważnia pobranie w locie: odpowiedź `GET`-a sprzed zapisu jest starsza od tego, co
+   * właśnie wróciło z `PATCH`-a, więc nie może go nadpisać.
+   */
+  setProfile(profile: UserProfile): void {
+    this.profileRequestId++;
+    this.profileSignal.set(profile);
+  }
+
   private clearProfile(): void {
     this.profileRequestId++;
     this.profileSignal.set(null);
