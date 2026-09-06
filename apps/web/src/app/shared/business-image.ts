@@ -46,16 +46,3 @@ export function businessCoverUrl(business: {
 }): string | null {
   return businessImageUrl(business.id, 'cover', business.coverVersion);
 }
-
-/**
- * Inicjały do monogramu — pierwsze litery maks. dwóch pierwszych słów nazwy. Ta sama funkcja
- * liczy zastępnik firmy i zastępnik pracownika, bo w obu miejscach to ten sam zabieg na nazwie.
- */
-export function monogramInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]!.toUpperCase())
-    .join('');
-}

@@ -11,6 +11,7 @@ import { serviceResponse } from '../services/testing-helpers';
 import { businessResponse } from '../settings/testing-helpers';
 import { businessStatsResponse } from '../stats/testing-helpers';
 import BusinessDashboard from './dashboard';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -116,7 +117,7 @@ describe('BusinessDashboard', () => {
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   it('OWNER widzi sześć kafelków w ustalonej kolejności', () => {

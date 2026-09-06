@@ -10,6 +10,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { StripeLoader } from '../../shared/payments/stripe-loader';
 import { settle } from '../testing-helpers';
 import BookingWizard, { groupSlotsByStart } from './booking-wizard';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -180,7 +181,9 @@ describe('groupSlotsByStart', () => {
 });
 
 describe('BookingWizard', () => {
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
+  });
 
   it('krok 2 pokazuje tylko pracowników wybranej usługi + „dowolny"', async () => {
     const { text } = await setup('?serviceId=s1');

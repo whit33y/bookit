@@ -705,6 +705,7 @@ export const en: Dictionary = {
   'nav.register': 'Sign up',
   'nav.toggleMenu': 'Navigation menu',
   'nav.userMenu': 'User menu',
+  'nav.userMenuFor': 'User menu — {name}',
 
   // ── Powiadomienia (shared/notifications) ────────────────────────────
   'notifications.empty': 'No notifications.',
