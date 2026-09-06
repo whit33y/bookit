@@ -29,6 +29,23 @@ export const pl = {
     'Sesja wygasła lub brak uprawnień. Zaloguj się ponownie.',
   'api.error.validation': 'Przesłane dane są nieprawidłowe.',
 
+  // ── Ustawienia konta (account/) ─────────────────────────────────────
+  'account.error.load': 'Nie udało się wczytać danych konta. {detail}',
+  'account.loading': 'Ładowanie danych konta…',
+  'account.password.link': 'Zmień hasło',
+  'account.password.subtitle':
+    'Hasło zmieniasz na osobnym ekranie — poprosi o obecne i o nowe.',
+  'account.password.title': 'Hasło',
+  'account.personal.phone': 'Telefon (opcjonalnie)',
+  'account.personal.saved': 'Zapisano dane osobowe',
+  'account.personal.saving': 'Zapisywanie…',
+  'account.personal.submit': 'Zapisz dane osobowe',
+  'account.personal.subtitle':
+    'Imię, nazwisko i telefon — firmy widzą je przy Twoich rezerwacjach.',
+  'account.personal.title': 'Dane osobowe',
+  'account.subtitle': 'Zarządzaj swoimi danymi i hasłem do konta',
+  'account.title': 'Ustawienia konta',
+
   // ── Panel admina (admin/) ───────────────────────────────────────────
   'admin.backToFirstPage': 'Wróć na pierwszą stronę',
   'admin.applications.approve': 'Akceptuj',
@@ -688,6 +705,7 @@ export const pl = {
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Konto',
+  'nav.accountSettings': 'Ustawienia konta',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Panel firmy',
   'nav.home': 'Strona główna',

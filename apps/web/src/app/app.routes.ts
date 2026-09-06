@@ -51,6 +51,13 @@ const routes: Route[] = [
     loadComponent: () => import('./public/change-password/change-password'),
   },
   {
+    // dla każdej zalogowanej roli: hasło i dane osobowe ma każde konto, a nie tylko klient
+    // czy właściciel (CONTEXT.md → „Ustawienia konta")
+    path: 'account',
+    canActivate: [authGuard],
+    loadComponent: () => import('./account/account'),
+  },
+  {
     path: 'client',
     canActivate: [authGuard],
     loadChildren: () => import('./client/client.routes'),

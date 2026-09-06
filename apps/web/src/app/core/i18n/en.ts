@@ -26,6 +26,23 @@ export const en: Dictionary = {
     'Your session expired or you lack permission. Please sign in again.',
   'api.error.validation': 'The submitted data is invalid.',
 
+  // ── Account settings (account/) ─────────────────────────────────────
+  'account.error.load': 'Could not load your account details. {detail}',
+  'account.loading': 'Loading account details…',
+  'account.password.link': 'Change password',
+  'account.password.subtitle':
+    'You change your password on a separate screen — it asks for the current one and the new one.',
+  'account.password.title': 'Password',
+  'account.personal.phone': 'Phone (optional)',
+  'account.personal.saved': 'Personal details saved',
+  'account.personal.saving': 'Saving…',
+  'account.personal.submit': 'Save personal details',
+  'account.personal.subtitle':
+    'First name, last name and phone — businesses see them with your bookings.',
+  'account.personal.title': 'Personal details',
+  'account.subtitle': 'Manage your details and your account password',
+  'account.title': 'Account settings',
+
   // ── Panel admina (admin/) ───────────────────────────────────────────
   'admin.backToFirstPage': 'Back to the first page',
   'admin.applications.approve': 'Approve',
@@ -695,6 +712,7 @@ export const en: Dictionary = {
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Account',
+  'nav.accountSettings': 'Account settings',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Business panel',
   'nav.home': 'Home',

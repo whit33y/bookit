@@ -1,5 +1,5 @@
 import { appRoutes } from './app.routes';
-import { passwordChangeGuard } from './core/auth/auth.guard';
+import { authGuard, passwordChangeGuard } from './core/auth/auth.guard';
 
 /**
  * Wiring, nie logika: sam guard ma testy w `auth.guard.spec.ts`, a tu pilnujemy, że nowa trasa
@@ -13,6 +13,12 @@ describe('appRoutes', () => {
       .filter((route) => route.canActivate?.[0] !== passwordChangeGuard)
       .map((route) => route.path);
     expect(missing).toEqual([]);
+  });
+
+  it('ustawienia konta stoją za authGuard, bez zawężania do roli (#162)', () => {
+    const account = appRoutes.find((route) => route.path === 'account');
+
+    expect(account?.canActivate).toEqual([passwordChangeGuard, authGuard]);
   });
 
   it('ma trasę ekranu zmiany hasła', () => {

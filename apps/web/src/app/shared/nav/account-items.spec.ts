@@ -80,6 +80,18 @@ describe('AccountItems', () => {
     expect(el.textContent).not.toContain('Anna Kowalska');
   });
 
+  it('prowadzi do ustawień konta — dla każdej roli, nie tylko klienta', async () => {
+    for (const role of ['CLIENT', 'OWNER', 'EMPLOYEE', 'ADMIN'] as const) {
+      TestBed.resetTestingModule();
+      const { el } = await setup(role);
+
+      const account = Array.from(el.querySelectorAll('a')).find(
+        (a) => a.getAttribute('href') === '/account',
+      );
+      expect(account?.textContent).toContain('Ustawienia konta');
+    }
+  });
+
   it('grupa jest opisana dla czytnika ekranu', async () => {
     const { el } = await setup('CLIENT');
 

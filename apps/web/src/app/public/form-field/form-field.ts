@@ -11,6 +11,7 @@ import {
   required,
   schema,
   submit,
+  validate,
 } from '@angular/forms/signals';
 import { apiErrorMessage } from '../../core/api-client';
 import { translate } from '../../core/i18n/translate';
@@ -49,6 +50,13 @@ export const NAME_MAX_LENGTH = 50;
 export function personNameSchema(field: 'firstName' | 'lastName') {
   return schema<string>((p) => {
     required(p, { message: () => translate(`validation.${field}.required`) });
+    // sama spacja przechodzi `required` (pole nie jest puste), a backendowe @IsNotBlank
+    // odrzuca ją jako 400 — bez tej reguły błąd wychodziłby dopiero z serwera
+    validate(p, ({ value }) =>
+      value().trim() === ''
+        ? { kind: 'blank', message: translate(`validation.${field}.required`) }
+        : undefined,
+    );
     maxLength(p, NAME_MAX_LENGTH, {
       message: () =>
         translate(`validation.${field}.tooLong`, { max: NAME_MAX_LENGTH }),
