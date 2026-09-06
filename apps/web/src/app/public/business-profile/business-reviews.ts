@@ -3,11 +3,14 @@ import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import { formatDate } from '../../shared/business-time';
+import { signatureMonogram } from '../../shared/monogram';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
 import Pagination from '../../shared/ui/pagination';
 import RatingStars from '../../shared/ui/rating-stars';
+import UserPhoto from '../../shared/ui/user-photo';
+import { profilePhotoUrl } from '../../shared/user-image';
 import RatingDistributionChart, { RatingDistribution } from './rating-distribution';
 
 // Stan przed pierwszą odpowiedzią. Współdzielona instancja jest tu bezpieczna (w przeciwieństwie
@@ -15,14 +18,24 @@ import RatingDistributionChart, { RatingDistribution } from './rating-distributi
 // a sygnał zawsze podmienia całą wartość.
 const EMPTY_DISTRIBUTION: RatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
-// lustrzane typy backendu — GET /businesses/:slug/reviews (#47).
-// `author` przychodzi już zamaskowany („Anna K.") — front nie skraca nazwisk u siebie.
+/**
+ * Lustrzane typy backendu — GET /businesses/:slug/reviews (#47).
+ *
+ * Autor opinii (#165). `name` przychodzi już zamaskowany („Anna K.") — front nie skraca
+ * nazwisk u siebie — a `id` z wersją zdjęcia służą wyłącznie do złożenia adresu obrazu.
+ */
+interface ReviewAuthor {
+  id: string;
+  name: string;
+  avatarVersion: string | null;
+}
+
 interface BusinessReview {
   id: string;
   rating: number;
   comment: string | null;
   createdAt: string;
-  author: string;
+  author: ReviewAuthor;
 }
 
 interface BusinessReviewsResponse {
@@ -51,6 +64,7 @@ interface BusinessReviewsResponse {
     LoadingState,
     ErrorState,
     EmptyState,
+    UserPhoto,
   ],
   template: `
     <h2 class="mb-4 mt-8 text-lg font-bold">{{ i18n.t('reviews.title') }}</h2>
@@ -64,15 +78,22 @@ interface BusinessReviewsResponse {
 
       <ul class="divide-y divide-stone-100">
         @for (review of items(); track review.id) {
-          <li class="py-4 first:pt-0">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <app-rating-stars [value]="review.rating" [showValue]="false" />
-              <span class="text-sm font-semibold">{{ review.author }}</span>
-              <span class="text-[13px] text-stone-400">{{ date(review.createdAt) }}</span>
+          <li class="flex gap-3 py-4 first:pt-0">
+            <app-user-photo
+              class="h-10 w-10 rounded-full bg-brand-50 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-200"
+              [src]="photo(review.author)"
+              [monogram]="monogram(review.author.name)"
+            />
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <app-rating-stars [value]="review.rating" [showValue]="false" />
+                <span class="text-sm font-semibold">{{ review.author.name }}</span>
+                <span class="text-[13px] text-stone-400">{{ date(review.createdAt) }}</span>
+              </div>
+              @if (review.comment; as comment) {
+                <p class="mt-1.5 text-sm leading-relaxed text-stone-600">{{ comment }}</p>
+              }
             </div>
-            @if (review.comment; as comment) {
-              <p class="mt-1.5 text-sm leading-relaxed text-stone-600">{{ comment }}</p>
-            }
           </li>
         }
       </ul>
@@ -98,6 +119,16 @@ export default class BusinessReviews {
 
   // pełna data i godzina rozpycha wiersz opinii, a przy recenzji liczy się dzień, nie minuta
   protected readonly date = formatDate;
+
+  /** Zdjęcie profilowe autora albo `null` (wtedy kafelek pokazuje monogram). Adres jest
+   *  publiczny i niesie wersję, więc zmiana zdjęcia przez autora podmienia obrazek przy jego
+   *  opiniach — bez tokenu, bo opinie czyta też niezalogowany. */
+  protected readonly photo = profilePhotoUrl;
+
+  /** Monogram liczony z zamaskowanego podpisu („Anna K." → „AK"), bo nazwisko autora nigdy
+   *  nie opuszcza backendu. `signatureMonogram` daje ten sam wynik, co `personMonogram`
+   *  w menu konta — także przy dwuczłonowym imieniu. */
+  protected readonly monogram = signatureMonogram;
 
   protected readonly items = signal<BusinessReview[]>([]);
   protected readonly total = signal(0);

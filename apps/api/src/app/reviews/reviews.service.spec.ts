@@ -125,7 +125,12 @@ describe('ReviewsService', () => {
       rating: 5,
       comment: 'Polecam',
       createdAt: new Date('2026-07-01T10:00:00Z'),
-      client: { firstName: 'Anna', lastName: 'Kowalska' },
+      client: {
+        id: 'u1',
+        firstName: 'Anna',
+        lastName: 'Kowalska',
+        avatarVersion: 'abc123',
+      },
     };
 
     // wiersze tak, jak zwraca je groupBy({ by: ['rating'] })
@@ -147,10 +152,23 @@ describe('ReviewsService', () => {
           rating: 5,
           comment: 'Polecam',
           createdAt: row.createdAt,
-          author: 'Anna K.',
+          author: { id: 'u1', name: 'Anna K.', avatarVersion: 'abc123' },
         },
       ]);
       expect(JSON.stringify(result)).not.toContain('Kowalska');
+    });
+
+    // #165: publiczna odpowiedź niesie id autora świadomie — inaczej nie da się zaadresować
+    // publicznego GET /users/:id/avatar, a zdjęcie i tak wisi obok jego imienia
+    it('pyta bazę o id i wersję zdjęcia autora, nie tylko o imię', async () => {
+      await service.listForBusiness('salon', {});
+
+      expect(reviewFindMany.mock.calls[0][0].select.client.select).toEqual({
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarVersion: true,
+      });
     });
 
     it('pyta tylko o działającą firmę i filtruje recenzje po jej id', async () => {

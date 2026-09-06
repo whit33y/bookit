@@ -8,12 +8,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { settle } from '../testing-helpers';
 import BusinessReviews from './business-reviews';
 
-const review = (id: string, rating: number, comment: string | null) => ({
+const review = (
+  id: string,
+  rating: number,
+  comment: string | null,
+  author: { id?: string; name?: string; avatarVersion?: string | null } = {},
+) => ({
   id,
   rating,
   comment,
   createdAt: '2026-08-01T10:00:00.000Z',
-  author: 'Anna K.',
+  // autor jedzie obiektem (#165): podpis plus to, czym adresujemy jego zdjęcie profilowe
+  author: { id: 'u1', name: 'Anna K.', avatarVersion: null, ...author },
 });
 
 /** Rozkład opisuje całą firmę, nie stronę — backend liczy go bez skip/take (#111). */
@@ -82,6 +88,65 @@ describe('BusinessReviews', () => {
     expect(ctx.el().querySelectorAll('ul.divide-y > li')).toHaveLength(2);
     // ocena idzie do czytnika ekranu jako jedna etykieta, bez powtarzania liczby przy gwiazdkach
     expect(ctx.el().querySelector('[aria-label="Ocena 5 na 5"]')).not.toBeNull();
+  });
+
+  it('autor ze zdjęciem profilowym dostaje je przy swojej opinii, z wersją w adresie', async () => {
+    const ctx = await setup({
+      ...RESPONSE,
+      items: [review('r1', 5, 'Bardzo miła obsługa', { id: 'u7', avatarVersion: 'abc123' })],
+      total: 1,
+    });
+
+    const photo = ctx.el().querySelector('ul.divide-y img');
+    expect(photo?.getAttribute('src')).toBe('/api/users/u7/avatar?v=abc123');
+    // podpis stoi obok, więc obraz nie ma czytnikowi ekranu nic do dodania
+    expect(photo?.getAttribute('alt')).toBe('');
+    expect(ctx.text()).toContain('Anna K.');
+  });
+
+  it('autor bez zdjęcia dostaje monogram z inicjałów, a nie puste miejsce', async () => {
+    const ctx = await setup({
+      ...RESPONSE,
+      items: [review('r1', 5, 'Bardzo miła obsługa')],
+      total: 1,
+    });
+
+    const tile = ctx.el().querySelector('ul.divide-y app-user-photo')!;
+    expect(tile.querySelector('img')).toBeNull();
+    expect(tile.textContent?.trim()).toBe('AK');
+  });
+
+  it('każda opinia dostaje kafelek autora, bez dodatkowego żądania przez ApiClient', async () => {
+    const ctx = await setup();
+
+    // zdjęcie to zwykły <img src> pod publiczny endpoint, więc nie leci przez ApiClient
+    // i nie dokłada nagłówka z tokenem — afterEach z http.verify() pilnuje, że poza listą
+    // opinii komponent nie wysłał żadnego żądania
+    expect(ctx.el().querySelectorAll('ul.divide-y app-user-photo')).toHaveLength(2);
+  });
+
+  it('nowa wersja zdjęcia autora podmienia obrazek przy jego opinii', async () => {
+    const ctx = await setup({
+      ...RESPONSE,
+      items: [review('r1', 5, 'Bardzo miła obsługa', { id: 'u7', avatarVersion: 'abc123' })],
+      total: 1,
+    });
+
+    // ten sam autor, inny profil firmy: po wgraniu nowego zdjęcia lista niesie nową wersję,
+    // a że jedzie ona w query stringu, `Cache-Control: immutable` nie przykleja starego obrazu
+    ctx.fixture.componentRef.setInput('slug', 'test-slug-2');
+    ctx.fixture.detectChanges();
+    ctx.http.expectOne('/api/businesses/test-slug-2/reviews?page=1').flush({
+      ...RESPONSE,
+      items: [review('r1', 5, 'Bardzo miła obsługa', { id: 'u7', avatarVersion: 'def456' })],
+      total: 1,
+    });
+    await settle(ctx.fixture);
+    ctx.fixture.detectChanges();
+
+    expect(ctx.el().querySelector('ul.divide-y img')?.getAttribute('src')).toBe(
+      '/api/users/u7/avatar?v=def456',
+    );
   });
 
   it('pokazuje rozkład ocen z agregatu nad listą opinii', async () => {

@@ -48,11 +48,11 @@ export const en: Dictionary = {
   'account.photo.remove': 'Remove photo',
   'account.photo.remove.heading': 'Remove your profile photo?',
   'account.photo.remove.message':
-    'The photo will disappear from the user menu — a monogram of your initials takes its place.',
+    'The photo will disappear from the user menu and from your reviews — a monogram of your initials takes its place.',
   'account.photo.removing': 'Removing…',
   'account.photo.replace': 'Change photo',
   'account.photo.subtitle':
-    'Shown in the user menu; without it a monogram of your initials takes its place',
+    'Shown in the user menu and publicly next to your reviews; without it a monogram of your initials takes its place',
   'account.photo.title': 'Profile photo',
   'account.photo.unavailable':
     'Your profile photo will be available once your account details load.',
