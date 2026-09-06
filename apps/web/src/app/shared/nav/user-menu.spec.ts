@@ -1,15 +1,20 @@
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthStore, type UserRole } from '../../core/auth/auth-store';
+import { profileResponse } from '../../core/auth/auth-testing';
 import UserMenu from './user-menu';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
 
-async function setup(role: UserRole) {
+/** Profil, który `AuthStore` pobiera po wejściu na stronę (#161); `null` = pobranie padło. */
+async function setup(role: UserRole, name: { firstName: string; lastName: string } | null = null) {
   localStorage.clear();
   localStorage.setItem(
     'bookit.accessToken',
@@ -21,6 +26,15 @@ async function setup(role: UserRole) {
   }).compileComponents();
 
   const fixture = TestBed.createComponent(UserMenu);
+  fixture.detectChanges();
+
+  const req = TestBed.inject(HttpTestingController).expectOne('/api/users/me');
+  if (name) {
+    req.flush(profileResponse({ ...name, role }));
+  } else {
+    req.flush(null, { status: 500, statusText: 'Server Error' });
+  }
+  await Promise.resolve();
   fixture.detectChanges();
 
   const el = fixture.nativeElement as HTMLElement;
@@ -118,6 +132,38 @@ describe('UserMenu', () => {
     const home = el.querySelector('#user-menu-panel a');
     expect(home?.getAttribute('href')).toBe('/');
     expect(home?.textContent).toContain('Strona główna');
+  });
+
+  it('pokazuje monogram z inicjałów i mówi czytnikowi, czyje to menu', async () => {
+    const { trigger } = await setup('CLIENT', {
+      firstName: 'Anna',
+      lastName: 'Kowalska',
+    });
+
+    expect(trigger()?.textContent?.trim()).toBe('AK');
+    expect(trigger()?.querySelector('svg')).toBeNull();
+    expect(trigger()?.getAttribute('aria-label')).toBe('Menu użytkownika — Anna Kowalska');
+  });
+
+  it('bez profilu (nieudane GET /users/me) zostaje ikona sylwetki', async () => {
+    const { trigger } = await setup('CLIENT');
+
+    expect(trigger()?.querySelector('svg')).not.toBeNull();
+    expect(trigger()?.getAttribute('aria-label')).toBe('Menu użytkownika');
+  });
+
+  it('panel pokazuje imię i nazwisko nad adresem', async () => {
+    const { fixture, el, trigger } = await setup('CLIENT', {
+      firstName: 'Anna',
+      lastName: 'Kowalska',
+    });
+
+    trigger()?.click();
+    fixture.detectChanges();
+
+    const panel = el.querySelector('#user-menu-panel');
+    expect(panel?.textContent).toContain('Anna Kowalska');
+    expect(panel?.textContent).toContain('anna.kowalska@firma.pl');
   });
 
   it('„Wyloguj" woła AuthStore.logout()', async () => {

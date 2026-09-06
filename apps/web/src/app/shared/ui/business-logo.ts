@@ -1,5 +1,5 @@
 import { Component, computed, input, signal } from '@angular/core';
-import { monogramInitials } from '../business-image';
+import { monogramInitials } from '../monogram';
 
 /**
  * Kwadratowy znak firmy przy jej nazwie (CONTEXT.md → „Logo firmy") z monogramem jako stanem

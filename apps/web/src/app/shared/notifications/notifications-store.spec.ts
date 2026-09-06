@@ -7,6 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthStore } from '../../core/auth/auth-store';
 import { AppNotification, NotificationsStore } from './notifications-store';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -44,7 +45,7 @@ describe('NotificationsStore', () => {
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   function login(role = 'CLIENT') {

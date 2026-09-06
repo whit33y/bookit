@@ -7,6 +7,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import NotificationBell from './notification-bell';
 import { AppNotification } from './notifications-store';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -49,7 +50,7 @@ describe('NotificationBell', () => {
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

@@ -11,6 +11,7 @@ import { authGuard } from '../core/auth/auth.guard';
 import { setLocale } from '../core/i18n/locale';
 import { settle } from '../public/testing-helpers';
 import MyBookings from './my-bookings';
+import { verifyIgnoringProfile } from '../core/auth/auth-testing';
 
 @Component({ selector: 'app-blank', template: '' })
 class Blank {}
@@ -174,7 +175,7 @@ async function setup(response: unknown = MOCK, url = '/client') {
 
 describe('MyBookings', () => {
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
     vi.restoreAllMocks();
   });
 

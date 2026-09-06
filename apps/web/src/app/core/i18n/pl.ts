@@ -698,6 +698,7 @@ export const pl = {
   'nav.register': 'Rejestracja',
   'nav.toggleMenu': 'Menu nawigacji',
   'nav.userMenu': 'Menu użytkownika',
+  'nav.userMenuFor': 'Menu użytkownika — {name}',
 
   // ── Powiadomienia (shared/notifications) ────────────────────────────
   'notifications.empty': 'Brak powiadomień.',

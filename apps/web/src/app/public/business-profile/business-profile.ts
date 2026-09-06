@@ -5,11 +5,8 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
-import {
-  businessCoverUrl,
-  businessLogoUrl,
-  monogramInitials,
-} from '../../shared/business-image';
+import { businessCoverUrl, businessLogoUrl } from '../../shared/business-image';
+import { monogramInitials } from '../../shared/monogram';
 import { DepositType, depositAmountCents } from '../../shared/deposit';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';

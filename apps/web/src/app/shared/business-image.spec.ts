@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { businessCoverUrl, businessLogoUrl, monogramInitials } from './business-image';
+import { businessCoverUrl, businessLogoUrl } from './business-image';
 
 describe('adresy obrazów firmy', () => {
   it('składają adres publicznej trasy z wersją jako cache-busterem', () => {
@@ -22,16 +22,5 @@ describe('adresy obrazów firmy', () => {
     expect(businessLogoUrl({ id: 'b1', logoVersion: 'v 1' })).toBe(
       '/api/businesses/b1/images/logo?v=v%201',
     );
-  });
-});
-
-describe('monogramInitials', () => {
-  it('bierze pierwsze litery maks. dwóch pierwszych słów', () => {
-    expect(monogramInitials('Studio Fryzur Kraków')).toBe('SF');
-    expect(monogramInitials('Barber')).toBe('B');
-  });
-
-  it('ignoruje nadmiarowe odstępy', () => {
-    expect(monogramInitials('  Salon   Piękna  ')).toBe('SP');
   });
 });

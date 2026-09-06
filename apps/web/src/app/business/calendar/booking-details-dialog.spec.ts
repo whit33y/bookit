@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import BookingDetailsDialog, { CalendarBooking } from './booking-details-dialog';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 // jsdom 22 nie implementuje showModal()/close() na HTMLDialogElement — lokalny polyfill,
 // nie globalny setup, żeby nie wyciekał do innych speców (jak vi.spyOn(globalThis, 'confirm')
@@ -49,7 +50,7 @@ describe('BookingDetailsDialog', () => {
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   function setRole(role: 'OWNER' | 'EMPLOYEE'): void {

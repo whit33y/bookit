@@ -1,4 +1,4 @@
-import { Service, computed, inject, signal } from '@angular/core';
+import { Service, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../api-client';
@@ -21,6 +21,26 @@ export interface AuthUser {
   mustChangePassword?: boolean;
   /** Standardowe pole JWT — unix timestamp wygaśnięcia (sekundy). */
   exp?: number;
+}
+
+/**
+ * Profil zalogowanego z `GET /users/me` — lustro `profileSelect` z apps/api.
+ *
+ * Świadomie osobno od `AuthUser`: imienia i nazwiska nie ma w tokenie i nie ma ich tam być.
+ * Token jest kopią stanu sprzed maks. 15 minut, więc po zmianie imienia w ustawieniach konta
+ * pokazywałby stare dane do najbliższego odświeżenia; do tego dane osobowe jechałyby przy
+ * każdym żądaniu i lądowały w logach.
+ */
+export interface UserProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  role: UserRole;
+  isBlocked: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
 }
 
 /** Ekran wymuszonej zmiany hasła (#146) — cel przekierowań z guarda i z interceptora. */
@@ -89,6 +109,10 @@ export class AuthStore {
    *  jej nie niesie, a mimo to każde żądanie wraca z 403. */
   private readonly forcedPasswordChange = signal(false);
 
+  /** Profil z API — `null`, dopóki nie wrócił (gość, pierwsze chwile po zalogowaniu,
+   *  nieudane pobranie). Każdy konsument musi umieć ten stan narysować. */
+  private readonly profileSignal = signal<UserProfile | null>(null);
+
   readonly accessToken = this.accessTokenSignal.asReadonly();
   readonly user = computed<AuthUser | null>(() => {
     const token = this.accessTokenSignal();
@@ -101,7 +125,32 @@ export class AuthStore {
     () => this.user()?.mustChangePassword === true || this.forcedPasswordChange(),
   );
 
+  readonly profile = this.profileSignal.asReadonly();
+  /** Imię i nazwisko zalogowanego albo `null`, gdy profilu (jeszcze) nie ma. */
+  readonly fullName = computed(() => {
+    const profile = this.profileSignal();
+    return profile ? `${profile.firstName} ${profile.lastName}`.trim() : null;
+  });
+
+  /** Tożsamość zalogowanego jako zwykły string — osobne computed, żeby wymiana tokenu
+   *  (refresh co 15 minut) nie budziła efektu poniżej: `user()` przy każdym przeliczeniu
+   *  oddaje nowy obiekt, a `sub` zostaje ten sam. */
+  private readonly userId = computed(() => this.user()?.sub ?? null);
+
   private refreshPromise: Promise<void> | null = null;
+  private profileRequestId = 0;
+
+  constructor() {
+    // Keyed na tożsamości: odtworzenie sesji (token z localStorage) i zalogowanie prowadzą
+    // do tego samego pobrania, a zmiana konta wymienia profil. Gość nic nie pyta.
+    effect(() => {
+      if (this.userId() === null) {
+        this.clearProfile();
+        return;
+      }
+      void this.loadProfile();
+    });
+  }
 
   /** Po sukcesie przekierowuje na returnUrl (jeśli podany i bezpieczny), inaczej
    *  na stronę domową roli (symetria z logout → /login). */
@@ -193,7 +242,32 @@ export class AuthStore {
     await this.goHome();
   }
 
+  /**
+   * Profil zalogowanego (#161). Cicho: to nie jest treść, o którą użytkownik prosił, tylko
+   * dodatek do menu — nieudane pobranie zostawia `profile()` pustym, a menu spada do
+   * wyglądu bez imienia, zamiast blokować aplikację komunikatem.
+   */
+  private async loadProfile(): Promise<void> {
+    const requestId = ++this.profileRequestId;
+    try {
+      const profile = await firstValueFrom(this.api.get<UserProfile>('/users/me'));
+      // spóźniona odpowiedź poprzedniej sesji nie może wpisać cudzego imienia
+      if (requestId !== this.profileRequestId) return;
+      this.profileSignal.set(profile);
+    } catch {
+      // patrz komentarz metody — brak profilu to obsłużony stan, nie błąd do pokazania
+    }
+  }
+
+  private clearProfile(): void {
+    this.profileRequestId++;
+    this.profileSignal.set(null);
+  }
+
   private clearTokens(): void {
+    // wylogowanie i wygaśnięcie sesji czyszczą profil od razu, nie dopiero przy najbliższym
+    // przeliczeniu efektu — inaczej menu przez moment pokazywałoby imię wylogowanego
+    this.clearProfile();
     this.forcedPasswordChange.set(false);
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);

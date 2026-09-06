@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 import PendingBookings from './pending-bookings';
 import { CalendarBooking } from '../calendar/booking-details-dialog';
 import { PendingCountStore } from '../pending-count-store';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -59,7 +60,7 @@ describe('PendingBookings', () => {
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   function setRole(role: 'OWNER' | 'EMPLOYEE'): void {

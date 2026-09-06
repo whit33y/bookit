@@ -28,9 +28,10 @@ const LOGOUT_CLASS = `${ITEM_BASE} font-semibold text-rose-600 hover:bg-rose-50 
  * z panelem, a poniżej `md` panel hamburgera wypisuje ją płasko (drugi poziom rozwijania
  * wewnątrz już rozwiniętego panelu byłby tylko utrudnieniem).
  *
- * Ikona zamiast inicjałów jest po stronie `user-menu.ts`: w tokenie (`AuthUser`) jest tylko
- * e-mail i rola — nie mamy imienia ani nazwiska, a inicjały z adresu udawałyby dane,
- * których nie ma.
+ * Nagłówek pokazuje imię i nazwisko z profilu (`AuthStore.fullName`, #161), a adres schodzi
+ * pod nie drobnym drukiem — przy kilku kontach w jednej przeglądarce to on rozstrzyga, kto jest
+ * zalogowany. Bez profilu (jeszcze nie wrócił albo pobranie padło) zostaje sam adres, czyli
+ * dzisiejszy wygląd.
  */
 @Component({
   selector: 'app-account-items',
@@ -40,9 +41,12 @@ const LOGOUT_CLASS = `${ITEM_BASE} font-semibold text-rose-600 hover:bg-rose-50 
     '[attr.aria-label]': "i18n.t('nav.account')",
   },
   template: `
-    <p class="truncate px-3 py-2 text-[13px] font-semibold text-stone-400">
-      {{ email() }}
-    </p>
+    <div class="px-3 py-2">
+      @if (fullName(); as name) {
+        <p class="truncate text-sm font-semibold text-stone-900">{{ name }}</p>
+      }
+      <p class="truncate text-[13px] font-semibold text-stone-400">{{ email() }}</p>
+    </div>
     @if (homeLink(); as link) {
       <a [routerLink]="link" (click)="selected.emit()" [class]="homeClass">{{
         homeLabel()
@@ -64,6 +68,7 @@ export default class AccountItems {
   protected readonly logoutClass = LOGOUT_CLASS;
 
   protected readonly email = computed(() => this.auth.user()?.email ?? '');
+  protected readonly fullName = this.auth.fullName;
   protected readonly homeLink = computed(() => {
     const role = this.auth.user()?.role;
     return role ? homeFor(role) : null;

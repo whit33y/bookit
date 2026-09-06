@@ -6,9 +6,9 @@ import type { TranslationKey } from '../../core/i18n/pl';
 import { translate } from '../../core/i18n/translate';
 import {
   businessImageUrl,
-  monogramInitials,
   type BusinessImageKind,
 } from '../../shared/business-image';
+import { monogramInitials } from '../../shared/monogram';
 import ConfirmDialog from '../../shared/confirm-dialog';
 
 /** Limit z `MAX_IMAGE_BYTES` (apps/api) — powielony, bo repo nie ma wspólnej libki kontraktów. */

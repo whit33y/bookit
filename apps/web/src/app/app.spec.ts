@@ -8,6 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { App } from './app';
 import type { UserRole } from './core/auth/auth-store';
+import { verifyIgnoringProfile } from './core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -51,8 +52,9 @@ describe('App', () => {
     }).compileComponents();
   });
 
+  // zalogowany pobiera też swój profil (#161) — imię do monogramu w menu użytkownika
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
   });
 
   it('renderuje nawigację z linkiem logowania dla niezalogowanego', async () => {

@@ -8,6 +8,7 @@ import { Router, provideRouter } from '@angular/router';
 import { AuthStore } from '../../core/auth/auth-store';
 import { settle, setValue } from '../testing-helpers';
 import ChangePassword from './change-password';
+import { verifyIgnoringProfile } from '../../core/auth/auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
@@ -72,7 +73,9 @@ const submitForm = async (fixture: Fixture) => {
 };
 
 describe('ChangePassword', () => {
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    verifyIgnoringProfile(TestBed.inject(HttpTestingController));
+  });
 
   it('zmienia hasło, przyjmuje nowe tokeny i odsyła na stronę domową roli', async () => {
     const { fixture, http, store, navigateByUrl } = await setup();

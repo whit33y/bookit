@@ -7,11 +7,16 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { AuthStore } from './auth-store';
 import { authInterceptor } from './auth.interceptor';
+import { verifyIgnoringProfile } from './auth-testing';
 
 const fakeJwt = (payload: object) =>
   `header.${btoa(JSON.stringify(payload))}.signature`;
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve));
+
+/** Dowolne chronione żądanie — celowo nie `/users/me`: tamto AuthStore wysyła sam (#161),
+ *  a `expectOne` nie odróżniłoby go od żądania z testu. */
+const PROTECTED_URL = '/api/bookings/mine';
 
 describe('authInterceptor', () => {
   let http: HttpClient;
@@ -39,11 +44,13 @@ describe('authInterceptor', () => {
     vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    verifyIgnoringProfile(httpMock);
+  });
 
   it('dokłada nagłówek Authorization: Bearer', () => {
-    http.get('/api/users/me').subscribe();
-    const req = httpMock.expectOne('/api/users/me');
+    http.get(PROTECTED_URL).subscribe();
+    const req = httpMock.expectOne(PROTECTED_URL);
     expect(req.request.headers.get('Authorization')).toBe(
       `Bearer ${store.accessToken()}`,
     );
@@ -53,10 +60,10 @@ describe('authInterceptor', () => {
   it('na 401 odświeża tokeny i ponawia żądanie', async () => {
     const nowyAccess = fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' });
     let result: unknown;
-    http.get('/api/users/me').subscribe((r) => (result = r));
+    http.get(PROTECTED_URL).subscribe((r) => (result = r));
 
     httpMock
-      .expectOne('/api/users/me')
+      .expectOne(PROTECTED_URL)
       .flush(null, { status: 401, statusText: 'Unauthorized' });
 
     const refreshReq = httpMock.expectOne('/api/auth/refresh');
@@ -64,7 +71,7 @@ describe('authInterceptor', () => {
     refreshReq.flush({ accessToken: nowyAccess, refreshToken: 'nowy-refresh' });
     await flushMicrotasks();
 
-    const retry = httpMock.expectOne('/api/users/me');
+    const retry = httpMock.expectOne(PROTECTED_URL);
     expect(retry.request.headers.get('Authorization')).toBe(
       `Bearer ${nowyAccess}`,
     );
@@ -78,10 +85,10 @@ describe('authInterceptor', () => {
   it('udany refresh + błąd ponowionego żądania nie wylogowuje', async () => {
     const nowyAccess = fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' });
     let error: unknown;
-    http.get('/api/users/me').subscribe({ error: (e) => (error = e) });
+    http.get(PROTECTED_URL).subscribe({ error: (e) => (error = e) });
 
     httpMock
-      .expectOne('/api/users/me')
+      .expectOne(PROTECTED_URL)
       .flush(null, { status: 401, statusText: 'Unauthorized' });
     httpMock
       .expectOne('/api/auth/refresh')
@@ -89,7 +96,7 @@ describe('authInterceptor', () => {
     await flushMicrotasks();
 
     httpMock
-      .expectOne('/api/users/me')
+      .expectOne(PROTECTED_URL)
       .flush(null, { status: 500, statusText: 'Server Error' });
     await flushMicrotasks();
 
@@ -100,10 +107,10 @@ describe('authInterceptor', () => {
 
   it('nieudany refresh → wylogowanie i propagacja błędu', async () => {
     let error: unknown;
-    http.get('/api/users/me').subscribe({ error: (e) => (error = e) });
+    http.get(PROTECTED_URL).subscribe({ error: (e) => (error = e) });
 
     httpMock
-      .expectOne('/api/users/me')
+      .expectOne(PROTECTED_URL)
       .flush(null, { status: 401, statusText: 'Unauthorized' });
     httpMock
       .expectOne('/api/auth/refresh')
