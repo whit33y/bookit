@@ -13,6 +13,7 @@ import {
   pickedFile,
 } from '../shared/image-upload';
 import { personMonogram } from '../shared/monogram';
+import UserPhoto from '../shared/ui/user-photo';
 
 /** Odrzucenie samego pliku ma własny komunikat, reszta idzie ogólną ścieżką błędu. */
 function uploadErrorMessage(err: unknown): string {
@@ -38,7 +39,7 @@ function uploadErrorMessage(err: unknown): string {
  */
 @Component({
   selector: 'app-profile-photo',
-  imports: [ConfirmDialog],
+  imports: [ConfirmDialog, UserPhoto],
   template: `
     <section>
       <h2 class="text-lg font-bold">{{ i18n.t('account.photo.title') }}</h2>
@@ -46,21 +47,14 @@ function uploadErrorMessage(err: unknown): string {
 
       @if (profile(); as user) {
         <div class="mt-5 flex flex-wrap items-center gap-5">
-          <!-- podgląd 1:1, w proporcjach zapisanego obrazu (512×512); NgOptimizedImage nie
-               wchodzi w grę — to bajty spod /api, nie statyczny zasób -->
-          @if (photoSrc(); as src) {
-            <img
-              [src]="src"
-              [alt]="i18n.t('account.photo.alt')"
-              class="h-24 w-24 rounded-2xl object-cover ring-1 ring-inset ring-stone-200"
-            />
-          } @else {
-            <span
-              aria-hidden="true"
-              class="grid h-24 w-24 place-items-center rounded-2xl bg-brand-50 text-2xl font-extrabold text-brand-700 ring-1 ring-inset ring-brand-200"
-              >{{ monogram() }}</span
-            >
-          }
+          <!-- podgląd 1:1, w proporcjach zapisanego obrazu (512×512); ten sam kafelek
+               „zdjęcie albo monogram", co w menu użytkownika i przy recenzjach (#165) -->
+          <app-user-photo
+            class="h-24 w-24 rounded-2xl bg-brand-50 text-2xl font-extrabold text-brand-700 ring-1 ring-inset ring-brand-200"
+            [src]="photoSrc()"
+            [monogram]="monogram()"
+            [alt]="i18n.t('account.photo.alt')"
+          />
 
           <div>
             <p class="text-[13px] text-stone-500">

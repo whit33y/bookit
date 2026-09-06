@@ -17,3 +17,34 @@ export const maskAuthor = ({
   const name = firstName.trim();
   return initial ? `${name} ${initial}.` : name;
 };
+
+/**
+ * Autor recenzji tak, jak wychodzi z API: podpis plus to, czym front zaadresuje zdjęcie
+ * profilowe (#165). Trzy pola razem, a nie trzy pola obok siebie w recenzji — `id` i wersja
+ * mają sens wyłącznie jako para adresująca `GET /users/:id/avatar`, a bez `name` nie ma
+ * z czego złożyć monogramu.
+ */
+export interface ReviewAuthor {
+  /**
+   * Publikujemy je świadomie: publiczny odczyt zdjęcia inaczej nie ma jak zostać zaadresowany,
+   * a uuid nic nie zdradza ponad to, co i tak widać obok — imię autora recenzji.
+   */
+  id: string;
+  /** Imię z inicjałem nazwiska — patrz `maskAuthor`. */
+  name: string;
+  /** `null` = konto bez zdjęcia profilowego, czyli monogram po stronie frontu. */
+  avatarVersion: string | null;
+}
+
+/** Wiersz klienta → autor recenzji. Nazwisko kończy się tutaj: dalej jedzie sam inicjał. */
+export const toReviewAuthor = ({
+  id,
+  firstName,
+  lastName,
+  avatarVersion,
+}: {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarVersion: string | null;
+}): ReviewAuthor => ({ id, name: maskAuthor({ firstName, lastName }), avatarVersion });

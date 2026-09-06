@@ -28,3 +28,14 @@ export function personMonogram(firstName: string, lastName: string): string {
     .join('')
     .toUpperCase();
 }
+
+/**
+ * Monogram z podpisu recenzji („Anna K." → „AK"). Podpis autora przychodzi z API już
+ * zamaskowany, więc imię i nazwisko nie stoją w osobnych polach — bierzemy pierwsze i ostatnie
+ * słowo, a nie dwa pierwsze: „Anna Maria K." ma dać „AK", tak samo jak `personMonogram` w menu
+ * konta. Inaczej ta sama osoba miałaby przy recenzji inny monogram niż nad swoimi ustawieniami.
+ */
+export function signatureMonogram(signature: string): string {
+  const words = signature.split(/\s+/).filter(Boolean);
+  return personMonogram(words[0] ?? '', words.length > 1 ? words[words.length - 1] : '');
+}

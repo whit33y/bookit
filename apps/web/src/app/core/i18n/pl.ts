@@ -51,11 +51,11 @@ export const pl = {
   'account.photo.remove': 'Usuń zdjęcie',
   'account.photo.remove.heading': 'Usunąć zdjęcie profilowe?',
   'account.photo.remove.message':
-    'Zdjęcie zniknie z menu użytkownika — w jego miejsce wróci monogram z Twoich inicjałów.',
+    'Zdjęcie zniknie z menu użytkownika i sprzed Twoich opinii — w jego miejsce wróci monogram z Twoich inicjałów.',
   'account.photo.removing': 'Usuwanie…',
   'account.photo.replace': 'Zmień zdjęcie',
   'account.photo.subtitle':
-    'Widoczne w menu użytkownika; bez niego zostaje monogram z Twoich inicjałów',
+    'Widoczne w menu użytkownika i publicznie przy Twoich opiniach; bez niego zostaje monogram z Twoich inicjałów',
   'account.photo.title': 'Zdjęcie profilowe',
   'account.photo.unavailable':
     'Zdjęcie profilowe będzie dostępne, kiedy wczytają się dane konta.',

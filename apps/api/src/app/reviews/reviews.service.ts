@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BusinessReviewsQueryDto } from './dto/business-reviews-query.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { countRatings, toRatingDistribution } from './rating-distribution';
-import { maskAuthor } from './review-author';
+import { toReviewAuthor } from './review-author';
 import { ReviewStats, toReviewStats } from './review-stats';
 
 // kształt zwracany z POST /bookings/:id/review; bez clientId — to zawsze wystawiający
@@ -24,14 +24,19 @@ const reviewSelect = {
   createdAt: true,
 } satisfies Prisma.ReviewSelect;
 
-// Publiczna lista recenzji. Nazwisko autora wchodzi tutaj wyłącznie po to, żeby maskAuthor zrobił
-// z niego inicjał — z serwisu nie wychodzi ani ono, ani clientId (patrz mapowanie w listForBusiness).
+// Publiczna lista recenzji. Nazwisko autora wchodzi tutaj wyłącznie po to, żeby toReviewAuthor
+// zrobił z niego inicjał — samo nazwisko z serwisu nie wychodzi (patrz mapowanie w listForBusiness).
+//
+// `id` klienta wychodzi już tak (#165, ADR-0002), i to świadomie: publiczny `GET /users/:id/avatar` nie ma
+// jak zostać zaadresowany inaczej, a uuid nie zdradza nic ponad to, co widać obok — że ta osoba
+// wystawiła tę recenzję. `clientId` samej recenzji nadal nie publikujemy: to ta sama wartość,
+// ale w polu, które wyglądałoby na klucz do rezerwacji.
 const publicReviewSelect = {
   id: true,
   rating: true,
   comment: true,
   createdAt: true,
-  client: { select: { firstName: true, lastName: true } },
+  client: { select: { id: true, firstName: true, lastName: true, avatarVersion: true } },
 } satisfies Prisma.ReviewSelect;
 
 @Injectable()
@@ -113,7 +118,7 @@ export class ReviewsService {
     const ratingDistribution = toRatingDistribution(byRating);
 
     return {
-      items: rows.map(({ client, ...review }) => ({ ...review, author: maskAuthor(client) })),
+      items: rows.map(({ client, ...review }) => ({ ...review, author: toReviewAuthor(client) })),
       // suma słupków zamiast osobnego `count`: jedno zapytanie mniej, a przy równoległym
       // zapisie total i histogram nie rozjadą się na tyle, żeby udziały nie sumowały się do 100%
       total: countRatings(ratingDistribution),
