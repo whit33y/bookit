@@ -43,6 +43,24 @@ export const pl = {
   'account.personal.subtitle':
     'Imię, nazwisko i telefon — firmy widzą je przy Twoich rezerwacjach.',
   'account.personal.title': 'Dane osobowe',
+  'account.photo.alt': 'Twoje zdjęcie profilowe',
+  'account.photo.error.remove': 'Nie udało się usunąć zdjęcia profilowego. {detail}',
+  'account.photo.error.upload': 'Nie udało się wgrać zdjęcia profilowego. {detail}',
+  'account.photo.hint':
+    'Kwadratowy obraz przy Twoim imieniu. JPG, PNG lub WebP, maks. {max} MB.',
+  'account.photo.remove': 'Usuń zdjęcie',
+  'account.photo.remove.heading': 'Usunąć zdjęcie profilowe?',
+  'account.photo.remove.message':
+    'Zdjęcie zniknie z menu użytkownika — w jego miejsce wróci monogram z Twoich inicjałów.',
+  'account.photo.removing': 'Usuwanie…',
+  'account.photo.replace': 'Zmień zdjęcie',
+  'account.photo.subtitle':
+    'Widoczne w menu użytkownika; bez niego zostaje monogram z Twoich inicjałów',
+  'account.photo.title': 'Zdjęcie profilowe',
+  'account.photo.unavailable':
+    'Zdjęcie profilowe będzie dostępne, kiedy wczytają się dane konta.',
+  'account.photo.upload': 'Wgraj zdjęcie',
+  'account.photo.uploading': 'Wgrywanie…',
   'account.subtitle': 'Zarządzaj swoimi danymi i hasłem do konta',
   'account.title': 'Ustawienia konta',
 
@@ -291,12 +309,6 @@ export const pl = {
   'appearance.coverHint':
     'Szeroki pas nad nagłówkiem profilu. JPG, PNG lub WebP, maks. {max} MB.',
   'appearance.error.remove': 'Nie udało się usunąć obrazu. {detail}',
-  'appearance.error.tooLarge':
-    'Plik jest za duży — maksymalny rozmiar to {max} MB.',
-  'appearance.error.type':
-    'Nieobsługiwany format pliku. Wgraj obraz JPG, PNG lub WebP.',
-  'appearance.error.unreadable':
-    'Nie udało się odczytać pliku. Sprawdź, czy obraz nie jest uszkodzony.',
   'appearance.error.upload': 'Nie udało się wgrać obrazu. {detail}',
   'appearance.logo': 'Logo firmy',
   'appearance.logoHint':
@@ -702,6 +714,15 @@ export const pl = {
   'footer.contact.title': 'Kontakt',
   'footer.copyright': '© {year} BookIt. Wszystkie prawa zastrzeżone.',
   'footer.label': 'Stopka',
+
+  // wgrywanie obrazów (shared/image-upload.ts) — wspólne dla wizerunku firmy i zdjęcia
+  // profilowego, więc komunikaty mówią o pliku, a nie o tym, czym ten obraz jest
+  'imageUpload.error.tooLarge':
+    'Plik jest za duży — maksymalny rozmiar to {max} MB.',
+  'imageUpload.error.type':
+    'Nieobsługiwany format pliku. Wgraj obraz JPG, PNG lub WebP.',
+  'imageUpload.error.unreadable':
+    'Nie udało się odczytać pliku. Sprawdź, czy obraz nie jest uszkodzony.',
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Konto',

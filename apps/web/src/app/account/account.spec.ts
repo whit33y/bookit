@@ -9,10 +9,14 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import AccountSettings from './account';
 import PersonalDetails from './personal-details';
+import ProfilePhoto from './profile-photo';
 
-// Sekcja danych osobowych ma własny spek i własne żądanie — tutaj badamy sam szkielet strony.
+// Sekcje mają własne speki i własne żądania — tutaj badamy sam szkielet strony.
 @Component({ selector: 'app-personal-details', template: '' })
 class PersonalDetailsStub {}
+
+@Component({ selector: 'app-profile-photo', template: '' })
+class ProfilePhotoStub {}
 
 describe('AccountSettings', () => {
   beforeEach(async () => {
@@ -26,8 +30,8 @@ describe('AccountSettings', () => {
       ],
     })
       .overrideComponent(AccountSettings, {
-        remove: { imports: [PersonalDetails] },
-        add: { imports: [PersonalDetailsStub] },
+        remove: { imports: [PersonalDetails, ProfilePhoto] },
+        add: { imports: [PersonalDetailsStub, ProfilePhotoStub] },
       })
       .compileComponents();
   });
@@ -38,11 +42,12 @@ describe('AccountSettings', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('składa się z sekcji danych osobowych i hasła', () => {
+  it('składa się z sekcji danych osobowych, zdjęcia profilowego i hasła', () => {
     const el = setup();
 
     expect(el.querySelector('h1')?.textContent).toContain('Ustawienia konta');
     expect(el.querySelector('app-personal-details')).not.toBeNull();
+    expect(el.querySelector('app-profile-photo')).not.toBeNull();
     expect(el.textContent).toContain('Hasło');
   });
 

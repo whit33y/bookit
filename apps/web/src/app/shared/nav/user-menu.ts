@@ -16,8 +16,9 @@ import AccountItems from './account-items';
  * w DOM zaraz za przyciskiem, więc Tab wchodzi w niego bez przestawiania fokusu; Escape zamyka
  * i oddaje fokus przyciskowi, bo inaczej zniknąłby razem z panelem.
  *
- * Przycisk nosi monogram osoby (CONTEXT.md → „Wizerunek") z imienia i nazwiska, które
- * `AuthStore` trzyma z `GET /users/me` (#161). Ikona sylwetki zostaje jako stan przejściowy:
+ * Przycisk nosi zdjęcie profilowe osoby (#164), a bez niego monogram (CONTEXT.md → „Wizerunek")
+ * z imienia i nazwiska — jedno i drugie `AuthStore` trzyma z `GET /users/me` (#161), więc
+ * wgranie zdjęcia w ustawieniach konta widać tu od razu. Ikona sylwetki zostaje stanem przejściowym:
  * profilu nie ma jeszcze zaraz po wejściu na stronę i nie będzie go wcale, gdy pobranie padnie
  * — inicjały z adresu e-mail udawałyby wtedy dane, których nie mamy.
  */
@@ -40,28 +41,39 @@ import AccountItems from './account-items';
       (click)="toggle()"
       class="grid h-9 w-9 place-items-center rounded-full transition hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
     >
-      <span
-        aria-hidden="true"
-        class="grid h-7 w-7 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-700 ring-1 ring-inset ring-brand-200"
-      >
-        @if (monogram(); as initials) {
-          {{ initials }}
-        } @else {
-          <svg
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-        }
-      </span>
+      @if (photo(); as src) {
+        <!-- NgOptimizedImage nie wchodzi w grę: to nie jest statyczny zasób, tylko bajty
+             spod /api, a wersja w adresie zmienia się przy każdym wgraniu -->
+        <img
+          [src]="src"
+          alt=""
+          aria-hidden="true"
+          class="h-7 w-7 rounded-full object-cover ring-1 ring-inset ring-stone-200"
+        />
+      } @else {
+        <span
+          aria-hidden="true"
+          class="grid h-7 w-7 place-items-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-700 ring-1 ring-inset ring-brand-200"
+        >
+          @if (monogram(); as initials) {
+            {{ initials }}
+          } @else {
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
+            </svg>
+          }
+        </span>
+      }
     </button>
 
     @if (open()) {
@@ -81,6 +93,11 @@ export default class UserMenu {
   private readonly trigger = viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
 
   protected readonly open = signal(false);
+
+  /** Zdjęcie profilowe zalogowanego (#164); `null` spycha przycisk na monogram, a ten na
+   *  ikonę sylwetki. Alt jest pusty, a element `aria-hidden`: czyje to menu, mówi już etykieta
+   *  przycisku, a druga zapowiedź tej samej rzeczy tylko przedłużyłaby odczyt. */
+  protected readonly photo = this.auth.profilePhoto;
 
   /** `''` (konto bez imienia i nazwiska) znaczy to samo, co brak profilu — pusty monogram
    *  byłby gorszy od ikony. */

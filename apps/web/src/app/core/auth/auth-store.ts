@@ -1,6 +1,7 @@
 import { Service, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { profilePhotoUrl } from '../../shared/user-image';
 import { ApiClient } from '../api-client';
 
 // lustrzane typy backendu (UserRole z prisma, TokenPair z AuthService) — bez importu z api
@@ -41,6 +42,8 @@ export interface UserProfile {
   isBlocked: boolean;
   mustChangePassword: boolean;
   createdAt: string;
+  /** Wersja zdjęcia profilowego (#163) — `null` znaczy „konto nie ma zdjęcia", czyli monogram. */
+  avatarVersion: string | null;
 }
 
 /** Ekran wymuszonej zmiany hasła (#146) — cel przekierowań z guarda i z interceptora. */
@@ -126,6 +129,13 @@ export class AuthStore {
   );
 
   readonly profile = this.profileSignal.asReadonly();
+  /** Adres zdjęcia profilowego zalogowanego albo `null`, gdy konto go nie ma (albo nie ma
+   *  jeszcze profilu). Liczony tutaj, bo czyta go i menu użytkownika, i ustawienia konta. */
+  readonly profilePhoto = computed(() => {
+    const profile = this.profileSignal();
+    return profile ? profilePhotoUrl(profile) : null;
+  });
+
   /** Imię i nazwisko zalogowanego albo `null`, gdy profilu (jeszcze) nie ma. */
   readonly fullName = computed(() => {
     const profile = this.profileSignal();
@@ -271,6 +281,22 @@ export class AuthStore {
   setProfile(profile: UserProfile): void {
     this.profileRequestId++;
     this.profileSignal.set(profile);
+  }
+
+  /**
+   * Nowa wersja zdjęcia profilowego po wgraniu albo usunięciu w ustawieniach konta (#164).
+   *
+   * Osobno od `setProfile`: `PUT /users/me/avatar` oddaje samą wersję, nie profil, więc
+   * podmiana całości wymagałaby drugiego `GET`-a. Bez tego menu użytkownika trzymałoby stare
+   * zdjęcie (albo monogram) aż do przeładowania strony.
+   *
+   * Bez profilu nie ma czego aktualizować — zdjęcie wgrywa się wyłącznie z ekranu, który
+   * profil już ma, a dopisywanie połówki profilu byłoby gorsze od zostawienia go pustym.
+   */
+  setAvatarVersion(version: string | null): void {
+    this.profileSignal.update((profile) =>
+      profile ? { ...profile, avatarVersion: version } : profile,
+    );
   }
 
   private clearProfile(): void {

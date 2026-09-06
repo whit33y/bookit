@@ -145,6 +145,23 @@ describe('UserMenu', () => {
     expect(trigger()?.getAttribute('aria-label')).toBe('Menu użytkownika — Anna Kowalska');
   });
 
+  it('zdjęcie profilowe wchodzi na miejsce monogramu, bez przeładowania strony', async () => {
+    const { fixture, trigger } = await setup('CLIENT', {
+      firstName: 'Anna',
+      lastName: 'Kowalska',
+    });
+
+    // tak samo jak po wgraniu zdjęcia w ustawieniach konta (#164)
+    TestBed.inject(AuthStore).setAvatarVersion('abc123');
+    fixture.detectChanges();
+
+    const photo = trigger()?.querySelector('img');
+    expect(photo?.getAttribute('src')).toBe('/api/users/1/avatar?v=abc123');
+    // sam obraz nic czytnikowi nie mówi — czyje to menu, niesie etykieta przycisku
+    expect(photo?.getAttribute('alt')).toBe('');
+    expect(trigger()?.textContent?.trim()).toBe('');
+  });
+
   it('bez profilu (nieudane GET /users/me) zostaje ikona sylwetki', async () => {
     const { trigger } = await setup('CLIENT');
 

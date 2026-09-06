@@ -1,6 +1,6 @@
 import { Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ApiClient, apiErrorMessage, isApiStatus } from '../../core/api-client';
+import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import type { TranslationKey } from '../../core/i18n/pl';
 import { translate } from '../../core/i18n/translate';
@@ -8,15 +8,15 @@ import {
   businessImageUrl,
   type BusinessImageKind,
 } from '../../shared/business-image';
+import {
+  ACCEPTED_IMAGE_TYPES,
+  MAX_IMAGE_MB,
+  imageRejectionMessage,
+  oversizeMessage,
+  pickedFile,
+} from '../../shared/image-upload';
 import { monogramInitials } from '../../shared/monogram';
 import ConfirmDialog from '../../shared/confirm-dialog';
-
-/** Limit z `MAX_IMAGE_BYTES` (apps/api) — powielony, bo repo nie ma wspólnej libki kontraktów. */
-const MAX_IMAGE_MB = 5;
-const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
-
-/** Formaty przyjmowane przez API; `accept` je tylko podpowiada, decyduje backend po magic bytes. */
-const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
 
 interface Slot {
   kind: BusinessImageKind;
@@ -40,18 +40,12 @@ const SLOTS: readonly Slot[] = [
   },
 ];
 
-/** Status odrzucenia pliku przez API na komunikat — reszta idzie ogólną ścieżką błędu. */
+/** Odrzucenie samego pliku ma własny komunikat, reszta idzie ogólną ścieżką błędu. */
 function uploadErrorMessage(err: unknown): string {
-  if (isApiStatus(err, 415)) {
-    return translate('appearance.error.type');
-  }
-  if (isApiStatus(err, 413)) {
-    return translate('appearance.error.tooLarge', { max: MAX_IMAGE_MB });
-  }
-  if (isApiStatus(err, 422)) {
-    return translate('appearance.error.unreadable');
-  }
-  return translate('appearance.error.upload', { detail: apiErrorMessage(err) });
+  return (
+    imageRejectionMessage(err) ??
+    translate('appearance.error.upload', { detail: apiErrorMessage(err) })
+  );
 }
 
 /**
@@ -188,7 +182,7 @@ export default class BusinessAppearance {
   readonly coverVersion = input<string | null>(null);
 
   protected readonly slots = SLOTS;
-  protected readonly acceptedTypes = ACCEPTED_TYPES;
+  protected readonly acceptedTypes = ACCEPTED_IMAGE_TYPES;
   protected readonly maxMegabytes = MAX_IMAGE_MB;
 
   /** Wersje obrazów: po wgraniu lub usunięciu zmienia je ta sekcja, a `linkedSignal` przywraca
@@ -225,11 +219,7 @@ export default class BusinessAppearance {
   });
 
   protected onPick(event: Event, kind: BusinessImageKind): void {
-    const picker = event.target as HTMLInputElement;
-    const file = picker.files?.[0];
-    // ten sam plik wybrany drugi raz (np. po poprawce w edytorze) nie wywołałby `change`,
-    // gdyby wartość inputu została
-    picker.value = '';
+    const file = pickedFile(event);
     if (file) {
       void this.upload(kind, file);
     }
@@ -264,10 +254,9 @@ export default class BusinessAppearance {
    *  pokazuje obraz, który firma faktycznie ma. */
   private async upload(kind: BusinessImageKind, file: File): Promise<void> {
     this.setError(kind, undefined);
-    // limit sprawdzany też tutaj, nie tylko przez 413 z API: nie ma sensu wysyłać
-    // kilkudziesięciu megabajtów po to, żeby serwer urwał je na strumieniu
-    if (file.size > MAX_IMAGE_BYTES) {
-      this.setError(kind, translate('appearance.error.tooLarge', { max: MAX_IMAGE_MB }));
+    const oversize = oversizeMessage(file);
+    if (oversize) {
+      this.setError(kind, oversize);
       return;
     }
     const body = new FormData();
