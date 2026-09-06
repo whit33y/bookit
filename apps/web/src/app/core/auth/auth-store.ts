@@ -26,7 +26,12 @@ export interface AuthUser {
 /** Ekran wymuszonej zmiany hasła (#146) — cel przekierowań z guarda i z interceptora. */
 export const CHANGE_PASSWORD_PATH = '/change-password';
 
-/** Strona domowa dla roli — cel redirectów po logowaniu/rejestracji. */
+/** Strona domowa dla roli — jedno miejsce, z którego czytają wszystkie ścieżki wyboru celu
+ *  (redirect po zalogowaniu, guestGuard, skrót w menu konta).
+ *
+ *  Klient ląduje na wyszukiwarce firm (`/`), a nie na „Moich wizytach" (#160): świeżo
+ *  zalogowany zwykle nie ma jeszcze żadnej wizyty, a przychodzi po to, żeby znaleźć firmę.
+ *  Dla pozostałych ról ich panel jest właściwym startem, więc zostaje bez zmian. */
 export function homeFor(role: UserRole): string {
   switch (role) {
     case 'ADMIN':
@@ -35,7 +40,7 @@ export function homeFor(role: UserRole): string {
     case 'EMPLOYEE':
       return '/business';
     default:
-      return '/client';
+      return '/';
   }
 }
 

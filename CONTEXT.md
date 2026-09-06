@@ -83,11 +83,12 @@ nie przyjmuje nowych rezerwacji, ale zachowuje rezerwacje już złożone i rolę
 Niezależna od stanu zgłoszenia — to dwie osie, wpuszczenie i kara.
 _Unikaj_: odrzucenie, dezaktywacja
 
-### Wizerunek firmy
+### Wizerunek
 
 **Logo firmy**:
 Kwadratowy znak firmy pokazywany przy jej nazwie — na profilu publicznym i w wynikach
 wyszukiwarki. Wgrywany wyłącznie przez właściciela w ustawieniach panelu, opcjonalny.
+Firma ma logo, osoba ma zdjęcie profilowe — te dwa obrazy nigdy nie dzielą nazwy.
 _Unikaj_: awatar, zdjęcie profilowe, profilówka
 
 **Okładka profilu**:
@@ -95,7 +96,22 @@ Szeroki pas graficzny nad nagłówkiem profilu firmy. Opcjonalny, wgrywany w tym
 miejscu co logo firmy i widoczny wyłącznie na profilu.
 _Unikaj_: tło, baner, hero, cover
 
+**Zdjęcie profilowe**:
+Obraz osoby stojącej za kontem, wgrywany przez nią samą w ustawieniach konta, opcjonalny.
+Widoczny przy jej recenzjach, w menu użytkownika i przy rozpatrywaniu jej rezerwacji przez
+firmę. Dotyczy wyłącznie użytkownika — firma ma logo firmy, nie zdjęcie profilowe.
+_Unikaj_: awatar, profilówka, logo
+
 **Monogram**:
-Zastępnik pokazywany, gdy firma nie ma logo firmy ani okładki profilu: gradient marki
-z inicjałami nazwy. Stan domyślny każdej firmy, nie brak danych do uzupełnienia.
+Zastępnik pokazywany, gdy obrazu nie ma: gradient marki z inicjałami — nazwy, gdy firma
+nie ma logo firmy ani okładki profilu; imienia i nazwiska, gdy osoba nie ma zdjęcia
+profilowego. Stan domyślny, nie brak danych do uzupełnienia.
 _Unikaj_: placeholder, awatar zastępczy, inicjały
+
+### Konto użytkownika
+
+**Ustawienia konta**:
+Miejsce, w którym zalogowany zarządza sobą: dane osobowe, zdjęcie profilowe, hasło i adres
+e-mail (`/account`, każda rola). Odróżnia się od ustawień firmy (`/business/settings`), gdzie
+właściciel zarządza firmą — właściciel ma jedno i drugie.
+_Unikaj_: profil, ustawienia użytkownika, moje konto

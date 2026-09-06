@@ -690,6 +690,7 @@ export const pl = {
   'nav.account': 'Konto',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Panel firmy',
+  'nav.home': 'Strona główna',
   'nav.login': 'Zaloguj',
   'nav.logout': 'Wyloguj',
   'nav.main': 'Nawigacja główna',

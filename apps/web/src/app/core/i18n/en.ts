@@ -697,6 +697,7 @@ export const en: Dictionary = {
   'nav.account': 'Account',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Business panel',
+  'nav.home': 'Home',
   'nav.login': 'Sign in',
   'nav.logout': 'Sign out',
   'nav.main': 'Main navigation',

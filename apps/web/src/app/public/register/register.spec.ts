@@ -93,6 +93,6 @@ describe('Register', () => {
     });
     await settle(fixture);
 
-    expect(navigate).toHaveBeenCalledWith('/client');
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 });
