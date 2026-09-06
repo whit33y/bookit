@@ -15,6 +15,9 @@ const profileSelect = {
   // #144: front pyta o profil również spod flagi (to jedna z dwóch dozwolonych tras),
   // więc stąd dowiaduje się, że zamiast panelu ma pokazać formularz zmiany hasła
   mustChangePassword: true,
+  // #163: sam wskaźnik na zdjęcie profilowe — front składa z niego adres obrazu albo pokazuje
+  // monogram, gdy `null`. Bajty nigdy nie idą tą trasą, leżą w `UserImage`.
+  avatarVersion: true,
   createdAt: true,
 } satisfies Prisma.UserSelect;
 

@@ -27,6 +27,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   role: 'CLIENT',
   isBlocked: false,
   mustChangePassword: false,
+  avatarVersion: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,

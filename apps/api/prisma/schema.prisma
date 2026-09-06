@@ -75,6 +75,9 @@ model User {
   // własnego profilu. Flaga jest ogólna, nie sprawdzeniem roli — ten sam strażnik obsłuży
   // każde kolejne źródło takich kont.
   mustChangePassword Boolean  @default(false)
+  // Zdjęcie profilowe (#163): hash treści albo `null` = „osoba nie ma zdjęcia" (monogram).
+  // Bajty leżą w `UserImage`, nigdy tutaj — `User` jest czytany na każdej trasie z tokenem.
+  avatarVersion      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -85,6 +88,7 @@ model User {
   notifications Notification[]
   refreshTokens RefreshToken[]
   resetTokens   PasswordResetToken[]
+  image         UserImage?
 }
 
 model RefreshToken {
@@ -156,6 +160,23 @@ model Business {
 enum BusinessImageKind {
   LOGO
   COVER
+}
+
+/// Zdjęcie profilowe (#163). Jeden slot na osobę, więc — inaczej niż `BusinessImage` — bez
+/// kolumny `kind`: rolę klucza pełni sam `userId`. Bajty w Postgresie, uzasadnienie w ADR-0001.
+model UserImage {
+  id        String   @id @default(uuid())
+  // @unique zamiast @@unique([userId, kind]): jedno zdjęcie na konto, PUT je nadpisuje
+  userId    String   @unique
+  // zawsze image/webp — trzymane jawnie, żeby publiczny GET nie zgadywał nagłówka
+  mime      String
+  // hash treści tych właśnie bajtów; ta sama wartość ląduje w `User.avatarVersion`, ale ETag
+  // liczy się stąd — powód ten sam, co przy obrazach firm
+  version   String
+  bytes     Bytes
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 /// Bajty logo firmy i okładki profilu (#153). Osobna tabela, bo blob w `Business` zaciągałby

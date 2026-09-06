@@ -1,27 +1,14 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  PayloadTooLargeException,
-  UnprocessableEntityException,
-  UnsupportedMediaTypeException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { BusinessImageKind, Prisma } from '@prisma/client';
-import { createHash } from 'crypto';
-import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  IMAGE_SLOTS,
-  MAX_IMAGE_BYTES,
   STORED_MIME,
-  WEBP_QUALITY,
-  isAcceptedImage,
-} from './business-image';
-
-/** Skrót treści obrazu: krótki, bo idzie do URL-a jako cache-buster i do ETagu, a nie do
- *  weryfikacji integralności — 16 znaków heksa wystarczy, żeby dwie wersje się rozjechały. */
-const versionOf = (bytes: Buffer) =>
-  createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+  acceptUpload,
+  normalizeImage,
+  toStoredBytes,
+  versionOf,
+} from '../common/images/image-upload';
+import { IMAGE_SLOTS } from './business-image';
 
 /**
  * Wizerunek firmy (#153): normalizacja i przechowywanie logo firmy oraz okładki profilu.
@@ -36,13 +23,11 @@ export class BusinessImagesService {
    * ścieżki — właściciel nie ma jak dotknąć cudzego wiersza.
    */
   async replaceMine(userId: string, kind: BusinessImageKind, file?: Express.Multer.File) {
-    const bytes = this.acceptUpload(file);
+    const bytes = acceptUpload(file);
     const businessId = await this.ownBusinessId(userId);
-    const processed = await this.normalize(bytes, kind);
+    const processed = await normalizeImage(bytes, IMAGE_SLOTS[kind]);
     const version = versionOf(processed);
-    // Prisma opisuje `Bytes` jako Uint8Array; Buffer z sharpa bywa nad SharedArrayBuffer,
-    // więc przepisujemy widok zamiast rzutować
-    const stored = new Uint8Array(processed);
+    const stored = toStoredBytes(processed);
 
     // jedna transakcja, bo `logoVersion` na `Business` jest wskaźnikiem na wiersz obok:
     // rozjazd tych dwóch zapisów oznaczałby obraz nie do pobrania albo URL do pustki
@@ -97,40 +82,6 @@ export class BusinessImagesService {
       throw new NotFoundException('Nie znaleziono obrazu');
     }
     return image;
-  }
-
-  /** Bramka wejściowa: obecność pliku, rozmiar i format po sygnaturze. */
-  private acceptUpload(file?: Express.Multer.File): Buffer {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('Nie przesłano pliku');
-    }
-    // multer urywa większe żądanie wcześniej; ten warunek trzyma regułę także wtedy,
-    // gdy serwis wywoła coś innego niż kontroler z tym interceptorem
-    if (file.buffer.length > MAX_IMAGE_BYTES) {
-      throw new PayloadTooLargeException('Obraz może mieć najwyżej 5 MB');
-    }
-    if (!isAcceptedImage(file.buffer)) {
-      throw new UnsupportedMediaTypeException('Dozwolone formaty to JPEG, PNG i WebP');
-    }
-    return file.buffer;
-  }
-
-  /**
-   * Kadrowanie do docelowych wymiarów i konwersja na WebP. `sharp` domyślnie nie przepisuje
-   * EXIF-u, więc metadane aparatu (w tym GPS) znikają razem z oryginałem — trzymamy tylko wynik.
-   */
-  private async normalize(bytes: Buffer, kind: BusinessImageKind): Promise<Buffer> {
-    const { width, height } = IMAGE_SLOTS[kind];
-    try {
-      return await sharp(bytes)
-        .resize({ width, height, fit: 'cover' })
-        .webp({ quality: WEBP_QUALITY })
-        .toBuffer();
-    } catch {
-      // sygnatura się zgadzała, ale treść jest ucięta albo uszkodzona — to nie jest
-      // „zły typ pliku", więc 422, nie 415
-      throw new UnprocessableEntityException('Nie udało się odczytać obrazu');
-    }
   }
 
   /** Wskaźnik na `Business`: hash treści albo `null`, gdy slot jest pusty. */
