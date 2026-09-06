@@ -25,6 +25,8 @@ describe('UsersService', () => {
     expect(arg.where).toEqual({ id: 'user-1' });
     expect(arg.select.passwordHash).toBeUndefined();
     expect(arg.select).toMatchObject({ id: true, email: true, role: true });
+    // #163: profil niesie wskaźnik na zdjęcie profilowe, nigdy jego bajty
+    expect(arg.select.avatarVersion).toBe(true);
   });
 
   it('getMe dla usuniętego usera (ważny token) → 404', async () => {

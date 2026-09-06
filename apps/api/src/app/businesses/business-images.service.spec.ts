@@ -9,7 +9,7 @@ import { BusinessImageKind } from '@prisma/client';
 import sharp from 'sharp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service';
-import { MAX_IMAGE_BYTES } from './business-image';
+import { MAX_IMAGE_BYTES } from '../common/images/image-upload';
 import { BusinessImagesService } from './business-images.service';
 
 /** Prawdziwy obraz wejściowy — konwersję sprawdzamy na wyniku sharpa, nie na atrapie. */

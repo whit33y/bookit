@@ -24,3 +24,19 @@ a blob w bazie przeżywa deploy i wchodzi do tego samego backupu co reszta danyc
 - Dumpy bazy rosną o rozmiar obrazów. Przy skali platformy to kilkaset MB — akceptowalne.
 - Migracja do object storage pozostaje możliwa: publiczny URL obrazka nie zmienia kształtu,
   zmienia się tylko źródło bajtów za nim.
+
+## Dopisek (#163): zdjęcia profilowe
+
+Ta sama decyzja obejmuje **zdjęcie profilowe** użytkownika: bajty idą do Postgresa (tabela
+`UserImage`), a `User` niesie tylko `avatarVersion` — nullowalny hash treści, dokładnie w tej
+samej roli, co `logoVersion` przy firmie. Powody się nie zmieniają, więc nie ma tu osobnego ADR;
+zmienia się tylko właściciel obrazu.
+
+Różnice wobec wizerunku firmy są dwie i obie wynikają z modelu, nie z decyzji o przechowywaniu:
+
+- osoba ma **jeden** slot, nie dwa — stąd `@unique` na `userId` zamiast pary `(businessId, kind)`
+  i brak kolumny `kind`;
+- kadr jest zawsze kwadratem 512×512, bo zdjęcie pokazuje się przy nazwisku, nigdy jako pas.
+
+Reguły wejścia (JPEG/PNG/WebP po sygnaturze, 5 MB, konwersja do WebP q80) są wspólne dla obu
+zastosowań i mieszkają w jednym module — `common/images/image-upload`.
