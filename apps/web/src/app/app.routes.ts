@@ -7,6 +7,8 @@ import {
 } from './core/auth/auth.guard';
 
 const routes: Route[] = [
+  // bez guestGuard: to strona domowa klienta (#160) — guard odsyłałby go tutaj z /login,
+  // a stąd znowu na siebie samego
   { path: '', loadComponent: () => import('./public/landing/landing') },
   {
     // literalna ścieżka — musi być przed ':slug', inaczej trasa parametryczna

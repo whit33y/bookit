@@ -60,7 +60,7 @@ describe('AuthStore', () => {
 
     expect(store.isLoggedIn()).toBe(true);
     expect(localStorage.getItem('bookit.refreshToken')).toBe('refresh');
-    expect(navigate).toHaveBeenCalledWith('/client');
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 
   it('register wysyła POST /auth/register i loguje automatycznie', async () => {
@@ -89,7 +89,7 @@ describe('AuthStore', () => {
 
     expect(store.isLoggedIn()).toBe(true);
     expect(store.user()?.role).toBe('CLIENT');
-    expect(navigate).toHaveBeenCalledWith('/client');
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 
   it('login z returnUrl wraca na wskazany adres zamiast na stronę roli', async () => {
@@ -131,7 +131,7 @@ describe('AuthStore', () => {
       });
       await pending;
 
-      expect(navigate).toHaveBeenCalledWith('/client');
+      expect(navigate).toHaveBeenCalledWith('/');
     },
   );
 

@@ -109,15 +109,15 @@ describe('UserMenu', () => {
     expect(home?.textContent).toContain('Panel firmy');
   });
 
-  it('dla klienta skrót prowadzi do jego wizyt', async () => {
+  it('dla klienta skrót prowadzi na stronę główną', async () => {
     const { fixture, el, trigger } = await setup('CLIENT');
 
     trigger()?.click();
     fixture.detectChanges();
 
     const home = el.querySelector('#user-menu-panel a');
-    expect(home?.getAttribute('href')).toBe('/client');
-    expect(home?.textContent).toContain('Moje wizyty');
+    expect(home?.getAttribute('href')).toBe('/');
+    expect(home?.textContent).toContain('Strona główna');
   });
 
   it('„Wyloguj" woła AuthStore.logout()', async () => {

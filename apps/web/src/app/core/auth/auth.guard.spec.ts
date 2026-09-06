@@ -8,7 +8,7 @@ import {
   convertToParamMap,
   provideRouter,
 } from '@angular/router';
-import { AuthStore, homeFor } from './auth-store';
+import { AuthStore, homeFor, type UserRole } from './auth-store';
 import {
   authGuard,
   guestGuard,
@@ -46,14 +46,14 @@ describe('guestGuard', () => {
     expect(runGuestGuard()).toBe(true);
   });
 
-  it('zalogowanego klienta przekierowuje na /client', () => {
+  it('zalogowanego klienta przekierowuje na stronę główną', () => {
     localStorage.setItem(
       'bookit.accessToken',
       fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
     );
     const result = runGuestGuard();
     expect(result).toBeInstanceOf(UrlTree);
-    expect(result.toString()).toBe('/client');
+    expect(result.toString()).toBe('/');
   });
 
   it('wpuszcza na /login przy wygasłym tokenie — martwa sesja nie blokuje logowania', () => {
@@ -69,21 +69,26 @@ describe('guestGuard', () => {
     expect(runGuestGuard()).toBe(true);
   });
 
-  it('zalogowanego z returnUrl odsyła tam, nie na stronę roli', () => {
-    localStorage.setItem(
-      'bookit.accessToken',
-      fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
-    );
-    const result = runGuestGuard({ returnUrl: '/studio/rezerwacja?serviceId=s1' });
-    expect(result.toString()).toBe('/studio/rezerwacja?serviceId=s1');
-  });
+  // returnUrl bije stronę domową niezależnie od roli — po zmianie celu klienta (#160) tylko
+  // on wychodziłby na `/`, więc pozostałe role też muszą tu być
+  it.each<UserRole>(['CLIENT', 'OWNER', 'EMPLOYEE', 'ADMIN'])(
+    'zalogowanego z returnUrl odsyła tam, nie na stronę roli: %s',
+    (role) => {
+      localStorage.setItem(
+        'bookit.accessToken',
+        fakeJwt({ sub: '1', email: 'a@b.pl', role }),
+      );
+      const result = runGuestGuard({ returnUrl: '/studio/rezerwacja?serviceId=s1' });
+      expect(result.toString()).toBe('/studio/rezerwacja?serviceId=s1');
+    },
+  );
 
   it('ignoruje returnUrl prowadzący poza aplikację', () => {
     localStorage.setItem(
       'bookit.accessToken',
       fakeJwt({ sub: '1', email: 'a@b.pl', role: 'CLIENT' }),
     );
-    expect(runGuestGuard({ returnUrl: '//evil.com' }).toString()).toBe('/client');
+    expect(runGuestGuard({ returnUrl: '//evil.com' }).toString()).toBe('/');
   });
 });
 
@@ -152,7 +157,7 @@ describe('roleGuard', () => {
 
 describe('homeFor', () => {
   it('mapuje rolę na stronę domową', () => {
-    expect(homeFor('CLIENT')).toBe('/client');
+    expect(homeFor('CLIENT')).toBe('/');
     expect(homeFor('OWNER')).toBe('/business');
     expect(homeFor('EMPLOYEE')).toBe('/business');
     expect(homeFor('ADMIN')).toBe('/admin');

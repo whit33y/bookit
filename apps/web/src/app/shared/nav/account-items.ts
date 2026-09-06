@@ -4,12 +4,14 @@ import { AuthStore, homeFor, type UserRole } from '../../core/auth/auth-store';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import type { TranslationKey } from '../../core/i18n/pl';
 
-/** Etykieta skrótu do strony domowej roli — te same klucze co linki w pasku, bez nowych tłumaczeń. */
+/** Etykieta skrótu do strony domowej roli — musi opisywać cel z `homeFor`, więc klient
+ *  dostaje „Strona główna", a nie „Moje wizyty" (#160). „Moje wizyty" zostają w pasku
+ *  nawigacji dla wszystkich ról. */
 const HOME_LABEL: Record<UserRole, TranslationKey> = {
   ADMIN: 'nav.admin',
   OWNER: 'nav.businessPanel',
   EMPLOYEE: 'nav.businessPanel',
-  CLIENT: 'nav.myBookings',
+  CLIENT: 'nav.home',
 };
 
 // wspólny kształt pozycji; różnią się tylko wagą, kolorem i pierścieniem fokusu
