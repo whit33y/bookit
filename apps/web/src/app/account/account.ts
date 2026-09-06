@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { CHANGE_PASSWORD_PATH } from '../core/auth/auth-store';
 import { I18nStore } from '../core/i18n/i18n-store';
 import PersonalDetails from './personal-details';
+import ProfilePhoto from './profile-photo';
 
 /**
  * Ustawienia konta (#162, CONTEXT.md → „Ustawienia konta") — miejsce, w którym zalogowany
@@ -15,12 +16,12 @@ import PersonalDetails from './personal-details';
  *
  * Hasło jest tu tylko wejściem na istniejący `/change-password` (do #162 nie prowadził tam
  * żaden link) — drugiej kopii formularza nie stawiamy, bo rozjechałaby się przy pierwszej
- * poprawce. Sekcje „Zdjęcie profilowe" i „Adres e-mail" dochodzą osobnymi zadaniami; ich
- * miejsce jest tutaj, między danymi osobowymi a hasłem.
+ * poprawce. „Zdjęcie profilowe" (#164) stoi między danymi osobowymi a hasłem; sekcja „Adres
+ * e-mail" dojdzie osobnym zadaniem, w to samo miejsce.
  */
 @Component({
   selector: 'app-account-settings',
-  imports: [PersonalDetails, RouterLink],
+  imports: [PersonalDetails, ProfilePhoto, RouterLink],
   template: `
     <div class="flex flex-1 items-center justify-center px-4 py-8">
       <section
@@ -30,6 +31,8 @@ import PersonalDetails from './personal-details';
         <p class="mt-1 text-sm text-stone-500">{{ i18n.t('account.subtitle') }}</p>
 
         <app-personal-details class="mt-8 block" />
+
+        <app-profile-photo class="mt-10 block border-t border-stone-200 pt-8" />
 
         <section class="mt-10 border-t border-stone-200 pt-8">
           <h2 class="text-lg font-bold">{{ i18n.t('account.password.title') }}</h2>

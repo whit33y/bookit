@@ -40,6 +40,24 @@ export const en: Dictionary = {
   'account.personal.subtitle':
     'First name, last name and phone — businesses see them with your bookings.',
   'account.personal.title': 'Personal details',
+  'account.photo.alt': 'Your profile photo',
+  'account.photo.error.remove': 'Could not remove your profile photo. {detail}',
+  'account.photo.error.upload': 'Could not upload your profile photo. {detail}',
+  'account.photo.hint':
+    'A square image shown next to your name. JPG, PNG or WebP, up to {max} MB.',
+  'account.photo.remove': 'Remove photo',
+  'account.photo.remove.heading': 'Remove your profile photo?',
+  'account.photo.remove.message':
+    'The photo will disappear from the user menu — a monogram of your initials takes its place.',
+  'account.photo.removing': 'Removing…',
+  'account.photo.replace': 'Change photo',
+  'account.photo.subtitle':
+    'Shown in the user menu; without it a monogram of your initials takes its place',
+  'account.photo.title': 'Profile photo',
+  'account.photo.unavailable':
+    'Your profile photo will be available once your account details load.',
+  'account.photo.upload': 'Upload photo',
+  'account.photo.uploading': 'Uploading…',
   'account.subtitle': 'Manage your details and your account password',
   'account.title': 'Account settings',
 
@@ -289,11 +307,6 @@ export const en: Dictionary = {
   'appearance.coverHint':
     'A wide strip above the profile header. JPG, PNG or WebP, up to {max} MB.',
   'appearance.error.remove': 'Could not remove the image. {detail}',
-  'appearance.error.tooLarge': 'The file is too large — the limit is {max} MB.',
-  'appearance.error.type':
-    'Unsupported file format. Upload a JPG, PNG or WebP image.',
-  'appearance.error.unreadable':
-    'Could not read the file. Check whether the image is damaged.',
   'appearance.error.upload': 'Could not upload the image. {detail}',
   'appearance.logo': 'Business logo',
   'appearance.logoHint':
@@ -709,6 +722,14 @@ export const en: Dictionary = {
   'footer.contact.title': 'Contact',
   'footer.copyright': '© {year} BookIt. All rights reserved.',
   'footer.label': 'Footer',
+
+  // wgrywanie obrazów (shared/image-upload.ts) — wspólne dla wizerunku firmy i zdjęcia
+  // profilowego, więc komunikaty mówią o pliku, a nie o tym, czym ten obraz jest
+  'imageUpload.error.tooLarge': 'The file is too large — the limit is {max} MB.',
+  'imageUpload.error.type':
+    'Unsupported file format. Upload a JPG, PNG or WebP image.',
+  'imageUpload.error.unreadable':
+    'Could not read the file. Check whether the image is damaged.',
 
   // ── Nawigacja (app.html) ────────────────────────────────────────────
   'nav.account': 'Account',
