@@ -20,7 +20,8 @@ class StubPage {}
 const login = (role: UserRole) =>
   localStorage.setItem('bookit.accessToken', fakeJwt({ sub: '1', email: 'a@b.pl', role }));
 
-/** Zalogowanie uruchamia dzwoneczek (#54), a dla firmy też licznik oczekujących (#33) —
+/** Zalogowanie uruchamia dzwoneczek (#54), dla firmy licznik oczekujących (#33), a dla klienta
+ *  zbiór ulubionych (#182) —
  *  bez flusha `verify()` w afterEach wywaliłby test na zaległym żądaniu. */
 function flushNavRequests(pending: string[] = []) {
   const http = TestBed.inject(HttpTestingController);
@@ -30,6 +31,8 @@ function flushNavRequests(pending: string[] = []) {
       .flush(pending.map((status) => ({ status })));
   }
   http.expectOne('/api/notifications/unread-count').flush({ unread: 0 });
+  // klient pobiera też zbiór ulubionych (#182) — `match`, bo pozostałe role o niego nie pytają
+  http.match('/api/favorites/ids').forEach((req) => req.flush({ ids: [] }));
 }
 
 describe('App', () => {

@@ -11,6 +11,7 @@ import { filter } from 'rxjs';
 import { AuthStore } from './core/auth/auth-store';
 import { I18nStore } from './core/i18n/i18n-store';
 import { PendingCountStore } from './business/pending-count-store';
+import { FavoritesStore } from './shared/favorites/favorites-store';
 import LanguageSwitcher from './shared/i18n/language-switcher';
 import Footer from './shared/layout/footer';
 import AccountItems from './shared/nav/account-items';
@@ -59,6 +60,11 @@ export class App {
   protected readonly menuOpen = signal(false);
 
   constructor() {
+    // Zbiór ulubionych (#182): store sam pobiera `/favorites/ids` dla roli CLIENT i sam zeruje
+    // się przy wylogowaniu, więc App go tylko powołuje. Tutaj, a nie przy pierwszym sercu —
+    // inaczej żądanie szłoby dopiero przy wejściu na wyszukiwarkę albo profil firmy.
+    inject(FavoritesStore);
+
     // licznik oczekujących w nawigacji (#33) — odświeżamy przy każdej zmianie roli
     // (login/logout/przełączenie konta), nie tylko raz przy starcie aplikacji
     effect(() => {
