@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
+import { clearFavorites } from '../favorites/clear-favorites';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -60,6 +61,8 @@ export class EmployeesService {
     const linkedUserId = dto.email ? await this.resolveLinkedUserId(dto.email) : null;
     try {
       // atomowo: utworzenie pracownika + ustawienie roli EMPLOYEE powiązanemu userowi
+      // i skasowanie jego ulubionych — te ma wyłącznie CLIENT (ADR-0004). Odpięcie
+      // pracownika przywróci rolę, ale nie listę; świadomy koszt, opisany w ADR-ze.
       return await this.prisma.$transaction(async (tx) => {
         const employee = await tx.employee.create({
           data: { businessId, name: dto.name, userId: linkedUserId },
@@ -70,6 +73,7 @@ export class EmployeesService {
             where: { id: linkedUserId },
             data: { role: UserRole.EMPLOYEE },
           });
+          await clearFavorites(tx, linkedUserId);
         }
         return employee;
       });
@@ -97,6 +101,7 @@ export class EmployeesService {
             where: { id: linkedUserId },
             data: { role: UserRole.EMPLOYEE },
           });
+          await clearFavorites(tx, linkedUserId);
           // przepięcie na inne konto → poprzednie traci status pracownika
           if (employee.userId && employee.userId !== linkedUserId) {
             await tx.user.update({

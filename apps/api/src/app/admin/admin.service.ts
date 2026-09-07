@@ -7,6 +7,7 @@ import {
 import { BusinessStatus, Prisma, UserRole } from '@prisma/client';
 import { hashPassword, normalizeEmail } from '../common/credentials';
 import { parsePagination } from '../common/pagination';
+import { clearFavorites } from '../favorites/clear-favorites';
 import { PrismaService } from '../prisma/prisma.service';
 import { BusinessApplicationEventsService } from './business-application-events.service';
 import { AdminApplicationsQueryDto } from './dto/admin-applications-query.dto';
@@ -231,11 +232,18 @@ export class AdminService {
       // nadpisywać cudzą rolę w dół. Dziś zgłoszenie może złożyć wyłącznie CLIENT albo OWNER
       // (`POST /businesses`), ale bezwarunkowy zapis czekałby na pierwsze konto ADMIN-a
       // z własnym zgłoszeniem, żeby po cichu odebrać mu panel administratora.
-      (tx, ownerId) =>
-        tx.user.updateMany({
+      async (tx, ownerId) => {
+        await tx.user.updateMany({
           where: { id: ownerId, role: UserRole.CLIENT },
           data: { role: UserRole.OWNER },
-        }),
+        });
+        // Ulubione ma wyłącznie CLIENT (ADR-0004), więc lista zgłaszającego ginie razem
+        // z awansem — w tej samej transakcji, nie po niej: właściciel z sercem na cudzej
+        // firmie miałby dane, do których w panelu firmy nie prowadzi żadna ścieżka.
+        // Bezwarunkowo, mimo warunku na rolę w zapisie wyżej: kasujemy stan roli, którą
+        // konto właśnie opuszcza, a niepasująca rola nie ma tu czego zgubić.
+        await clearFavorites(tx, ownerId);
+      },
     );
 
     // ślad audytowy jak przy block/unblock — slug i id, bez danych właściciela

@@ -89,6 +89,7 @@ model User {
   refreshTokens RefreshToken[]
   resetTokens   PasswordResetToken[]
   image         UserImage?
+  favorites     FavoriteBusiness[]
 }
 
 model RefreshToken {
@@ -150,6 +151,7 @@ model Business {
   bookings  Booking[]
   reviews   Review[]
   images    BusinessImage[]
+  favorites FavoriteBusiness[]
 
   @@index([city])
   @@index([categoryId])
@@ -376,4 +378,28 @@ model Notification {
 
   @@index([userId, createdAt]) // lista powiadomień użytkownika, najnowsze pierwsze
   @@index([userId, readAt]) // licznik nieprzeczytanych — endpoint odpytywany pollingiem
+}
+
+/// Ulubiona firma klienta (#181). Osobna tabela zamiast niejawnej relacji m:n (jak `Service`
+/// ↔ `Employee`), bo lista ma porządek — `createdAt` malejąco — a niejawna tabela Prismy
+/// nie ma gdzie go trzymać. Relacja jest jednostronna i prywatna: firma nie czyta tych
+/// wierszy i nigdzie nie ma z nich licznika (CONTEXT.md → „Ulubiona firma").
+/// Ulubione ma wyłącznie rola CLIENT, więc wiersze giną przy każdym wyjściu z niej —
+/// uzasadnienie i cena tej decyzji w ADR-0004.
+model FavoriteBusiness {
+  id         String   @id @default(uuid())
+  userId     String
+  businessId String
+  createdAt  DateTime @default(now())
+
+  // Cascade jak w `UserImage` i `RefreshToken`: wiersz nie ma sensu bez żadnej ze stron,
+  // a nic go nie przeżywa — to nie historia, tylko zakładka.
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // Idempotencja `PUT /businesses/:id/favorite` opiera się na tym kluczu: powtórzony klik
+  // z dwóch kart wpada w `skipDuplicates`, a nie w 409.
+  @@unique([userId, businessId])
+  // pod listę „moje ulubione, najnowsze pierwsze" — sortowanie idzie z indeksu
+  @@index([userId, createdAt])
 }
