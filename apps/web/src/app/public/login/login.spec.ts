@@ -4,7 +4,12 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
+import { EMAIL_CHANGED_NOTICE } from '../../core/auth/auth-store';
 import { setLocale } from '../../core/i18n/locale';
 import { setValue, settle } from '../testing-helpers';
 import Login from './login';
@@ -69,6 +74,34 @@ describe('Login', () => {
     expect((el.querySelector('#email') as HTMLInputElement).value).toBe(
       'a@b.pl',
     );
+  });
+
+  it('po zmianie adresu e-mail wyjaśnia, dlaczego użytkownik tu wylądował', async () => {
+    // `?notice=` zostawiają ustawienia konta (#168) — bez tego zdania wylogowanie po zmianie
+    // loginu wygląda jak awaria sesji
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: {
+        snapshot: {
+          queryParamMap: convertToParamMap({ notice: EMAIL_CHANGED_NOTICE }),
+        },
+      },
+    });
+    const fixture = TestBed.createComponent(Login);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[role="status"]')?.textContent).toContain(
+      'Adres e-mail konta został zmieniony',
+    );
+  });
+
+  it('bez `notice` nie pokazuje żadnego komunikatu o zmianie', async () => {
+    const fixture = TestBed.createComponent(Login);
+    await fixture.whenStable();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[role="status"]'),
+    ).toBeNull();
   });
 
   // dowód, że ścieżka setLocale('en') → szablon faktycznie działa, a nie tylko sam słownik (#57)

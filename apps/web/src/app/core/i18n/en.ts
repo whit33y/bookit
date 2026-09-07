@@ -27,6 +27,18 @@ export const en: Dictionary = {
   'api.error.validation': 'The submitted data is invalid.',
 
   // ── Account settings (account/) ─────────────────────────────────────
+  'account.email.confirm': 'Repeat the new email address',
+  'account.email.current': 'Current address:',
+  'account.email.error.password': 'That is not your current password',
+  'account.email.error.taken': 'That email address already belongs to another account',
+  'account.email.new': 'New email address',
+  'account.email.submit': 'Change email address',
+  'account.email.submitting': 'Changing…',
+  'account.email.subtitle':
+    'Your email address is also your login — the change takes effect immediately, once you confirm your current password.',
+  'account.email.title': 'Email address',
+  'account.email.warning':
+    "After the change we'll sign you out on every device and you'll have to sign in with the new address. That's why we ask for it twice — a typo cannot be undone.",
   'account.error.load': 'Could not load your account details. {detail}',
   'account.loading': 'Loading account details…',
   'account.password.link': 'Change password',
@@ -509,6 +521,8 @@ export const en: Dictionary = {
   'auth.forgot.subtitle':
     'Enter your email and we will send you a link to set a new password',
   'auth.forgot.title': 'Forgot your password?',
+  'auth.login.emailChanged':
+    'Your account email address has been changed. Sign in with the new address and your existing password.',
   'auth.login.forgotLink': 'Forgot your password?',
   'auth.login.noAccount': "Don't have an account?",
   'auth.login.registerLink': 'Sign up',
@@ -886,7 +900,10 @@ export const en: Dictionary = {
   'validation.confirmPassword.mismatch': 'Passwords must match',
   'validation.currentPassword.required': 'Current password is required',
   'validation.email.invalid': 'Enter a valid email address',
+  'validation.email.mismatch': 'The email addresses must match',
   'validation.email.required': 'Email is required',
+  'validation.email.sameAsCurrent':
+    'The new address must differ from the current one',
   'validation.email.taken': 'An account with this email already exists',
   'validation.firstName.required': 'First name is required',
   'validation.firstName.tooLong': 'First name can be at most {max} characters',

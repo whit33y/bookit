@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { apply, form, required } from '@angular/forms/signals';
-import { AuthStore } from '../../core/auth/auth-store';
+import { AuthStore, EMAIL_CHANGED_NOTICE } from '../../core/auth/auth-store';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import { translate } from '../../core/i18n/translate';
 import AppFormField, {
@@ -21,6 +21,17 @@ import AppFormField, {
         <p class="mt-1 text-sm text-stone-500">
           {{ i18n.t('auth.login.subtitle') }}
         </p>
+
+        @if (emailChanged) {
+          <!-- użytkownik nie kliknął „Wyloguj": trafił tu, bo zmienił login (#168). Bez tego
+               zdania samo wylogowanie wygląda jak awaria sesji. -->
+          <p
+            role="status"
+            class="mt-4 rounded-lg bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700"
+          >
+            {{ i18n.t('auth.login.emailChanged') }}
+          </p>
+        }
 
         @if (serverError(); as msg) {
           <p role="alert" class="alert-danger mt-4">
@@ -85,9 +96,14 @@ export default class Login {
 
   /** Cel powrotu po zalogowaniu — snapshot wystarczy, bo /login nie zmienia query paramów
    *  w trakcie życia komponentu. Walidację adresu robi AuthStore (safeReturnUrl). */
-  protected readonly returnUrl = inject(ActivatedRoute).snapshot.queryParamMap.get(
-    'returnUrl',
-  );
+  private readonly params = inject(ActivatedRoute).snapshot.queryParamMap;
+  protected readonly returnUrl = this.params.get('returnUrl');
+
+  /** Powód wylogowania przyniesiony w `?notice=` przez ustawienia konta (#168). Snapshot z tych
+   *  samych powodów co `returnUrl`; treść bierze `i18n.t`, więc przełączenie języka na tym
+   *  ekranie ją tłumaczy. */
+  protected readonly emailChanged =
+    this.params.get('notice') === EMAIL_CHANGED_NOTICE;
 
   protected readonly model = signal({ email: '', password: '' });
   protected readonly serverError = signal<string | null>(null);

@@ -1,7 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CHANGE_PASSWORD_PATH } from '../core/auth/auth-store';
+import { AuthStore, CHANGE_PASSWORD_PATH } from '../core/auth/auth-store';
 import { I18nStore } from '../core/i18n/i18n-store';
+import EmailAddress, { canChangeEmail } from './email-address';
 import PersonalDetails from './personal-details';
 import ProfilePhoto from './profile-photo';
 
@@ -16,12 +17,16 @@ import ProfilePhoto from './profile-photo';
  *
  * Hasło jest tu tylko wejściem na istniejący `/change-password` (do #162 nie prowadził tam
  * żaden link) — drugiej kopii formularza nie stawiamy, bo rozjechałaby się przy pierwszej
- * poprawce. „Zdjęcie profilowe" (#164) stoi między danymi osobowymi a hasłem; sekcja „Adres
- * e-mail" dojdzie osobnym zadaniem, w to samo miejsce.
+ * poprawce. „Zdjęcie profilowe" (#164) stoi między danymi osobowymi a hasłem.
+ *
+ * „Adres e-mail" (#168) jest ostatni i jedyny warunkowy: pracownik i administrator go nie
+ * dostają, bo zmiany loginu nie ma dla nich w API (ADR-0003). Sekcji **nie ma** dla tych ról,
+ * zamiast przycisku, który kończyłby się `403` — obietnica czynności, której nie da się
+ * wykonać, jest gorsza niż jej brak.
  */
 @Component({
   selector: 'app-account-settings',
-  imports: [PersonalDetails, ProfilePhoto, RouterLink],
+  imports: [EmailAddress, PersonalDetails, ProfilePhoto, RouterLink],
   template: `
     <div class="flex flex-1 items-center justify-center px-4 py-8">
       <section
@@ -46,12 +51,26 @@ import ProfilePhoto from './profile-photo';
             {{ i18n.t('account.password.link') }}
           </a>
         </section>
+
+        @if (canChangeEmail()) {
+          <app-email-address
+            class="mt-10 block border-t border-stone-200 pt-8"
+          />
+        }
       </section>
     </div>
   `,
 })
 export default class AccountSettings {
+  private readonly auth = inject(AuthStore);
   protected readonly i18n = inject(I18nStore);
+
+  /** Rola z access tokenu, nie z profilu: profil pobiera się cicho i może nie wrócić, a wtedy
+   *  sekcja zniknęłaby klientowi, który ma do niej prawo. Token jest na miejscu od pierwszej
+   *  klatki i to on decyduje o dostępie w API. */
+  protected readonly canChangeEmail = computed(() =>
+    canChangeEmail(this.auth.user()?.role),
+  );
   /** Ta sama stała, z której korzystają guard i interceptor — jeden adres ekranu zmiany hasła. */
   protected readonly changePasswordPath = CHANGE_PASSWORD_PATH;
 }

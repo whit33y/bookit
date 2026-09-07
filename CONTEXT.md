@@ -111,7 +111,9 @@ _Unikaj_: placeholder, awatar zastępczy, inicjały
 ### Konto użytkownika
 
 **Ustawienia konta**:
-Miejsce, w którym zalogowany zarządza sobą: dane osobowe, zdjęcie profilowe, hasło i adres
-e-mail (`/account`, każda rola). Odróżnia się od ustawień firmy (`/business/settings`), gdzie
-właściciel zarządza firmą — właściciel ma jedno i drugie.
+Miejsce, w którym zalogowany zarządza sobą: dane osobowe, zdjęcie profilowe i hasło
+(`/account`, każda rola), a klient i właściciel także adres e-mail — pracownik i administrator
+tej sekcji nie mają, bo ich adres jest tożsamością nadaną przez organizację (ADR-0003).
+Odróżnia się od ustawień firmy (`/business/settings`), gdzie właściciel zarządza firmą —
+właściciel ma jedno i drugie.
 _Unikaj_: profil, ustawienia użytkownika, moje konto
