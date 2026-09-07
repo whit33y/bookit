@@ -29,7 +29,7 @@ const booking: CalendarBooking = {
   endsAt: '2026-08-12T08:30:00Z',
   status: 'CONFIRMED',
   clientNote: 'Proszę o przypomnienie SMS',
-  client: { firstName: 'Jan', lastName: 'Kowalski', phone: '600100200' },
+  client: { id: 'u1', avatarVersion: null, firstName: 'Jan', lastName: 'Kowalski', phone: '600100200' },
   service: {
     id: 's1',
     name: 'Strzyżenie',

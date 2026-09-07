@@ -5,10 +5,13 @@ import { ApiClient, apiErrorMessage } from '../../core/api-client';
 import { I18nStore } from '../../core/i18n/i18n-store';
 import { AuthStore } from '../../core/auth/auth-store';
 import { formatDateTime } from '../../shared/business-time';
+import { personMonogram } from '../../shared/monogram';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import EmptyState from '../../shared/ui/empty-state';
 import ErrorState from '../../shared/ui/error-state';
 import LoadingState from '../../shared/ui/loading-state';
+import UserPhoto from '../../shared/ui/user-photo';
+import { profilePhotoUrl } from '../../shared/user-image';
 import { CalendarBooking } from '../calendar/booking-details-dialog';
 import { mineBookingsUrl } from '../mine-bookings';
 import { PendingCountStore, pendingRange } from '../pending-count-store';
@@ -18,7 +21,7 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
  *  (pendingRange()) i filtrujemy PENDING po stronie klienta — bez zmian backendu. */
 @Component({
   selector: 'app-pending-bookings',
-  imports: [PricePlnPipe, LoadingState, ErrorState, EmptyState],
+  imports: [PricePlnPipe, LoadingState, ErrorState, EmptyState, UserPhoto],
   template: `
     <div class="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 class="text-xl font-bold tracking-tight sm:text-2xl">
@@ -46,10 +49,19 @@ import { PendingCountStore, pendingRange } from '../pending-count-store';
               </div>
 
               <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
-                <dt class="font-semibold text-stone-600">
+                <dt class="self-center font-semibold text-stone-600">
                   {{ i18n.t('bookingDetails.field.client') }}
                 </dt>
-                <dd class="font-medium">{{ b.client.firstName }} {{ b.client.lastName }}</dd>
+                <dd class="flex min-w-0 items-center gap-2 font-medium">
+                  <app-user-photo
+                    class="h-9 w-9 rounded-full bg-brand-50 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-200"
+                    [src]="photo(b.client)"
+                    [monogram]="monogram(b.client.firstName, b.client.lastName)"
+                  />
+                  <span class="min-w-0 break-words">
+                    {{ b.client.firstName }} {{ b.client.lastName }}
+                  </span>
+                </dd>
                 @if (b.client.phone; as phone) {
                   <dt class="font-semibold text-stone-600">
                     {{ i18n.t('bookingDetails.field.phone') }}
@@ -166,6 +178,15 @@ export default class PendingBookings {
   private readonly pendingCountStore = inject(PendingCountStore);
 
   protected readonly formatDateTime = formatDateTime;
+
+  /** Zdjęcie profilowe klienta albo `null` — wtedy kafelek rysuje monogram (#166). Firma
+   *  rozpoznaje po nim stałego klienta, zanim przeczyta imię. */
+  protected readonly photo = profilePhotoUrl;
+
+  /** Inicjały z imienia i nazwiska — panel firmy widzi jedno i drugie, więc monogram liczy
+   *  się z pełnych danych, a nie z podpisu jak przy recenzjach. */
+  protected readonly monogram = personMonogram;
+
   protected readonly isOwner = computed(
     () => this.authStore.user()?.role === 'OWNER',
   );

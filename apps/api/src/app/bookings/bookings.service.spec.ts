@@ -1794,6 +1794,18 @@ describe('BookingsService — kalendarz firmy (#31)', () => {
     });
   });
 
+  // #166: lista oczekujących rezerwacji pokazuje zdjęcie profilowe klienta, a front nie ma
+  // z czego złożyć adresu `GET /users/:id/avatar`, jeśli para (id, wersja) nie przyjdzie
+  // razem z rezerwacją. Telefon i nazwisko zostają — panel firmy dostaje je od #31.
+  it('dane klienta niosą id i avatarVersion pod zdjęcie profilowe', async () => {
+    await service.findForBusiness(ownerUser, query());
+
+    expect(bookingFindMany.mock.calls[0][0].select.client.select).toMatchObject({
+      id: true,
+      avatarVersion: true,
+    });
+  });
+
   it('OWNER + employeeId: zawęża where do wskazanego pracownika', async () => {
     await service.findForBusiness(
       ownerUser,

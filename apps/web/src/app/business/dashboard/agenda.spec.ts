@@ -19,7 +19,7 @@ function mkBooking(overrides: Partial<CalendarBooking> = {}): CalendarBooking {
     endsAt: '2026-08-31T11:30:00.000Z',
     status: 'CONFIRMED',
     clientNote: null,
-    client: { firstName: 'Jan', lastName: 'Kowalski', phone: null },
+    client: { id: 'u1', avatarVersion: null, firstName: 'Jan', lastName: 'Kowalski', phone: null },
     service: {
       id: 's1',
       name: 'Strzyżenie',

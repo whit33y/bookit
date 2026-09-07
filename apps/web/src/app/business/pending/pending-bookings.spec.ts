@@ -33,7 +33,7 @@ function mkBooking(overrides: Partial<CalendarBooking> = {}): CalendarBooking {
     endsAt: '2026-08-12T08:30:00Z',
     status: 'PENDING',
     clientNote: null,
-    client: { firstName: 'Jan', lastName: 'Kowalski', phone: '600100200' },
+    client: { id: 'u1', avatarVersion: null, firstName: 'Jan', lastName: 'Kowalski', phone: '600100200' },
     service: {
       id: 's1',
       name: 'Strzyżenie',
@@ -104,6 +104,40 @@ describe('PendingBookings', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Brak oczekujących rezerwacji');
+  });
+
+  // #166: przy rozpatrywaniu rezerwacji firma najpierw rozpoznaje twarz, potem czyta imię
+  it('klient ze zdjęciem profilowym dostaje je przy swojej rezerwacji, z wersją w adresie', async () => {
+    const { fixture, http } = setup();
+    bookingsReq(http).flush([
+      mkBooking({
+        client: {
+          id: 'u7',
+          avatarVersion: 'abc123',
+          firstName: 'Jan',
+          lastName: 'Kowalski',
+          phone: null,
+        },
+      }),
+    ]);
+    await tick();
+    fixture.detectChanges();
+
+    const photo = fixture.nativeElement.querySelector('app-user-photo img');
+    expect(photo?.getAttribute('src')).toBe('/api/users/u7/avatar?v=abc123');
+    // imię i nazwisko stoi w tym samym wierszu, więc obraz nie ma czytnikowi co dodać
+    expect(photo?.getAttribute('alt')).toBe('');
+  });
+
+  it('klient bez zdjęcia dostaje monogram z imienia i nazwiska', async () => {
+    const { fixture, http } = setup();
+    bookingsReq(http).flush([mkBooking()]);
+    await tick();
+    fixture.detectChanges();
+
+    const tile = fixture.nativeElement.querySelector('app-user-photo')!;
+    expect(tile.querySelector('img')).toBeNull();
+    expect(tile.textContent?.trim()).toBe('JK');
   });
 
   it('EMPLOYEE widzi listę bez przycisków akcji', async () => {
