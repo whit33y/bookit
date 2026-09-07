@@ -35,7 +35,15 @@ export interface CalendarBooking {
   endsAt: string;
   status: BookingStatus;
   clientNote: string | null;
-  client: { firstName: string; lastName: string; phone: string | null };
+  /** `id` i `avatarVersion` adresują zdjęcie profilowe klienta (#166) — potrzebuje ich lista
+   *  oczekujących rezerwacji; kalendarz i to okno zostają bez zdjęć, bo są gęste. */
+  client: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string | null;
+    avatarVersion: string | null;
+  };
   service: {
     id: string;
     name: string;

@@ -137,7 +137,20 @@ const businessBookingSelect = {
   endsAt: true,
   status: true,
   clientNote: true,
-  client: { select: { firstName: true, lastName: true, phone: true } },
+  // `id` i `avatarVersion` niosą zdjęcie profilowe klienta na listę oczekujących rezerwacji
+  // (#166) — front składa z tej pary adres `GET /users/:id/avatar` (ADR-0001), a `null`
+  // w wersji znaczy „konto bez zdjęcia", czyli monogram z imienia i nazwiska. Para jedzie
+  // wyłącznie tą trasą, do firmy, która ma tę rezerwację rozpatrzyć; odpowiedzi dla klienta
+  // (`clientBookingSelect`) nie wożą klienta wcale, bo to zawsze pytający.
+  client: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      avatarVersion: true,
+    },
+  },
   service: { select: serviceClientFields },
   employee: { select: { id: true, name: true } },
   // firma widzi w kalendarzu, czy zaliczka wpłynęła — nieopłaconej rezerwacji i tak
