@@ -117,3 +117,12 @@ tej sekcji nie mają, bo ich adres jest tożsamością nadaną przez organizacj�
 Odróżnia się od ustawień firmy (`/business/settings`), gdzie właściciel zarządza firmą —
 właściciel ma jedno i drugie.
 _Unikaj_: profil, ustawienia użytkownika, moje konto
+
+### Ulubione
+
+**Ulubiona firma**:
+Firma oznaczona przez klienta sercem — na jej profilu albo w wynikach wyszukiwarki — żeby wrócić
+do niej bez szukania od nowa. Lista mieszka pod `/client/favorites`, porządkuje ją moment dodania.
+Relacja jest prywatna i jednostronna: firma nie wie, kto ją oznaczył ani ile osób to zrobiło.
+Ma ją wyłącznie rola CLIENT — pozostałe role nie widzą serca, a zmiana roli kasuje listę.
+_Unikaj_: polubienie, obserwowana firma, zapisana firma
