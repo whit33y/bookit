@@ -18,6 +18,7 @@ describe('EmployeesService', () => {
   let create: ReturnType<typeof vi.fn>;
   let update: ReturnType<typeof vi.fn>;
   let remove: ReturnType<typeof vi.fn>;
+  let favoriteDeleteMany: ReturnType<typeof vi.fn>;
   let prisma: {
     business: { findUnique: typeof businessFindUnique };
     user: { findUnique: typeof userFindUnique; update: typeof userUpdate };
@@ -28,6 +29,7 @@ describe('EmployeesService', () => {
       update: typeof update;
       delete: typeof remove;
     };
+    favoriteBusiness: { deleteMany: typeof favoriteDeleteMany };
     $transaction: ReturnType<typeof vi.fn>;
   };
   let service: EmployeesService;
@@ -41,10 +43,12 @@ describe('EmployeesService', () => {
     create = vi.fn();
     update = vi.fn();
     remove = vi.fn();
+    favoriteDeleteMany = vi.fn().mockResolvedValue({ count: 2 });
     prisma = {
       business: { findUnique: businessFindUnique },
       user: { findUnique: userFindUnique, update: userUpdate },
       employee: { findMany, findFirst, create, update, delete: remove },
+      favoriteBusiness: { deleteMany: favoriteDeleteMany },
       // tx = ten sam mock, wykonujemy callback od razu
       $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
@@ -92,6 +96,24 @@ describe('EmployeesService', () => {
       where: { id: 'u1' },
       data: { role: UserRole.EMPLOYEE },
     });
+  });
+
+  it('create z email CLIENT kasuje jego ulubione w tej samej transakcji', async () => {
+    userFindUnique.mockResolvedValue({ id: 'u1', role: UserRole.CLIENT });
+    create.mockResolvedValue({ id: 'e1' });
+
+    await service.create('user-1', { name: 'Anna', email: 'a@b.pl' });
+
+    // ulubione ma wyłącznie CLIENT (ADR-0004); odpięcie przywróci rolę, ale nie listę
+    expect(favoriteDeleteMany.mock.calls[0][0]).toEqual({ where: { userId: 'u1' } });
+  });
+
+  it('create bez email nie rusza niczyich ulubionych', async () => {
+    create.mockResolvedValue({ id: 'e1' });
+
+    await service.create('user-1', { name: 'Anna' });
+
+    expect(favoriteDeleteMany).not.toHaveBeenCalled();
   });
 
   it('create z nieistniejącym email → 400', async () => {
@@ -169,6 +191,27 @@ describe('EmployeesService', () => {
       where: { id: 'u1' },
       data: { role: UserRole.CLIENT },
     });
+  });
+
+  it('update z email kasuje ulubione nowo przypiętego, a nie odpiętego', async () => {
+    findFirst.mockResolvedValue({ id: 'e1', userId: 'u1' });
+    userFindUnique.mockResolvedValue({ id: 'u2', role: UserRole.CLIENT });
+    update.mockResolvedValue({ id: 'e1' });
+
+    await service.update('user-1', 'e1', { email: 'nowy@b.pl' });
+
+    // u1 wraca do CLIENT-a: dostaje ulubione z powrotem, więc nie ma czego kasować
+    expect(favoriteDeleteMany).toHaveBeenCalledTimes(1);
+    expect(favoriteDeleteMany.mock.calls[0][0]).toEqual({ where: { userId: 'u2' } });
+  });
+
+  it('update bez email nie rusza ulubionych', async () => {
+    findFirst.mockResolvedValue({ id: 'e1', userId: null });
+    update.mockResolvedValue({ id: 'e1', name: 'Nowe' });
+
+    await service.update('user-1', 'e1', { name: 'Nowe' });
+
+    expect(favoriteDeleteMany).not.toHaveBeenCalled();
   });
 
   it('remove z rezerwacjami → dezaktywacja (isActive:false), bez delete, rola zostaje', async () => {

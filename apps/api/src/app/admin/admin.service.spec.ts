@@ -25,6 +25,7 @@ describe('AdminService', () => {
   let userCount: ReturnType<typeof vi.fn>;
   let userCreate: ReturnType<typeof vi.fn>;
   let userUpdateMany: ReturnType<typeof vi.fn>;
+  let favoriteDeleteMany: ReturnType<typeof vi.fn>;
   let events: { approved: ReturnType<typeof vi.fn>; rejected: ReturnType<typeof vi.fn> };
   let service: AdminService;
 
@@ -62,6 +63,7 @@ describe('AdminService', () => {
       .fn()
       .mockImplementation(({ data }) => Promise.resolve({ id: 'u2', ...data }));
     userUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+    favoriteDeleteMany = vi.fn().mockResolvedValue({ count: 2 });
     const prisma = {
       business: {
         findMany: businessFindMany,
@@ -77,6 +79,7 @@ describe('AdminService', () => {
         create: userCreate,
         updateMany: userUpdateMany,
       },
+      favoriteBusiness: { deleteMany: favoriteDeleteMany },
       // transakcja bez bazy: callback dostaje ten sam klient, więc test sprawdza kolejność
       // i argumenty zapisów, a atomowość zostaje po stronie Prismy
       $transaction: vi.fn(),
@@ -272,6 +275,23 @@ describe('AdminService', () => {
         where: { id: OWNER_ID, role: UserRole.CLIENT },
         data: { role: UserRole.OWNER },
       });
+    });
+
+    it('approve kasuje ulubione zgłaszającego w tej samej transakcji co awans', async () => {
+      await service.approve(BUSINESS_ID);
+
+      // ulubione ma wyłącznie CLIENT (ADR-0004), a konto właśnie przestało nim być
+      expect(favoriteDeleteMany.mock.calls[0][0]).toEqual({ where: { userId: OWNER_ID } });
+      // po awansie, nie przed: kolejność w jednym callbacku transakcji
+      expect(userUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        favoriteDeleteMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('reject nie rusza ulubionych — zgłaszający zostaje klientem', async () => {
+      await service.reject(BUSINESS_ID, { reason: 'brak danych' });
+
+      expect(favoriteDeleteMany).not.toHaveBeenCalled();
     });
 
     it('reject zapisuje powód i nie rusza roli użytkownika', async () => {

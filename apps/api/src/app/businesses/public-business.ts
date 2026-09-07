@@ -18,3 +18,17 @@ export const publicBusinessWhere = {
  * więc indeks `Business_status_idx` nadal się liczy.
  */
 export const publicBusinessSql = Prisma.sql`b."isBlocked" = false AND b."status" = ${BusinessStatus.APPROVED}::"BusinessStatus"`;
+
+/**
+ * Ten sam warunek policzony na już wczytanym wierszu. Potrzebuje go lista ulubionych (#181):
+ * pokazuje również firmy, które przestały działać, wyszarzone — więc nie filtruje przez
+ * `publicBusinessWhere`, ale musi powiedzieć frontowi to samo, co ten predykat.
+ * Czyta wartości z `publicBusinessWhere`, a nie własne literały: „firma działająca" zostaje
+ * jednym pojęciem, które da się zmienić w jednym miejscu.
+ */
+export const isBusinessAvailable = (business: {
+  isBlocked: boolean;
+  status: BusinessStatus;
+}) =>
+  business.isBlocked === publicBusinessWhere.isBlocked &&
+  business.status === publicBusinessWhere.status;

@@ -10,6 +10,7 @@ import { BookingsModule } from './bookings/bookings.module';
 import { BusinessesModule } from './businesses/businesses.module';
 import { CategoriesModule } from './categories/categories.module';
 import { EmployeesModule } from './employees/employees.module';
+import { FavoritesModule } from './favorites/favorites.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -33,6 +34,7 @@ import { WorkingHoursModule } from './working-hours/working-hours.module';
     BusinessesModule,
     ServicesModule,
     EmployeesModule,
+    FavoritesModule,
     WorkingHoursModule,
     TimeOffsModule,
     AvailabilityModule,

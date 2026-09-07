@@ -1,6 +1,10 @@
 import { BusinessStatus } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
-import { publicBusinessSql, publicBusinessWhere } from './public-business';
+import {
+  isBusinessAvailable,
+  publicBusinessSql,
+  publicBusinessWhere,
+} from './public-business';
 
 describe('publicBusinessWhere / publicBusinessSql', () => {
   it('wpuszcza wyłącznie firmę zaakceptowaną i niezablokowaną', () => {
@@ -18,5 +22,28 @@ describe('publicBusinessWhere / publicBusinessSql', () => {
     expect(publicBusinessSql.sql).toContain('"status"');
     expect(publicBusinessSql.sql).toContain('::"BusinessStatus"');
     expect(publicBusinessSql.values).toEqual([BusinessStatus.APPROVED]);
+  });
+
+  // Trzeci zapis tego samego warunku, tym razem na wczytanym wierszu — potrzebuje go
+  // `isAvailable` na liście ulubionych (#181). Czyta wartości z predykatu, więc test pilnuje
+  // nie literałów, a tego, że firma niedziałająca nie przechodzi na żadnej z dwóch osi.
+  describe('isBusinessAvailable', () => {
+    it('zaakceptowana i niezablokowana działa', () => {
+      expect(
+        isBusinessAvailable({ isBlocked: false, status: BusinessStatus.APPROVED }),
+      ).toBe(true);
+    });
+
+    it('zablokowana albo niezaakceptowana nie działa', () => {
+      expect(
+        isBusinessAvailable({ isBlocked: true, status: BusinessStatus.APPROVED }),
+      ).toBe(false);
+      expect(
+        isBusinessAvailable({ isBlocked: false, status: BusinessStatus.PENDING }),
+      ).toBe(false);
+      expect(
+        isBusinessAvailable({ isBlocked: false, status: BusinessStatus.REJECTED }),
+      ).toBe(false);
+    });
   });
 });
