@@ -635,6 +635,14 @@ export const en: Dictionary = {
   'deposit.payment.unknownError':
     'We could not collect the deposit — please try again.',
 
+  // ── Ulubione firmy (client/favorites) ───────────────────────────────
+  'favorites.empty.searchLink': 'Find a business in search',
+  'favorites.empty.title': 'You have no favorite businesses yet.',
+  'favorites.loading': 'Loading favorites…',
+  'favorites.remove': 'Remove from favorites — {name}',
+  'favorites.title': 'Favorite businesses',
+  'favorites.unavailable': 'This business is currently unavailable',
+
   // ── Przełącznik języka (shared/i18n/language-switcher) ──────────────
   'language.groupLabel': 'Język / Language',
 
@@ -750,6 +758,7 @@ export const en: Dictionary = {
   'nav.accountSettings': 'Account settings',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Business panel',
+  'nav.favorites': 'Favorites',
   'nav.home': 'Home',
   'nav.login': 'Sign in',
   'nav.logout': 'Sign out',

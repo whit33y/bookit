@@ -9,6 +9,13 @@ interface NavItem {
   label: string;
   /** Liczba oczekujących przy „Panelu firmy" (#33); zero i brak znaczą to samo — bez plakietki. */
   badge?: number;
+  /**
+   * Podświetlenie tylko na dokładnej ścieżce. Potrzebne przy „Moich wizytach" od kiedy pod
+   * `/client` siedzi drugi link nawigacji (`/client/favorites`, #183): domyślne dopasowanie
+   * po prefiksie zapaliłoby na liście ulubionych obie pozycje i dało dwa `aria-current`.
+   * Panel firmy i admina zostają nieścisłe — ich podstrony mają podświetlać rodzica.
+   */
+  exact?: boolean;
 }
 
 /**
@@ -33,6 +40,7 @@ interface NavItem {
         <a
           [routerLink]="item.path"
           routerLinkActive=""
+          [routerLinkActiveOptions]="{ exact: !!item.exact }"
           #link="routerLinkActive"
           [class]="link.isActive ? activeLink : inactiveLink"
           [attr.aria-current]="link.isActive ? 'page' : null"
@@ -70,8 +78,13 @@ export default class NavLinks {
     }
 
     const items: NavItem[] = [
-      { path: '/client', label: this.i18n.t('nav.myBookings') },
+      { path: '/client', label: this.i18n.t('nav.myBookings'), exact: true },
     ];
+    // ulubione ma wyłącznie klient (#183) — nie w menu użytkownika, bo tam prowadzą
+    // ustawienia konta, czyli zarządzanie sobą, a ulubione to treść klienta
+    if (role === 'CLIENT') {
+      items.push({ path: '/client/favorites', label: this.i18n.t('nav.favorites') });
+    }
     if (role === 'OWNER' || role === 'EMPLOYEE') {
       items.push({
         path: '/business',

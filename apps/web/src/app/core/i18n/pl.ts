@@ -630,6 +630,14 @@ export const pl = {
   'deposit.payment.title': '4. Zapłać zaliczkę',
   'deposit.payment.unknownError': 'Nie udało się pobrać zaliczki — spróbuj ponownie.',
 
+  // ── Ulubione firmy (client/favorites) ───────────────────────────────
+  'favorites.empty.searchLink': 'Znajdź firmę w wyszukiwarce',
+  'favorites.empty.title': 'Nie masz jeszcze ulubionych firm.',
+  'favorites.loading': 'Wczytuję ulubione…',
+  'favorites.remove': 'Usuń z ulubionych — {name}',
+  'favorites.title': 'Ulubione firmy',
+  'favorites.unavailable': 'Ta firma jest obecnie niedostępna',
+
   // ── Przełącznik języka (shared/i18n/language-switcher) ──────────────
   'language.groupLabel': 'Język / Language',
 
@@ -743,6 +751,7 @@ export const pl = {
   'nav.accountSettings': 'Ustawienia konta',
   'nav.admin': 'Admin',
   'nav.businessPanel': 'Panel firmy',
+  'nav.favorites': 'Ulubione',
   'nav.home': 'Strona główna',
   'nav.login': 'Zaloguj',
   'nav.logout': 'Wyloguj',
