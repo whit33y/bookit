@@ -8,6 +8,7 @@ import { BOOKING_EVENT_RECIPIENT, BookingEvent } from './templates/booking-event
 import { renderBookingEmail } from './templates/booking.template';
 import { BusinessApplicationDecision } from './templates/business-application';
 import { renderBusinessApplicationEmail } from './templates/business-application.template';
+import { renderEmailChangedEmail } from './templates/email-changed.template';
 import { renderBusinessApplicationNotification } from './templates/notification.template';
 import { renderPasswordResetEmail } from './templates/password-reset.template';
 
@@ -239,6 +240,34 @@ export class NotificationsService {
       business.owner.id,
       `${decision} dla zgłoszenia ${businessId}`,
     );
+  }
+
+  /**
+   * Zmiana adresu e-mail konta (#167) — wiadomość idzie na **stary** adres, bo to on właśnie
+   * przestał być loginem.
+   *
+   * **Nigdy nie odrzuca**, jak powiadomienia rezerwacji: adres jest już zapisany, sesje
+   * skasowane, a tego się nie cofa — padnięty SMTP nie może zamienić udanej zmiany w błąd.
+   */
+  async emailChanged(
+    previousEmail: string,
+    firstName: string,
+    newEmail: string,
+  ): Promise<void> {
+    try {
+      const message = renderEmailChangedEmail(
+        firstName,
+        newEmail,
+        this.config.getOrThrow<string>('APP_URL'),
+      );
+      await this.mail.send({ to: previousEmail, ...message });
+      this.logger.log('Powiadomienie o zmianie adresu e-mail wysłane');
+    } catch (e) {
+      this.logger.error(
+        'Nie udało się wysłać powiadomienia o zmianie adresu e-mail',
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
   }
 
   /** Link resetu hasła (#4) — w przeciwieństwie do powiadomień rezerwacji rzuca przy błędzie. */

@@ -43,3 +43,16 @@ export const emailShell = (
 /** Akapit oprawy — jedyny znacznik, którego potrzebują oba szablony poza tabelką. */
 export const emailParagraph = (text: string): string =>
   `<p style="margin:0 0 16px;">${escapeHtml(text)}</p>`;
+
+/**
+ * Tekstowy odpowiednik `emailShell` — ta sama kolejność (nagłówek, treść, link, podpis), więc
+ * obie wersje wiadomości zmieniają się razem. Bez tego zmiana stopki oznaczałaby obejście
+ * wszystkich szablonów po kolei.
+ */
+export const emailPlainText = (
+  heading: string,
+  paragraphs: string[],
+  cta: string,
+  ctaUrl: string,
+): string =>
+  [heading, '', ...paragraphs, '', `${cta}: ${ctaUrl}`, '', '— BookIt'].join('\n');

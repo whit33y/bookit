@@ -3,7 +3,7 @@ import {
   BusinessApplicationData,
   BusinessApplicationDecision,
 } from './business-application';
-import { RenderedEmail, emailParagraph, emailShell } from './email';
+import { RenderedEmail, emailParagraph, emailPlainText, emailShell } from './email';
 
 // Ta sama oprawa co w mailach o rezerwacjach, ale bez tabelki: decyzja o zgłoszeniu nie ma
 // pól do wyliczenia — liczy się rozstrzygnięcie i, przy odrzuceniu, powód.
@@ -13,13 +13,6 @@ const renderHtml = (
   cta: string,
   ctaUrl: string,
 ): string => emailShell(heading, paragraphs.map(emailParagraph).join(''), cta, ctaUrl);
-
-const renderText = (
-  heading: string,
-  paragraphs: string[],
-  cta: string,
-  ctaUrl: string,
-): string => [heading, '', ...paragraphs, '', `${cta}: ${ctaUrl}`, '', '— BookIt'].join('\n');
 
 /**
  * Mail o decyzji administratora w sprawie zgłoszenia firmy (#143). Czysta funkcja, jak
@@ -43,7 +36,7 @@ export const renderBusinessApplicationEmail = (
     cta: string,
   ): RenderedEmail => ({
     subject,
-    text: renderText(heading, paragraphs, cta, ctaUrl),
+    text: emailPlainText(heading, paragraphs, cta, ctaUrl),
     html: renderHtml(heading, paragraphs, cta, ctaUrl),
   });
 

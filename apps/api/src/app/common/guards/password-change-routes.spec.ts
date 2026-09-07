@@ -21,6 +21,10 @@ describe('trasy dozwolone podczas wymuszonej zmiany hasła (#144)', () => {
     expect(allowed(UsersController.prototype, 'patchMe')).toBe(false);
   });
 
+  it('PATCH /users/me/email zostaje zamknięte — zmiana loginu nie jest wyjściem z flagi', () => {
+    expect(allowed(UsersController.prototype, 'patchMyEmail')).toBe(false);
+  });
+
   it('reszta panelu administratora zostaje zamknięta', () => {
     expect(allowed(AdminController.prototype, 'listUsers')).toBe(false);
     expect(allowed(AdminController.prototype, 'createUser')).toBe(false);
