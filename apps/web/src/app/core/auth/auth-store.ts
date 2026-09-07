@@ -49,6 +49,11 @@ export interface UserProfile {
 /** Ekran wymuszonej zmiany hasła (#146) — cel przekierowań z guarda i z interceptora. */
 export const CHANGE_PASSWORD_PATH = '/change-password';
 
+/** Znacznik w `?notice=` na `/login`, którym ustawienia konta mówią ekranowi logowania, że
+ *  wylogowanie było skutkiem zmiany adresu e-mail (#168), a nie awarią sesji. Stała, bo piszą
+ *  ją ustawienia konta, a czyta logowanie. */
+export const EMAIL_CHANGED_NOTICE = 'email-changed';
+
 /** Strona domowa dla roli — jedno miejsce, z którego czytają wszystkie ścieżki wyboru celu
  *  (redirect po zalogowaniu, guestGuard, skrót w menu konta).
  *
@@ -212,6 +217,23 @@ export class AuthStore {
   logout(): void {
     this.clearTokens();
     this.router.navigate(['/login']);
+  }
+
+  /**
+   * Domknięcie zmiany adresu e-mail (#168). Odpowiedź `PATCH /users/me/email` nie zawiera nowej
+   * pary tokenów, a backend usunął w tej samej transakcji wszystkie refresh tokeny (ADR-0003):
+   * sesja jest już martwa po stronie serwera, więc jedyne, co daje trzymanie access tokenu, to
+   * ekrany sypiące się na pierwszym żądaniu.
+   *
+   * Osobno od `logout()`, mimo identycznego skutku: to nie decyzja o wyjściu, tylko następstwo
+   * zmiany loginu, więc `/login` musi powiedzieć, dlaczego użytkownik tam trafił — inaczej
+   * wylogowanie wygląda jak awaria.
+   */
+  async finishEmailChange(): Promise<void> {
+    this.clearTokens();
+    await this.router.navigate(['/login'], {
+      queryParams: { notice: EMAIL_CHANGED_NOTICE },
+    });
   }
 
   /** Sesja padła w tle (refresh odrzucony), a nie na życzenie użytkownika — zapamiętujemy

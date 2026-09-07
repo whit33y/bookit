@@ -30,6 +30,18 @@ export const pl = {
   'api.error.validation': 'Przesłane dane są nieprawidłowe.',
 
   // ── Ustawienia konta (account/) ─────────────────────────────────────
+  'account.email.confirm': 'Powtórz nowy adres e-mail',
+  'account.email.current': 'Obecny adres:',
+  'account.email.error.password': 'Nieprawidłowe obecne hasło',
+  'account.email.error.taken': 'Ten adres e-mail należy już do innego konta',
+  'account.email.new': 'Nowy adres e-mail',
+  'account.email.submit': 'Zmień adres e-mail',
+  'account.email.submitting': 'Zmienianie…',
+  'account.email.subtitle':
+    'Adres e-mail jest jednocześnie loginem — zmiana wchodzi od razu, po podaniu obecnego hasła.',
+  'account.email.title': 'Adres e-mail',
+  'account.email.warning':
+    'Po zmianie wylogujemy Cię ze wszystkich urządzeń i trzeba będzie zalogować się nowym adresem. Dlatego prosimy o niego dwa razy — literówki nie da się cofnąć.',
   'account.error.load': 'Nie udało się wczytać danych konta. {detail}',
   'account.loading': 'Ładowanie danych konta…',
   'account.password.link': 'Zmień hasło',
@@ -508,6 +520,8 @@ export const pl = {
   'auth.forgot.submitting': 'Wysyłanie…',
   'auth.forgot.subtitle': 'Podaj email, a wyślemy Ci link do ustawienia nowego hasła',
   'auth.forgot.title': 'Nie pamiętasz hasła?',
+  'auth.login.emailChanged':
+    'Adres e-mail konta został zmieniony. Zaloguj się nowym adresem i dotychczasowym hasłem.',
   'auth.login.forgotLink': 'Nie pamiętasz hasła?',
   'auth.login.noAccount': 'Nie masz konta?',
   'auth.login.registerLink': 'Zarejestruj się',
@@ -876,7 +890,9 @@ export const pl = {
   'validation.confirmPassword.mismatch': 'Hasła muszą być takie same',
   'validation.currentPassword.required': 'Obecne hasło jest wymagane',
   'validation.email.invalid': 'Nieprawidłowy format adresu email',
+  'validation.email.mismatch': 'Adresy e-mail muszą być takie same',
   'validation.email.required': 'Email jest wymagany',
+  'validation.email.sameAsCurrent': 'Nowy adres musi różnić się od obecnego',
   'validation.email.taken': 'Konto z tym adresem email już istnieje',
   'validation.firstName.required': 'Imię jest wymagane',
   'validation.firstName.tooLong': 'Imię może mieć maksymalnie {max} znaków',

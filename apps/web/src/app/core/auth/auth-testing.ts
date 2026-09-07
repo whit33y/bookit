@@ -1,5 +1,5 @@
 import type { HttpTestingController } from '@angular/common/http/testing';
-import type { UserProfile } from './auth-store';
+import type { AuthUser, UserProfile } from './auth-store';
 
 /**
  * Pomocniki testowe do profilu, który `AuthStore` pobiera dla każdego zalogowanego (#161).
@@ -7,6 +7,24 @@ import type { UserProfile } from './auth-store';
  * Mieszkają obok store'u, a nie w spekach: żądanie leci z każdego zalogowanego kontekstu, więc
  * dotyka kilkunastu plików, które o profilu nic nie mówią.
  */
+
+/** Access token bez podpisu — `AuthStore` czyta wyłącznie payload, więc testowi wystarczy
+ *  poprawny base64 w środkowym segmencie. */
+export function fakeAccessToken(user: Partial<AuthUser> = {}): string {
+  const payload: AuthUser = {
+    sub: 'u1',
+    email: 'anna.kowalska@firma.pl',
+    role: 'CLIENT',
+    ...user,
+  };
+  return `header.${btoa(JSON.stringify(payload))}.signature`;
+}
+
+/** Zalogowanie testowego kontekstu: token w `localStorage`, tak jak po odtworzeniu sesji.
+ *  Rola bierze się właśnie stąd, więc ekrany zależne od roli ustawia się tą jedną funkcją. */
+export function signInAs(user: Partial<AuthUser> = {}): void {
+  localStorage.setItem('bookit.accessToken', fakeAccessToken(user));
+}
 
 /** Odpowiedź `GET /users/me` — pełny kształt kontraktu, testy nadpisują tylko to, co badają. */
 export function profileResponse(overrides: Partial<UserProfile> = {}): UserProfile {

@@ -7,7 +7,10 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { UserRole } from '../core/auth/auth-store';
+import { signInAs } from '../core/auth/auth-testing';
 import AccountSettings from './account';
+import EmailAddress from './email-address';
 import PersonalDetails from './personal-details';
 import ProfilePhoto from './profile-photo';
 
@@ -17,6 +20,9 @@ class PersonalDetailsStub {}
 
 @Component({ selector: 'app-profile-photo', template: '' })
 class ProfilePhotoStub {}
+
+@Component({ selector: 'app-email-address', template: '' })
+class EmailAddressStub {}
 
 describe('AccountSettings', () => {
   beforeEach(async () => {
@@ -30,8 +36,10 @@ describe('AccountSettings', () => {
       ],
     })
       .overrideComponent(AccountSettings, {
-        remove: { imports: [PersonalDetails, ProfilePhoto] },
-        add: { imports: [PersonalDetailsStub, ProfilePhotoStub] },
+        remove: { imports: [PersonalDetails, ProfilePhoto, EmailAddress] },
+        add: {
+          imports: [PersonalDetailsStub, ProfilePhotoStub, EmailAddressStub],
+        },
       })
       .compileComponents();
   });
@@ -49,6 +57,20 @@ describe('AccountSettings', () => {
     expect(el.querySelector('app-personal-details')).not.toBeNull();
     expect(el.querySelector('app-profile-photo')).not.toBeNull();
     expect(el.textContent).toContain('Hasło');
+  });
+
+  it('klient i właściciel dostają sekcję adresu e-mail', () => {
+    for (const role of ['CLIENT', 'OWNER'] satisfies UserRole[]) {
+      signInAs({ role });
+      expect(setup().querySelector('app-email-address')).not.toBeNull();
+    }
+  });
+
+  it('pracownik i administrator nie dostają sekcji adresu e-mail', () => {
+    for (const role of ['EMPLOYEE', 'ADMIN'] satisfies UserRole[]) {
+      signInAs({ role });
+      expect(setup().querySelector('app-email-address')).toBeNull();
+    }
   });
 
   it('sekcja „Hasło" prowadzi na istniejący ekran zmiany hasła', () => {
