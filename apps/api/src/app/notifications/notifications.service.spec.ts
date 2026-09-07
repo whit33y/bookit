@@ -263,4 +263,25 @@ describe('NotificationsService', () => {
       ).rejects.toThrow('SMTP down');
     });
   });
+
+  describe('emailChanged (#167)', () => {
+    it('pisze na stary adres, bo to on właśnie przestał być loginem', async () => {
+      await service.emailChanged('stary@example.com', 'Jan', 'nowy@example.com');
+
+      const message = send.mock.calls[0][0];
+      expect(message.to).toBe('stary@example.com');
+      expect(message.subject).toBe('Adres e-mail Twojego konta został zmieniony');
+      expect(message.text).toContain('nowy@example.com');
+    });
+
+    // jak powiadomienia rezerwacji, odwrotnie niż sendPasswordReset: adres jest już zapisany
+    // i sesje skasowane, więc padnięty SMTP nie może zamienić udanej zmiany w błąd
+    it('błąd wysyłki nie wychodzi na zewnątrz', async () => {
+      send.mockRejectedValue(new Error('SMTP down'));
+
+      await expect(
+        service.emailChanged('stary@example.com', 'Jan', 'nowy@example.com'),
+      ).resolves.toBeUndefined();
+    });
+  });
 });
