@@ -109,6 +109,23 @@ describe('Search', () => {
     expect(text.replace(/\s/g, ' ')).toContain('3,1 km');
   });
 
+  // #182: serce stoi na każdej karcie i jest osobnym przyciskiem, nie częścią linku do profilu
+  it('każda karta ma serce ulubionych poza linkiem do profilu', async () => {
+    const { fixture, http } = await setup({ city: 'Warszawa' });
+    http
+      .expectOne((r) => r.url.startsWith('/api/businesses?') && !r.url.includes('/mine'))
+      .flush(RESPONSE);
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const hearts = root.querySelectorAll('app-favorite-heart button');
+    expect(hearts).toHaveLength(2);
+    expect(hearts[0].getAttribute('aria-label')).toBe('Dodaj do ulubionych');
+    // gość nie pyta o ulubione — zbiór identyfikatorów ma wyłącznie zalogowany klient
+    http.expectNone('/api/favorites/ids');
+    expect(root.querySelector('a app-favorite-heart')).toBeNull();
+  });
+
   it('karta z ocenami pokazuje gwiazdki i liczbę opinii, karta bez ocen nic', async () => {
     const { fixture, http } = await setup({ city: 'Warszawa' });
     http

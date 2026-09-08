@@ -893,6 +893,10 @@ export const en: Dictionary = {
   'stats.total.occupancyRatio': '{booked} of {capacity}',
   'stats.total.revenue': 'Revenue from appointments',
 
+  // ── Ulubione (shared/favorites) ─────────────────────────────────────
+  'favorites.add': 'Add to favorites',
+  'favorites.remove': 'Remove from favorites',
+
   // ── Wspólne stany UI (shared/ui) ────────────────────────────────────
   'ui.loading': 'Loading…',
   'ui.retry': 'Try again',

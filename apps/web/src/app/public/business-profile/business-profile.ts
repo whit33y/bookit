@@ -8,6 +8,7 @@ import { I18nStore } from '../../core/i18n/i18n-store';
 import { businessCoverUrl, businessLogoUrl } from '../../shared/business-image';
 import { monogramInitials } from '../../shared/monogram';
 import { DepositType, depositAmountCents } from '../../shared/deposit';
+import FavoriteHeart from '../../shared/favorites/favorite-heart';
 import AppMap from '../../shared/map/map';
 import { PricePlnPipe } from '../../shared/price-pln.pipe';
 import BusinessLogo from '../../shared/ui/business-logo';
@@ -56,6 +57,7 @@ interface PublicBusiness {
   imports: [
     AppMap,
     BusinessLogo,
+    FavoriteHeart,
     PricePlnPipe,
     NotFound,
     RouterLink,
@@ -105,8 +107,13 @@ interface PublicBusiness {
                 [src]="logoUrl()"
                 [eager]="true"
               />
-              <div class="pb-0.5">
-                <h1 class="text-xl font-bold tracking-tight sm:text-2xl">{{ b.name }}</h1>
+              <div class="min-w-0 flex-1 pb-0.5">
+                <div class="flex items-start gap-2">
+                  <h1 class="text-xl font-bold tracking-tight sm:text-2xl">{{ b.name }}</h1>
+                  <!-- serce przy nazwie, a nie przy usługach: dotyczy całej firmy, więc
+                       stoi tam, gdzie jej tożsamość (#182) -->
+                  <app-favorite-heart class="-mt-1.5 shrink-0" [businessId]="b.id" />
+                </div>
                 <p class="text-sm font-medium text-stone-500">
                   {{ b.category.name }} · {{ b.city }}
                 </p>

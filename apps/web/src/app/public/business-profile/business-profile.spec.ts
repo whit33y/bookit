@@ -106,6 +106,20 @@ describe('BusinessProfile', () => {
     expect(text).toContain('Anna Kowalska');
   });
 
+  // #182: serce ulubionych stoi przy nazwie firmy, bo dotyczy całej firmy, nie usługi
+  it('pokazuje serce ulubionych przy nazwie firmy', async () => {
+    const { fixture, http } = await setup();
+    http.expectOne('/api/businesses/test-slug').flush(MOCK);
+    await fixture.whenStable();
+
+    const heart = (fixture.nativeElement as HTMLElement).querySelector(
+      'app-favorite-heart button',
+    );
+    expect(heart?.getAttribute('aria-label')).toBe('Dodaj do ulubionych');
+    // gość nie pyta o ulubione — zbiór identyfikatorów ma wyłącznie zalogowany klient
+    http.expectNone('/api/favorites/ids');
+  });
+
   // AC #53: „kwota zaliczki widoczna przed potwierdzeniem" — profil jest wcześniej niż kreator
   it('pokazuje kwotę zaliczki tylko przy usłudze, która jej wymaga', async () => {
     const { fixture, http } = await setup();

@@ -7,6 +7,7 @@ import { I18nStore } from '../../core/i18n/i18n-store';
 import { numberFormat } from '../../core/i18n/intl';
 import { translate } from '../../core/i18n/translate';
 import { businessLogoUrl } from '../../shared/business-image';
+import FavoriteHeart from '../../shared/favorites/favorite-heart';
 import AppMap, { MapPin } from '../../shared/map/map';
 import BusinessLogo from '../../shared/ui/business-logo';
 import EmptyState from '../../shared/ui/empty-state';
@@ -47,6 +48,7 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
   imports: [
     AppMap,
     BusinessLogo,
+    FavoriteHeart,
     RouterLink,
     LoadingState,
     ErrorState,
@@ -94,32 +96,38 @@ const PASSTHROUGH_PARAMS = ['category', 'city', 'q', 'lat', 'lng', 'radiusKm', '
                     : 'border-stone-200'
                 "
               >
-                <a [routerLink]="'/' + item.slug" class="flex items-start gap-4">
-                  <app-business-logo
-                    class="h-14 w-14 rounded-xl text-base font-bold sm:h-16 sm:w-16"
-                    [name]="item.name"
-                    [src]="item.logoUrl"
-                  />
-                  <!-- min-w-0: bez tego długa nazwa rozpycha kolumnę tekstu i na wąskim
-                       ekranie wypycha miniaturę poza kartę zamiast się zawinąć -->
-                  <div class="min-w-0 flex-1">
-                    <h2 class="font-bold">{{ item.name }}</h2>
-                    <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
-                    @if (item.avgRating !== null) {
-                      <app-rating-stars
-                        class="mt-1"
-                        [value]="item.avgRating"
-                        [count]="item.reviewCount"
-                      />
-                    }
-                    <p class="mt-1 text-sm text-stone-500">
-                      {{ item.category.name }} · {{ item.city }}, {{ item.street }}
-                      @if (item.distanceKm !== undefined) {
-                        · {{ distanceLabel(item.distanceKm) }}
+                <!-- serce stoi obok kotwicy, nie w niej: przycisk w linku to zagnieżdżona
+                     interaktywność (axe: nested-interactive), a klik w serce ma zostać
+                     przy sercu, zamiast otwierać profil -->
+                <div class="flex items-start gap-3">
+                  <a [routerLink]="'/' + item.slug" class="flex min-w-0 flex-1 items-start gap-4">
+                    <app-business-logo
+                      class="h-14 w-14 rounded-xl text-base font-bold sm:h-16 sm:w-16"
+                      [name]="item.name"
+                      [src]="item.logoUrl"
+                    />
+                    <!-- min-w-0: bez tego długa nazwa rozpycha kolumnę tekstu i na wąskim
+                         ekranie wypycha miniaturę poza kartę zamiast się zawinąć -->
+                    <div class="min-w-0 flex-1">
+                      <h2 class="font-bold">{{ item.name }}</h2>
+                      <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
+                      @if (item.avgRating !== null) {
+                        <app-rating-stars
+                          class="mt-1"
+                          [value]="item.avgRating"
+                          [count]="item.reviewCount"
+                        />
                       }
-                    </p>
-                  </div>
-                </a>
+                      <p class="mt-1 text-sm text-stone-500">
+                        {{ item.category.name }} · {{ item.city }}, {{ item.street }}
+                        @if (item.distanceKm !== undefined) {
+                          · {{ distanceLabel(item.distanceKm) }}
+                        }
+                      </p>
+                    </div>
+                  </a>
+                  <app-favorite-heart class="-mr-1 shrink-0" [businessId]="item.id" />
+                </div>
               </li>
             }
           </ul>

@@ -883,6 +883,12 @@ export const pl = {
   'stats.total.occupancyRatio': '{booked} z {capacity}',
   'stats.total.revenue': 'Przychód z wizyt',
 
+  // ── Ulubione (shared/favorites) ─────────────────────────────────────
+  // Etykieta opisuje akcję, którą klik wykona, a nie stan serca (#182) — dlatego przycisk
+  // nie ma aria-pressed, a te dwa klucze są jedynymi tekstami tej funkcji.
+  'favorites.add': 'Dodaj do ulubionych',
+  'favorites.remove': 'Usuń z ulubionych',
+
   // ── Wspólne stany UI (shared/ui) ────────────────────────────────────
   'ui.loading': 'Ładowanie…',
   'ui.retry': 'Spróbuj ponownie',
