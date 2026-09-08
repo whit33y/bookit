@@ -49,6 +49,21 @@ Rezerwacja o statusie `CONFIRMED` lub `PENDING`, której termin dopiero nastąpi
 Porządkuje ją czas, nie status — w odróżnieniu od oczekującej rezerwacji.
 _Unikaj_: oczekująca wizyta, przyszła rezerwacja
 
+**Ponowna rezerwacja**:
+Rezerwacja złożona przez klienta jako powtórzenie jego minionej wizyty: ta sama usługa i ten
+sam pracownik, do wyboru zostaje sam termin. Skrót w historii wizyt, nie osobny rodzaj
+rezerwacji — po złożeniu firma widzi ją jak każdą inną i nic jej nie odróżnia. Dostępna przy
+wizycie zakończonej i odwołanej, przy odrzuconej nie.
+_Unikaj_: powtórzenie wizyty, rebooking, przedłużenie wizyty
+
+**Podpowiedziany termin**:
+Pierwszy wolny termin, który ponowna rezerwacja z góry wybiera za klienta, żeby zostawić mu
+tylko potwierdzenie. Liczony od momentu, w którym klient prawdopodobnie znów zechce przyjść:
+miesiąc po wizycie zakończonej, tydzień po odwołanej, a przy odwołaniu terminu, który jeszcze
+nie minął — od zaraz, bo to przekładanie wizyty. Podpowiedź, nie rezerwacja: klient zmienia go
+jednym kliknięciem, a gdy nic wolnego nie ma, kreator otwiera się bez terminu.
+_Unikaj_: sugerowany slot, proponowany termin, automatyczny termin
+
 ### Zgłoszenia firm
 
 **Zgłoszenie firmy**:
