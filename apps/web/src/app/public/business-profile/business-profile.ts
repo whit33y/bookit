@@ -100,23 +100,27 @@ interface PublicBusiness {
             <div class="h-32 bg-brand-gradient sm:h-36" aria-hidden="true"></div>
           }
           <div class="p-6 sm:p-8">
-            <div class="-mt-14 mb-5 flex flex-wrap items-end gap-4 sm:-mt-16">
+            <!-- Na okładkę wchodzi tylko logo — nazwa, kategoria i oceny stoją pod nim, na
+                 białym. Wcześniej cały blok był wyrównany do dołu kafelka i nagłówek lądował
+                 na okładce, a przy ciemnym zdjęciu robił się nieczytelny. -->
+            <div class="-mt-14 mb-5 sm:-mt-16">
               <app-business-logo
                 class="h-20 w-20 rounded-2xl border-4 border-white text-2xl font-extrabold shadow-lifted sm:h-24 sm:w-24"
                 [name]="b.name"
                 [src]="logoUrl()"
                 [eager]="true"
               />
-              <div class="min-w-0 flex-1 pb-0.5">
-                <div class="flex items-start gap-2">
-                  <h1 class="text-xl font-bold tracking-tight sm:text-2xl">{{ b.name }}</h1>
-                  <!-- serce przy nazwie, a nie przy usługach: dotyczy całej firmy, więc
-                       stoi tam, gdzie jej tożsamość (#182) -->
-                  <app-favorite-heart class="-mt-1.5 shrink-0" [businessId]="b.id" />
+              <div class="mt-3 min-w-0">
+                <h1 class="text-xl font-bold tracking-tight sm:text-2xl">{{ b.name }}</h1>
+                <!-- serce przy nazwie, a nie przy usługach: dotyczy całej firmy, więc stoi
+                     tam, gdzie jej tożsamość (#182) — w wierszu podpisu, żeby nie rozpychać
+                     nagłówka i nie łamać go na dwie linie przy długich nazwach -->
+                <div class="flex items-center gap-1">
+                  <p class="text-sm font-medium text-stone-500">
+                    {{ b.category.name }} · {{ b.city }}
+                  </p>
+                  <app-favorite-heart class="shrink-0" [businessId]="b.id" />
                 </div>
-                <p class="text-sm font-medium text-stone-500">
-                  {{ b.category.name }} · {{ b.city }}
-                </p>
                 <!-- firma bez ocen nie dostaje atrapy „0,0" (AC #49) — backend zwraca tu null -->
                 @if (b.avgRating !== null) {
                   <app-rating-stars

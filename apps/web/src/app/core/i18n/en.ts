@@ -904,7 +904,6 @@ export const en: Dictionary = {
 
   // ── Ulubione (shared/favorites) ─────────────────────────────────────
   'favorites.add': 'Add to favorites',
-  'favorites.remove': 'Remove from favorites',
 
   // ── Wspólne stany UI (shared/ui) ────────────────────────────────────
   'ui.loading': 'Loading…',
