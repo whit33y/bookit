@@ -439,6 +439,178 @@ describe('BookingWizard', () => {
     expect(ctx.text()).toContain('Anna Kowalska');
   });
 
+  // ── #193: ponowna rezerwacja ───────────────────────────────────────────
+  describe('ponowna rezerwacja', () => {
+    const REBOOK_FROM = '2026-08-01';
+
+    const firstSlots = (ctx: Awaited<ReturnType<typeof setup>>) =>
+      ctx.http.expectOne((r) =>
+        r.url.startsWith('/api/businesses/test-slug/availability/first-slots'),
+      );
+
+    /** Sloty jednego dnia — osobny matcher, bo szukanie podpowiedzi bywa jeszcze w locie. */
+    const daySlots = (ctx: Awaited<ReturnType<typeof setup>>) =>
+      ctx.http.expectOne((r) =>
+        r.url.startsWith('/api/businesses/test-slug/availability?'),
+      );
+
+    it('sam wybiera pierwszy wolny termin, zostawiając klientowi jeden klik', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}`,
+      );
+
+      const suggestion = firstSlots(ctx);
+      expect(suggestion.request.url).toContain('serviceId=s1');
+      expect(suggestion.request.url).toContain('from=2026-08-01');
+      expect(suggestion.request.url).toContain('to=2026-08-31');
+      // „dowolny pracownik" pyta o najszerszą pulę — bez zawężenia do jednej osoby
+      expect(suggestion.request.url).not.toContain('employeeId');
+
+      suggestion.flush([{ date: DATE, startsAt: SLOT_A, employeeId: 'e1' }]);
+      await settle(ctx.harness.fixture);
+
+      const req = daySlots(ctx);
+      expect(req.request.url).toContain('date=' + DATE);
+      await flushSlots(ctx, req, [
+        { employeeId: 'e1', startsAt: SLOT_A },
+        { employeeId: 'e1', startsAt: SLOT_B },
+      ]);
+
+      expect(must<HTMLInputElement>(ctx.el(), '#data').value).toBe(DATE);
+      expect(
+        slotButtons(ctx.el()).map((b) => b.getAttribute('aria-pressed')),
+      ).toEqual(['true', 'false']);
+      expect(ctx.text()).toContain('Podsumowanie');
+    });
+
+    it('konkretny pracownik zawęża szukanie do niego', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=e1&rebookFrom=${REBOOK_FROM}`,
+      );
+
+      const suggestion = firstSlots(ctx);
+      expect(suggestion.request.url).toContain('employeeId=e1');
+
+      suggestion.flush([]);
+      await settle(ctx.harness.fixture);
+    });
+
+    it('parametry ponownej rezerwacji znikają z adresu razem z wynikiem', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}&rebookEmployeeGone=1`,
+      );
+
+      firstSlots(ctx).flush([
+        { date: DATE, startsAt: SLOT_A, employeeId: 'e1' },
+      ]);
+      await settle(ctx.harness.fixture);
+      await flushSlots(ctx, daySlots(ctx), [
+        { employeeId: 'e1', startsAt: SLOT_A },
+      ]);
+
+      const url = TestBed.inject(Router).url;
+      expect(url).not.toContain('rebookFrom');
+      expect(url).not.toContain('rebookEmployeeGone');
+      // odświeżenie strony ma odtworzyć wybór, a nie policzyć podpowiedź od nowa
+      expect(url).toContain('date=' + DATE);
+      expect(url).toContain('startsAt=' + SLOT_A);
+    });
+
+    it('brak wolnych terminów w oknie zostawia kreator bez daty i bez błędu', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}`,
+      );
+
+      firstSlots(ctx).flush([]);
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      expect(must<HTMLInputElement>(ctx.el(), '#data').value).toBe('');
+      expect(slotButtons(ctx.el())).toHaveLength(0);
+      expect(ctx.text()).not.toContain('Brak wolnych terminów w tym dniu.');
+      expect(TestBed.inject(Router).url).not.toContain('rebookFrom');
+    });
+
+    it('dzień wybrany w trakcie szukania wygrywa ze spóźnioną podpowiedzią', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}`,
+      );
+      const suggestion = firstSlots(ctx);
+
+      setDate(must<HTMLInputElement>(ctx.el(), '#data'), '2026-08-04');
+      await settle(ctx.harness.fixture);
+      const req = daySlots(ctx);
+
+      suggestion.flush([{ date: DATE, startsAt: SLOT_A, employeeId: 'e1' }]);
+      await settle(ctx.harness.fixture);
+      await flushSlots(ctx, req, [{ employeeId: 'e1', startsAt: SLOT_B }]);
+
+      expect(must<HTMLInputElement>(ctx.el(), '#data').value).toBe('2026-08-04');
+      expect(
+        slotButtons(ctx.el()).map((b) => b.getAttribute('aria-pressed')),
+      ).toEqual(['false']);
+    });
+
+    it('zdegradowany pracownik tłumaczy się od razu po wczytaniu kreatora', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}&rebookEmployeeGone=1`,
+      );
+
+      expect(ctx.text()).toContain('już nie przyjmuje');
+      const radios = ctx
+        .el()
+        .querySelectorAll<HTMLInputElement>('input[type="radio"]');
+      expect(radios[0].checked).toBe(true);
+
+      firstSlots(ctx).flush([]);
+      await settle(ctx.harness.fixture);
+    });
+
+    it('pracownik odpięty od usługi schodzi do „dowolnego", a nie kasuje szukania', async () => {
+      // e3 wykonuje wyłącznie usługę s2 — link z minionej wizyty zdążył się zdezaktualizować
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=e3&rebookFrom=${REBOOK_FROM}`,
+      );
+
+      const suggestion = firstSlots(ctx);
+      expect(suggestion.request.url).not.toContain('employeeId');
+      expect(ctx.text()).toContain('już nie przyjmuje');
+
+      suggestion.flush([]);
+      await settle(ctx.harness.fixture);
+    });
+
+    it('inny termin wybrany po podpowiedzi zostaje w adresie', async () => {
+      const ctx = await setup(
+        `?serviceId=s1&employeeId=any&rebookFrom=${REBOOK_FROM}`,
+      );
+
+      firstSlots(ctx).flush([
+        { date: DATE, startsAt: SLOT_A, employeeId: 'e1' },
+      ]);
+      await settle(ctx.harness.fixture);
+      await flushSlots(ctx, daySlots(ctx), [
+        { employeeId: 'e1', startsAt: SLOT_A },
+        { employeeId: 'e1', startsAt: SLOT_B },
+      ]);
+
+      slotButtons(ctx.el())[1].click();
+      await settle(ctx.harness.fixture);
+      ctx.harness.detectChanges();
+
+      const url = TestBed.inject(Router).url;
+      expect(url).toContain('startsAt=' + SLOT_B);
+      expect(url).not.toContain('rebookFrom');
+    });
+
+    it('wejście bez rebookFrom nie szuka niczego z góry', async () => {
+      const ctx = await setup(`?serviceId=s1&employeeId=e1&date=${DATE}`);
+
+      await flushSlots(ctx, daySlots(ctx), []);
+      expect(ctx.text()).toContain('Brak wolnych terminów w tym dniu.');
+    });
+  });
+
   // ── #53: zaliczka ──────────────────────────────────────────────────────
   describe('usługa z zaliczką', () => {
     const SLOT_C = '2026-08-03T08:00:00.000Z';

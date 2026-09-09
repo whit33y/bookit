@@ -16,6 +16,7 @@ import { I18nStore } from '../../core/i18n/i18n-store';
 import { translate } from '../../core/i18n/translate';
 import { AuthStore } from '../../core/auth/auth-store';
 import {
+  addLocalDays,
   formatDateTime,
   formatTime,
   todayInBusinessTz,
@@ -53,6 +54,13 @@ export interface AvailableSlot {
   startsAt: string; // ISO 8601, UTC
 }
 
+/** Najwcześniejszy wolny termin dnia — GET /businesses/:slug/availability/first-slots (#191). */
+interface FirstSlot {
+  date: string; // "YYYY-MM-DD", data lokalna firmy
+  startsAt: string; // ISO 8601, UTC
+  employeeId: string;
+}
+
 /** Zaliczka do opłacenia — wyłącznie w odpowiedzi na POST /bookings (#51), nigdy na listach. */
 interface BookingPayment {
   amountCents: number;
@@ -75,6 +83,23 @@ interface Booking {
 
 /** Wartość kroku 2 oznaczająca „bez preferencji" — do availability leci wtedy bez employeeId. */
 const ANY_EMPLOYEE = 'any';
+
+/** Ile dni od `rebookFrom` przeszukuje ponowna rezerwacja. Miesiąc: dalej podpowiedź przestaje
+ *  być podpowiedzią, a backend i tak nie przyjmie zakresu dłuższego niż 31 dni. */
+const REBOOK_WINDOW_DAYS = 30;
+
+/** „Dowolny pracownik" jedzie do API jako brak parametru, nie jako wartość — obie trasy
+ *  dostępności czytają ten sam protokół, więc kodujemy go raz. */
+function availabilityQuery(
+  params: Record<string, string>,
+  employeeId: string,
+): URLSearchParams {
+  const query = new URLSearchParams(params);
+  if (employeeId !== ANY_EMPLOYEE) {
+    query.set('employeeId', employeeId);
+  }
+  return query;
+}
 
 /** Sloty „dowolnego" pracownika to ta sama godzina powtórzona per pracownik — użytkownik ma
  *  zobaczyć jedną pozycję na godzinę. Backend sortuje po startsAt, potem po employeeId, więc
@@ -339,6 +364,13 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
               <h2 id="krok-2" class="text-lg font-bold">
                 {{ i18n.t('booking.step2') }}
               </h2>
+              @if (rebookEmployeeGone()) {
+                <!-- klient przyszedł po powtórkę wizyty u konkretnej osoby; musi się dowiedzieć,
+                     że jej nie ma, zanim potwierdzi termin u kogoś innego -->
+                <p class="mt-3 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm font-medium text-amber-700">
+                  {{ i18n.t('booking.rebook.employeeGone') }}
+                </p>
+              }
               @if (svc.employees.length) {
                 <fieldset class="mt-4">
                   <legend class="sr-only">{{ i18n.t('booking.staff.legend') }}</legend>
@@ -413,7 +445,7 @@ export function groupSlotsByStart(slots: AvailableSlot[]): AvailableSlot[] {
                   class="w-full max-w-xs rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm shadow-card transition focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-ring"
                 />
 
-                @if (date()) {
+                @if (date() || slotsLoading()) {
                   @if (slotsLoading()) {
                     <app-loading-state
                       class="mt-4"
@@ -568,6 +600,15 @@ export default class BookingWizard {
   private readonly slug = signal('');
   private slotsRequestId = 0;
 
+  // Ponowna rezerwacja (#193): dzień, od którego kreator sam szuka pierwszego wolnego terminu.
+  // Zwykłe pole, nie sygnał — nic w widoku z niego nie żyje, a po zużyciu znika.
+  private rebookFrom: string | null = null;
+  // Podpowiedź przegrywa z klientem: każdy jego wybór unieważnia lot w powietrzu. Ten sam
+  // strażnik kolejności co `slotsRequestId` w `loadSlots`.
+  private suggestionId = 0;
+  /** Pracownik z minionej wizyty już nie przyjmuje — link zdegradował wybór do „dowolnego". */
+  protected readonly rebookEmployeeGone = signal(false);
+
   protected readonly business = signal<PublicBusiness | null>(null);
   protected readonly loading = signal(true);
   protected readonly notFound = signal(false);
@@ -690,6 +731,8 @@ export default class BookingWizard {
     this.date.set(query.get('date') ?? '');
     this.selectedStart.set(query.get('startsAt'));
     this.clientNote.set(query.get('clientNote') ?? '');
+    this.rebookFrom = query.get('rebookFrom');
+    this.rebookEmployeeGone.set(query.get('rebookEmployeeGone') === '1');
 
     // Powrót z metody płatności, która wymagała przekierowania (BLIK, Przelewy24). Stripe
     // dokleja te parametry do `return_url`; bez tej gałęzi klient wracałby na krok 3
@@ -802,6 +845,7 @@ export default class BookingWizard {
   }
 
   protected selectSlot(startsAt: string): void {
+    this.cancelSuggestion();
     this.selectedStart.set(startsAt);
     this.bookingError.set(null);
     this.syncUrl();
@@ -861,9 +905,17 @@ export default class BookingWizard {
     }
   }
 
+  /** Wybór klienta bije podpowiedź: odpowiedź, która przyjdzie później, nie ma już czego
+   *  ustawiać, a jej stan ładowania wisiałby nad siatką, której nikt nie czeka. */
+  private cancelSuggestion(): void {
+    this.suggestionId++;
+    this.slotsLoading.set(false);
+  }
+
   private clearSlots(): void {
     this.slots.set([]);
     this.slotsError.set(null);
+    this.cancelSuggestion();
     this.selectedStart.set(null);
     // błąd zapisu dotyczył konkretnego terminu — po zmianie dnia/usługi/pracownika
     // wisiałby nad świeżą, poprawną listą slotów
@@ -881,7 +933,9 @@ export default class BookingWizard {
         // dopiero teraz wiadomo, czy wybór z adresu jest jeszcze aktualny — sloty
         // ładujemy po weryfikacji, żeby nie strzelać zapytaniem z martwym employeeId
         this.reconcileRestoredState();
-        if (this.serviceId() && this.employeeId() && this.date()) {
+        if (this.rebookFrom) {
+          void this.suggestFirstSlot();
+        } else if (this.serviceId() && this.employeeId() && this.date()) {
           void this.loadSlots();
         }
       })
@@ -907,10 +961,7 @@ export default class BookingWizard {
 
     this.slotsLoading.set(true);
     this.slotsError.set(null);
-    const query = new URLSearchParams({ serviceId, date });
-    if (employeeId !== ANY_EMPLOYEE) {
-      query.set('employeeId', employeeId);
-    }
+    const query = availabilityQuery({ serviceId, date }, employeeId);
     try {
       const slots = await firstValueFrom(
         this.api.get<AvailableSlot[]>(
@@ -932,6 +983,67 @@ export default class BookingWizard {
     } finally {
       if (request === this.slotsRequestId) {
         this.slotsLoading.set(false);
+      }
+    }
+  }
+
+  /**
+   * Ponowna rezerwacja: kreator sam znajduje pierwszy wolny termin od `rebookFrom` i wybiera
+   * go za klienta, żeby został mu jeden klik — „Zarezerwuj".
+   *
+   * Gdy w oknie nic nie ma, dzień zostaje nieustawiony: kreator wygląda wtedy jak zwykły
+   * prefill z profilu. Wpisanie daty razem z „brak terminów" sugerowałoby, że akurat tam
+   * czegoś szukaliśmy, a szukaliśmy w całym miesiącu.
+   *
+   * Nieudane żądanie kończy się tak samo, bez komunikatu: to podpowiedź, nie funkcja
+   * kreatora — klient dostaje kreator z wybraną usługą i pracownikiem, jak z profilu.
+   */
+  private async suggestFirstSlot(): Promise<void> {
+    const from = this.rebookFrom;
+    // jednorazowa: `syncUrl()` niżej i tak wyczyści parametry z adresu
+    this.rebookFrom = null;
+    const serviceId = this.serviceId();
+    // pracownik z linku zdążył się odpiąć od usługi, więc `reconcileRestoredState()`
+    // wyczyścił wybór — ponowna rezerwacja schodzi wtedy do „dowolnego", tak samo jak
+    // przy pracowniku, którego już nie ma; zaniechanie szukania byłoby gorszą odpowiedzią
+    if (from && serviceId && !this.employeeId()) {
+      this.employeeId.set(ANY_EMPLOYEE);
+      this.rebookEmployeeGone.set(true);
+    }
+    const employeeId = this.employeeId();
+    if (!from || !serviceId || !employeeId) {
+      this.syncUrl();
+      return;
+    }
+
+    const request = ++this.suggestionId;
+    this.slotsLoading.set(true);
+    const query = availabilityQuery(
+      { serviceId, from, to: addLocalDays(from, REBOOK_WINDOW_DAYS) },
+      employeeId,
+    );
+    try {
+      const days = await firstValueFrom(
+        this.api.get<FirstSlot[]>(
+          `/businesses/${this.slug()}/availability/first-slots?${query}`,
+        ),
+      );
+      if (request !== this.suggestionId) return;
+      const first = days[0];
+      if (!first) return;
+
+      this.date.set(first.date);
+      this.selectedStart.set(first.startsAt);
+      // sloty całego dnia, żeby klient mógł zmienić godzinę bez klikania w kalendarz;
+      // przy okazji weryfikują, że podpowiedziany termin nadal istnieje
+      await this.loadSlots();
+    } catch {
+      // cisza jest tu decyzją — patrz doc komentarz
+    } finally {
+      if (request === this.suggestionId) {
+        this.slotsLoading.set(false);
+        // adres ma zostać odtwarzalny: po odświeżeniu wraca wybór klienta, nie nowa podpowiedź
+        this.syncUrl();
       }
     }
   }

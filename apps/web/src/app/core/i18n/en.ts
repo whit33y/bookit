@@ -569,6 +569,8 @@ export const en: Dictionary = {
   'booking.noServices': 'This business has no active services yet.',
   'booking.noSlots': 'No free slots on this day.',
   'booking.noStaff': 'This service has no staff assigned yet.',
+  'booking.rebook.employeeGone':
+    'The staff member from your previous appointment no longer takes bookings. We picked “Any staff member”, so the times come from everyone who offers this service.',
   'booking.redirect.failedBody':
     'We did not receive the deposit, so this booking will expire and the slot will return to the pool. Book it again if it is still available.',
   'booking.redirect.failedTitle': 'Payment not completed',

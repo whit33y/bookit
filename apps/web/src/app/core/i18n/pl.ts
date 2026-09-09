@@ -567,6 +567,8 @@ export const pl = {
   'booking.noServices': 'Ta firma nie ma jeszcze aktywnych usług.',
   'booking.noSlots': 'Brak wolnych terminów w tym dniu.',
   'booking.noStaff': 'Ta usługa nie ma jeszcze przypisanych pracowników.',
+  'booking.rebook.employeeGone':
+    'Pracownik z Twojej poprzedniej wizyty już nie przyjmuje. Wybraliśmy „dowolnego pracownika", więc terminy pochodzą od wszystkich, którzy wykonują tę usługę.',
   'booking.redirect.failedBody':
     'Nie otrzymaliśmy zaliczki, więc ta rezerwacja wygaśnie i termin wróci do puli wolnych. Zarezerwuj go jeszcze raz, jeśli nadal jest dostępny.',
   'booking.redirect.failedTitle': 'Płatność niedokończona',

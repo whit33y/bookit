@@ -66,3 +66,15 @@ export function formatRelativeTime(iso: string, now = new Date()): string {
 export function todayInBusinessTz(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIMEZONE }).format(now);
 }
+
+/**
+ * Data kalendarzowa (YYYY-MM-DD) przesunięta o `days` dni. „Local" jak w bliźniaczym
+ * `addLocalDays` backendu: chodzi o datę w strefie firmy, nie o strefę przeglądarki.
+ * Sama arytmetyka idzie po UTC świadomie — wejście i wyjście to gołe daty bez godziny,
+ * więc zmiana czasu nie ma na co wpłynąć, a strefa przeglądarki gubiłaby dzień.
+ */
+export function addLocalDays(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
