@@ -13,6 +13,7 @@ import EmptyState from '../shared/ui/empty-state';
 import ErrorState from '../shared/ui/error-state';
 import LoadingState from '../shared/ui/loading-state';
 import RatingStars from '../shared/ui/rating-stars';
+import { RebookQueryParams, rebookQueryParams } from './rebook-link';
 import ReviewDialog, { ReviewSubmission } from './review-dialog';
 
 // lustrzane typy backendu — GET /bookings/mine (#28) i POST /bookings/:id/cancel (#27)
@@ -75,6 +76,11 @@ interface ClientBooking {
   employee: { id: string; name: string };
   // liczy backend wg polityki firmy — front nie powtarza tej reguły u siebie (AC #28)
   canCancel: boolean;
+  /** Czy da się z tej wizyty złożyć ponowną rezerwację (#191). Warunki (usługa aktywna,
+   *  firma publiczna) liczy backend — front pokazuje przycisk dokładnie wtedy, gdy true. */
+  canRebook: boolean;
+  /** Pracownik do podstawienia w kreatorze; `null`, gdy odszedł albo stracił tę usługę. */
+  rebookEmployeeId: string | null;
   review: BookingReview | null;
   /** null = usługa bez zaliczki, cała płatność na miejscu. */
   payment: BookingPayment | null;
@@ -340,14 +346,40 @@ const PAYMENT_CLASSES: Record<PaymentStatus, string> = {
                         }}
                       </p>
                     </div>
-                  } @else if (canReview(b)) {
-                    <button
-                      type="button"
-                      (click)="openReview(b)"
-                      class="mt-4 rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                    >
-                      {{ i18n.t('myBookings.review') }}
-                    </button>
+                  }
+
+                  <!-- Wspólny rząd akcji drugorzędnych. „Zarezerwuj ponownie" stoi po
+                       „Oceń wizytę": recenzję da się zebrać tylko raz, a rezerwację klient
+                       złoży, kiedy zechce — historia wizyt to ekran do przeglądania. -->
+                  @if (canReview(b) || b.canRebook) {
+                    <div class="mt-4 flex flex-wrap gap-2">
+                      @if (canReview(b)) {
+                        <button
+                          type="button"
+                          (click)="openReview(b)"
+                          class="rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        >
+                          {{ i18n.t('myBookings.review') }}
+                        </button>
+                      }
+                      @if (b.canRebook) {
+                        <!-- link, nie przycisk z (click): kreator to osobny adres, więc ma
+                             działać pod Cmd/Ctrl i środkowym przyciskiem myszy -->
+                        <a
+                          [routerLink]="['/', b.business.slug, 'rezerwacja']"
+                          [queryParams]="rebookParams(b)"
+                          [attr.aria-label]="
+                            i18n.t('myBookings.rebookAria', {
+                              service: b.service.name,
+                              business: b.business.name,
+                            })
+                          "
+                          class="rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        >
+                          {{ i18n.t('myBookings.rebook') }}
+                        </a>
+                      }
+                    </div>
                   }
                 </li>
               }
@@ -466,6 +498,12 @@ export default class MyBookings {
 
   protected paymentClass(status: PaymentStatus): string {
     return PAYMENT_CLASSES[status];
+  }
+
+  /** Query params kreatora dla „Zarezerwuj ponownie" — reguła punktu startowego w
+   *  `rebook-link.ts`, powód jej pobytu na froncie w ADR-0005. */
+  protected rebookParams(booking: ClientBooking): RebookQueryParams {
+    return rebookQueryParams(booking);
   }
 
   protected cancellationNote(hours: number): string {

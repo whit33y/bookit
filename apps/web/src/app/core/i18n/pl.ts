@@ -698,6 +698,8 @@ export const pl = {
   'myBookings.field.phone': 'Telefon',
   'myBookings.field.slot': 'Termin',
   'myBookings.loading': 'Ładowanie wizyt…',
+  'myBookings.rebook': 'Zarezerwuj ponownie',
+  'myBookings.rebookAria': 'Zarezerwuj ponownie: {service} w {business}',
   'myBookings.review': 'Oceń wizytę',
   'myBookings.reviewGiven': 'Twoja ocena',
   'myBookings.reviewGivenAt': 'Wystawiona {when}',
