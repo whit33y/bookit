@@ -431,8 +431,9 @@ Moduły w `apps/api/src/app/`:
 | `PUT /businesses/mine/employees/:id/working-hours`          | właściciel           | zapis całego grafiku tygodniowego                                                  |
 | `GET/POST/DELETE /businesses/mine/employees/:id/time-offs…` | właściciel           | urlopy                                                                             |
 | `GET /businesses/:slug/availability`                        | publiczne            | wolne sloty: `?serviceId=&employeeId=&date=`                                       |
+| `GET /businesses/:slug/availability/first-slots`            | publiczne            | po jednym najwcześniejszym slocie na dzień: `?serviceId=&employeeId=&from=&to=` (zakres do 31 dni) |
 | `POST /bookings`                                            | klient               | utworzenie rezerwacji (`PENDING`); usługa z zaliczką zwraca `payment.clientSecret` |
-| `GET /bookings/mine`                                        | klient               | moje wizyty                                                                        |
+| `GET /bookings/mine`                                        | klient               | moje wizyty; flagi `canCancel`, `depositForfeitOnCancel`, `canRebook`, `rebookEmployeeId` |
 | `POST /bookings/:id/cancel`                                 | klient               | odwołanie (walidacja polityki firmy)                                               |
 | `GET /businesses/mine/bookings`                             | właściciel/pracownik | kalendarz: `?from=&to=&employeeId=`                                                |
 | `POST /bookings/:id/confirm` / `POST /bookings/:id/decline` | właściciel           | decyzja o rezerwacji                                                               |

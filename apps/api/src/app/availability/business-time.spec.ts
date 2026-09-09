@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addLocalDays,
   ceilToSlotGrid,
+  formatLocalDate,
+  countLocalDays,
   isOnSlotGrid,
   localDayRangeUtc,
   localWeekday,
@@ -147,6 +150,49 @@ describe('business-time', () => {
     it('jest odwrotnością zonedWallClockToUtc na poziomie daty', () => {
       const date = parseLocalDate('2026-01-31');
       expect(utcToLocalDate(zonedWallClockToUtc(date, '23:45'))).toEqual(date);
+    });
+  });
+
+  // Zakres dni w /availability/first-slots (#191) liczy się na samych datach kalendarzowych,
+  // nie na instantach — inaczej doba zmiany czasu przesuwałaby granice zakresu.
+  describe('zakres dat lokalnych', () => {
+    it('formatLocalDate uzupełnia zerami i jest odwrotnością parseLocalDate', () => {
+      expect(formatLocalDate({ year: 2026, month: 3, day: 7 })).toBe('2026-03-07');
+      expect(formatLocalDate(parseLocalDate('2026-12-31'))).toBe('2026-12-31');
+    });
+
+    it('addLocalDays przewija miesiąc i rok', () => {
+      expect(addLocalDays(parseLocalDate('2026-01-31'), 1)).toEqual(
+        parseLocalDate('2026-02-01'),
+      );
+      expect(addLocalDays(parseLocalDate('2026-12-31'), 1)).toEqual(
+        parseLocalDate('2027-01-01'),
+      );
+      expect(addLocalDays(parseLocalDate('2028-02-28'), 1)).toEqual(
+        parseLocalDate('2028-02-29'), // rok przestępny
+      );
+    });
+
+    it('addLocalDays przez zmianę czasu nie gubi dnia', () => {
+      // 2026-03-29 to wiosenna zmiana czasu — doba ma 23 h, dzień kalendarzowy mimo to jeden
+      expect(addLocalDays(parseLocalDate('2026-03-28'), 2)).toEqual(
+        parseLocalDate('2026-03-30'),
+      );
+    });
+
+    it('countLocalDays liczy obie granice włącznie', () => {
+      const days = (from: string, to: string) =>
+        countLocalDays(parseLocalDate(from), parseLocalDate(to));
+
+      expect(days('2026-01-14', '2026-01-14')).toBe(1);
+      expect(days('2026-01-01', '2026-01-31')).toBe(31);
+      expect(days('2026-03-28', '2026-03-30')).toBe(3); // przez zmianę czasu
+    });
+
+    it('countLocalDays dla odwróconego zakresu wychodzi poniżej zera', () => {
+      expect(
+        countLocalDays(parseLocalDate('2026-01-16'), parseLocalDate('2026-01-14')),
+      ).toBeLessThanOrEqual(0);
     });
   });
 });

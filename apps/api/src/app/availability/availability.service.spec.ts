@@ -233,3 +233,214 @@ describe('AvailabilityService', () => {
     expect(businessFindFirst).not.toHaveBeenCalled();
   });
 });
+
+// 2026-01-14 to środa (weekday 2), 15 czwartek (3), 16 piątek (4) — zima, CET,
+// więc 09:00 lokalnie = 08:00Z.
+describe('AvailabilityService — pierwsze wolne terminy', () => {
+  let businessFindFirst: ReturnType<typeof vi.fn>;
+  let serviceFindFirst: ReturnType<typeof vi.fn>;
+  let whFindMany: ReturnType<typeof vi.fn>;
+  let timeOffFindMany: ReturnType<typeof vi.fn>;
+  let bookingFindMany: ReturnType<typeof vi.fn>;
+  let service: AvailabilityService;
+
+  const hours = (
+    employeeId: string,
+    weekday: number,
+    startTime = '09:00',
+    endTime = '11:00',
+  ) => ({ employeeId, weekday, startTime, endTime });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    businessFindFirst = vi.fn().mockResolvedValue({ id: 'biz-1' });
+    serviceFindFirst = vi.fn().mockResolvedValue({
+      durationMin: 60,
+      employees: [{ id: EMPLOYEE_A }],
+    });
+    whFindMany = vi.fn().mockResolvedValue([hours(EMPLOYEE_A, 2), hours(EMPLOYEE_A, 3)]);
+    timeOffFindMany = vi.fn().mockResolvedValue([]);
+    bookingFindMany = vi.fn().mockResolvedValue([]);
+
+    service = new AvailabilityService({
+      business: { findFirst: businessFindFirst },
+      service: { findFirst: serviceFindFirst },
+      workingHours: { findMany: whFindMany },
+      timeOff: { findMany: timeOffFindMany },
+      booking: { findMany: bookingFindMany },
+    } as unknown as PrismaService);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const get = (
+    overrides: { from?: string; to?: string; employeeId?: string } = {},
+  ) =>
+    service.getFirstSlots('salon-x', {
+      serviceId: SERVICE_ID,
+      from: overrides.from ?? '2026-01-14',
+      to: overrides.to ?? '2026-01-16',
+      employeeId: overrides.employeeId,
+    });
+
+  it('po jednym najwcześniejszym slocie na dzień, rosnąco po dacie', async () => {
+    const slots = await get();
+
+    // 16.01 (piątek) nie ma grafiku → wypada z odpowiedzi
+    expect(slots).toEqual([
+      {
+        date: '2026-01-14',
+        startsAt: '2026-01-14T08:00:00.000Z',
+        employeeId: EMPLOYEE_A,
+      },
+      {
+        date: '2026-01-15',
+        startsAt: '2026-01-15T08:00:00.000Z',
+        employeeId: EMPLOYEE_A,
+      },
+    ]);
+  });
+
+  it('bez employeeId slot dnia jest najwcześniejszym ze wszystkich pracowników usługi', async () => {
+    serviceFindFirst.mockResolvedValue({
+      durationMin: 60,
+      employees: [{ id: EMPLOYEE_A }, { id: EMPLOYEE_B }],
+    });
+    whFindMany.mockResolvedValue([
+      hours(EMPLOYEE_A, 2, '12:00', '14:00'),
+      hours(EMPLOYEE_B, 2, '09:00', '11:00'),
+    ]);
+
+    const slots = await get({ to: '2026-01-14' });
+
+    expect(slots).toEqual([
+      {
+        date: '2026-01-14',
+        startsAt: '2026-01-14T08:00:00.000Z',
+        employeeId: EMPLOYEE_B,
+      },
+    ]);
+  });
+
+  // remis rozstrzygamy tak samo jak w getSlots, żeby podpowiedź nie skakała między
+  // pracownikami przy dwóch identycznych terminach
+  it('dwaj pracownicy wolni o tej samej godzinie → mniejszy employeeId', async () => {
+    serviceFindFirst.mockResolvedValue({
+      durationMin: 60,
+      employees: [{ id: EMPLOYEE_B }, { id: EMPLOYEE_A }],
+    });
+    whFindMany.mockResolvedValue([hours(EMPLOYEE_A, 2), hours(EMPLOYEE_B, 2)]);
+
+    const [slot] = await get({ to: '2026-01-14' });
+
+    expect(slot.employeeId).toBe(EMPLOYEE_A);
+  });
+
+  it('dzień z całodniowym wolnym wypada z odpowiedzi', async () => {
+    timeOffFindMany.mockResolvedValue([
+      {
+        employeeId: EMPLOYEE_A,
+        startsAt: new Date('2026-01-13T23:00:00.000Z'),
+        endsAt: new Date('2026-01-14T23:00:00.000Z'),
+      },
+    ]);
+
+    const slots = await get();
+
+    expect(slots.map((s) => s.date)).toEqual(['2026-01-15']);
+  });
+
+  it('dzień zapchany rezerwacjami PENDING/CONFIRMED wypada z odpowiedzi', async () => {
+    bookingFindMany.mockResolvedValue([
+      {
+        employeeId: EMPLOYEE_A,
+        startsAt: new Date('2026-01-14T08:00:00.000Z'),
+        endsAt: new Date('2026-01-14T10:00:00.000Z'), // cały grafik 09:00–11:00
+      },
+    ]);
+
+    const slots = await get();
+
+    expect(slots.map((s) => s.date)).toEqual(['2026-01-15']);
+    expect(bookingFindMany.mock.calls[0][0].where.status).toEqual({
+      in: [BookingStatus.PENDING, BookingStatus.CONFIRMED],
+    });
+  });
+
+  it('zakres jednodniowy (from === to) pyta o tę jedną dobę', async () => {
+    const slots = await get({ from: '2026-01-14', to: '2026-01-14' });
+
+    expect(slots.map((s) => s.date)).toEqual(['2026-01-14']);
+  });
+
+  it('31 dni przechodzi, 32 → 400 bez zapytań do bazy', async () => {
+    await expect(get({ from: '2026-01-01', to: '2026-01-31' })).resolves.toBeInstanceOf(
+      Array,
+    );
+
+    await expect(get({ from: '2026-01-01', to: '2026-02-01' })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(businessFindFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('to wcześniejsze niż from → 400', async () => {
+    await expect(get({ from: '2026-01-16', to: '2026-01-14' })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(businessFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('data nieistniejąca w kalendarzu → 400, bez zapytań do bazy', async () => {
+    await expect(get({ from: '2026-02-30', to: '2026-03-02' })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(businessFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('firma niedziałająca lub nieistniejąca → 404', async () => {
+    businessFindFirst.mockResolvedValue(null);
+
+    await expect(get()).rejects.toMatchObject({ status: 404 });
+    expect(serviceFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('usługa nieaktywna, nieistniejąca lub z innej firmy → 404', async () => {
+    serviceFindFirst.mockResolvedValue(null);
+
+    await expect(get()).rejects.toMatchObject({ status: 404 });
+    expect(whFindMany).not.toHaveBeenCalled();
+  });
+
+  it('employeeId spoza usługi lub nieaktywny → 404', async () => {
+    serviceFindFirst.mockResolvedValue({ durationMin: 60, employees: [] });
+
+    await expect(get({ employeeId: EMPLOYEE_B })).rejects.toMatchObject({ status: 404 });
+    expect(whFindMany).not.toHaveBeenCalled();
+  });
+
+  it('usługa bez przypisanych pracowników (bez employeeId) → pusta lista, nie 404', async () => {
+    serviceFindFirst.mockResolvedValue({ durationMin: 60, employees: [] });
+
+    await expect(get()).resolves.toEqual([]);
+    expect(whFindMany).not.toHaveBeenCalled();
+  });
+
+  it('dni już minione nie mają slotów — liczy się ten sam filtr przeszłości co w getSlots', async () => {
+    vi.setSystemTime(new Date('2026-01-15T08:30:00.000Z')); // 09:30 lokalnie
+
+    const slots = await get();
+
+    expect(slots).toEqual([
+      {
+        date: '2026-01-15',
+        startsAt: '2026-01-15T08:30:00.000Z',
+        employeeId: EMPLOYEE_A,
+      },
+    ]);
+  });
+});
