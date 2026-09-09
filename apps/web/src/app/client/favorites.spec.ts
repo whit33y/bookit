@@ -104,6 +104,17 @@ describe('Favorites', () => {
     expect(ctx.cards()[1].textContent).toContain('Salon Kosmetyczny');
   });
 
+  // Serca na tej liście wyglądają identycznie, więc etykieta musi nieść nazwę firmy.
+  // Osobny klucz od serca na profilu (`favorites.remove`) — wspólny raz już się rozjechał.
+  it('serce niesie w etykiecie nazwę firmy, której dotyczy', async () => {
+    const ctx = await setup();
+
+    expect(ctx.hearts().map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Usuń z ulubionych — Studio Fryzur',
+      'Usuń z ulubionych — Salon Kosmetyczny',
+    ]);
+  });
+
   it('firma bez ocen nie dostaje atrapy „0,0"', async () => {
     const ctx = await setup();
 

@@ -140,13 +140,17 @@ describe('planDemoBookings', () => {
   it('trzyma się reguł przez cały rok uruchomień', () => {
     // Grafiki różnią się dniami tygodnia, a przesunięcia liczą dni robocze — kolizja albo
     // wyjście poza grafik może się ujawnić dopiero przy konkretnym dniu startu seeda.
+    // Liczba wizyt jest niezależna od dnia startu, więc wzorzec liczymy raz przed pętlą —
+    // w środku podwajał pracę testu i przy obciążonej maszynie wypychał go poza 5 s limitu.
+    const expectedCount = planDemoBookings(NOW).length;
+
     for (let day = 0; day < 366; day += 1) {
       const now = new Date(
         Date.UTC(2026, 7, 12, 9, 37) + day * 24 * 60 * MINUTE_MS,
       );
       const bookings = planDemoBookings(now);
 
-      expect(bookings).toHaveLength(planDemoBookings(NOW).length);
+      expect(bookings).toHaveLength(expectedCount);
       for (const booking of bookings) {
         const intervals = workIntervalsFor(
           employeeOf(booking),
