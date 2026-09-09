@@ -143,3 +143,32 @@ export const ceilToSlotGrid = (instant: Date): Date => {
 // bo te przesuwają czas względem pełnego kwadransa.
 export const isOnSlotGrid = (instant: Date): boolean =>
   instant.getTime() % (SLOT_STEP_MIN * MS_PER_MIN) === 0;
+
+// "YYYY-MM-DD" z daty lokalnej — odwrotność parseLocalDate. Odpowiedź o pierwsze wolne
+// terminy niesie dzień jako datę lokalną firmy, nie instant, bo kreator ustawia nim
+// dzień w kalendarzu, a nie moment w czasie.
+export const formatLocalDate = ({ year, month, day }: LocalDate): string =>
+  `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(
+    day,
+  ).padStart(2, '0')}`;
+
+// Data lokalna przesunięta o n dni, z przewinięciem miesiąca i roku przez Date.UTC.
+// Dni kalendarzowe, nie doby: przez zmianę czasu przechodzi bez poślizgu, bo liczy się
+// na samej dacie, a nie na instantach.
+export const addLocalDays = ({ year, month, day }: LocalDate, days: number): LocalDate => {
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+};
+
+// Ile dni liczy zakres od `from` do `to`, obie granice włącznie (from === to → 1).
+// Wynik zerowy lub ujemny znaczy zakres odwrócony — sprawdza to wywołujący.
+export const countLocalDays = (from: LocalDate, to: LocalDate): number => {
+  const MS_PER_DAY = 86_400_000;
+  const fromUtc = Date.UTC(from.year, from.month - 1, from.day);
+  const toUtc = Date.UTC(to.year, to.month - 1, to.day);
+  return (toUtc - fromUtc) / MS_PER_DAY + 1;
+};

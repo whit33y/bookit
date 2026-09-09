@@ -135,7 +135,7 @@ export interface FavoriteBusiness {
 
               <button
                 type="button"
-                [attr.aria-label]="i18n.t('favorites.remove', { name: item.name })"
+                [attr.aria-label]="i18n.t('favorites.removeNamed', { name: item.name })"
                 [disabled]="removing().has(item.id)"
                 (click)="remove(item.id)"
                 class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-rose-600 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:cursor-not-allowed disabled:text-stone-300"

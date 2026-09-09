@@ -639,7 +639,7 @@ export const en: Dictionary = {
   'favorites.empty.searchLink': 'Find a business in search',
   'favorites.empty.title': 'You have no favorite businesses yet.',
   'favorites.loading': 'Loading favorites…',
-  'favorites.remove': 'Remove from favorites — {name}',
+  'favorites.removeNamed': 'Remove from favorites — {name}',
   'favorites.title': 'Favorite businesses',
   'favorites.unavailable': 'This business is currently unavailable',
 
@@ -904,6 +904,7 @@ export const en: Dictionary = {
 
   // ── Ulubione (shared/favorites) ─────────────────────────────────────
   'favorites.add': 'Add to favorites',
+  'favorites.remove': 'Remove from favorites',
 
   // ── Wspólne stany UI (shared/ui) ────────────────────────────────────
   'ui.loading': 'Loading…',

@@ -42,6 +42,7 @@ import {
   isWithinCancellationWindow,
   willForfeitDeposit,
 } from './cancellation-policy';
+import { rebookFlags } from './rebook-policy';
 import { DepositOutcome, depositOutcome } from './refund-policy';
 import { BusinessBookingsQueryDto } from './dto/business-bookings-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -89,7 +90,7 @@ const businessPaymentSelect = {
 } as const;
 
 // Karta wizyty na liście klienta (#28) — komplet danych do wyświetlenia bez dopytywania
-// o firmę/usługę/pracownika. Firma bez ownerId i isBlocked, tak jak w businessSelect;
+// o firmę/usługę/pracownika. Firma bez ownerId, tak jak w businessSelect;
 // cancellationHours zostaje, bo z niej liczy się canCancel i UI ma czym uzasadnić brak
 // przycisku „odwołaj". clientId pomijamy — to zawsze pytający.
 const clientBookingSelect = {
@@ -109,9 +110,23 @@ const clientBookingSelect = {
       city: true,
       postalCode: true,
       cancellationHours: true,
+      // Wyłącznie do policzenia canRebook (#191) — z odpowiedzi wypada w toClientVisit.
+      // Lista „Moje wizyty" celowo pokazuje też wizyty firmy zablokowanej (#41), więc
+      // „firma działa" nie da się tu zamknąć w WHERE; trzeba to sprawdzić na wierszu.
+      isBlocked: true,
+      status: true,
     },
   },
-  service: { select: serviceClientFields },
+  // isActive i przypisani pracownicy — też tylko pod flagi ponownej rezerwacji, też
+  // zdejmowane przed odpowiedzią. Aktywni pracownicy usługi zamiast pracownika wizyty,
+  // bo pytanie brzmi „czy on nadal ją wykonuje", a nie „czy on istnieje".
+  service: {
+    select: {
+      ...serviceClientFields,
+      isActive: true,
+      employees: { where: { isActive: true }, select: { id: true } },
+    },
+  },
   employee: { select: { id: true, name: true } },
   // Wystawiona recenzja albo null (#47). Bez tego pola #48 nie odróżni odbytej wizyty bez oceny
   // od już ocenionej, więc akcji „oceń wizytę" nie dałoby się pokazać warunkowo — a dopytywanie
@@ -205,6 +220,34 @@ const withCancelFlag = (booking: ClientBooking, now: Date) => {
   };
 };
 
+/**
+ * Karta wizyty gotowa do odpowiedzi: flagi odwołania (#28), flagi ponownej rezerwacji (#191)
+ * i zdjęte pola, które służyły wyłącznie do ich policzenia.
+ *
+ * `isBlocked`/`status` firmy i `isActive`/`employees` usługi nie wychodzą na zewnątrz —
+ * odpowiedź niesie wniosek (`canRebook`, `rebookEmployeeId`), a nie przesłanki, po których
+ * front i tak nie ma prawa liczyć tego sam.
+ */
+const toClientVisit = (booking: ClientBooking, now: Date) => {
+  const { isBlocked, status: businessStatus, ...business } = booking.business;
+  const { isActive: serviceIsActive, employees, ...service } = booking.service;
+
+  return {
+    ...withCancelFlag(booking, now),
+    business,
+    service,
+    ...rebookFlags({
+      status: booking.status,
+      employeeId: booking.employee.id,
+      service: {
+        isActive: serviceIsActive,
+        employeeIds: employees.map((e) => e.id),
+      },
+      business: { isBlocked, status: businessStatus },
+    }),
+  };
+};
+
 // Kto żąda przejścia — decyduje, czym jest „własna rezerwacja" (403) i czy obowiązuje
 // polityka czasowa. Firma odwołuje zawsze, klient tylko w oknie (SDD §7).
 type Actor = 'CLIENT' | 'BUSINESS';
@@ -252,8 +295,8 @@ export class BookingsService {
     ]);
 
     return {
-      upcoming: upcoming.map((booking) => withCancelFlag(booking, now)),
-      past: past.map((booking) => withCancelFlag(booking, now)),
+      upcoming: upcoming.map((booking) => toClientVisit(booking, now)),
+      past: past.map((booking) => toClientVisit(booking, now)),
     };
   }
 

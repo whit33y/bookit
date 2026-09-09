@@ -1453,11 +1453,35 @@ describe('BookingsService — moje wizyty', () => {
   };
   const employee = { id: EMPLOYEE_ID, name: 'Ala' };
 
+  // Wiersze z bazy niosą ponadto przesłanki flag ponownej rezerwacji (#191): stan firmy oraz
+  // aktywność usługi razem z jej dzisiejszymi pracownikami. W odpowiedzi tych pól nie ma,
+  // więc oczekiwany kształt (`business`, `serviceData`) zostaje bez nich.
+  const businessRow: typeof business & {
+    isBlocked: boolean;
+    status: BusinessStatus;
+  } = {
+    ...business,
+    isBlocked: false,
+    status: BusinessStatus.APPROVED,
+  };
+  const serviceRow: typeof serviceData & {
+    isActive: boolean;
+    employees: { id: string }[];
+  } = {
+    ...serviceData,
+    isActive: true,
+    employees: [{ id: EMPLOYEE_ID }],
+  };
+
   const booking = (
     startsAt: string,
     status: BookingStatus,
     id = BOOKING_ID,
     payment: { status: PaymentStatus } | null = null,
+    rebookable: {
+      business?: Partial<typeof businessRow>;
+      service?: Partial<typeof serviceRow>;
+    } = {},
   ) => ({
     id,
     startsAt: new Date(startsAt),
@@ -1465,8 +1489,8 @@ describe('BookingsService — moje wizyty', () => {
     status,
     clientNote: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    business,
-    service: serviceData,
+    business: { ...businessRow, ...rebookable.business },
+    service: { ...serviceRow, ...rebookable.service },
     employee,
     payment,
   });
@@ -1592,7 +1616,19 @@ describe('BookingsService — moje wizyty', () => {
       const { select } = findMany.mock.calls[0][0];
       expect(select).not.toHaveProperty('clientId');
       expect(select.business.select).not.toHaveProperty('ownerId');
-      expect(select.business.select).not.toHaveProperty('isBlocked');
+    });
+
+    // isBlocked, status firmy oraz isActive i pracownicy usługi są pobierani wyłącznie po to,
+    // żeby policzyć flagi ponownej rezerwacji (#191) — odpowiedź niesie sam wniosek
+    it('przesłanki flag ponownej rezerwacji nie wychodzą w odpowiedzi', async () => {
+      respond([booking('2026-01-20T09:00:00.000Z', BookingStatus.CONFIRMED)], []);
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.business).not.toHaveProperty('isBlocked');
+      expect(visit.business).not.toHaveProperty('status');
+      expect(visit.service).not.toHaveProperty('isActive');
+      expect(visit.service).not.toHaveProperty('employees');
     });
 
     // #47/#48: bez tego pola front nie odróżni odbytej wizyty bez oceny od już ocenionej
@@ -1726,6 +1762,120 @@ describe('BookingsService — moje wizyty', () => {
       const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
 
       expect(visit.canCancel).toBe(false);
+    });
+  });
+
+  // #191: warunki, na których w ogóle pokazuje się przycisk „zarezerwuj ponownie".
+  // Front nie ma z czego ich policzyć — „pracownik nadal przypisany do tej usługi" znaczyłoby
+  // pobranie pracowników każdej usługi z każdej minionej wizyty (ADR-0005).
+  describe('flagi ponownej rezerwacji', () => {
+    const PAST = '2026-01-05T09:00:00.000Z';
+    const FUTURE = '2026-01-20T09:00:00.000Z';
+
+    const pastVisit = async (
+      status: BookingStatus,
+      rebookable?: Parameters<typeof booking>[4],
+    ) => {
+      respond([], [booking(PAST, status, BOOKING_ID, null, rebookable)]);
+      const [visit] = (await service.findMine(CLIENT_ID)).past;
+      return visit;
+    };
+
+    it.each([
+      BookingStatus.COMPLETED,
+      BookingStatus.CANCELLED_BY_CLIENT,
+      BookingStatus.CANCELLED_BY_BUSINESS,
+    ])('%s → canRebook true, pracownik podpowiedziany', async (status) => {
+      const visit = await pastVisit(status);
+
+      expect(visit.canRebook).toBe(true);
+      expect(visit.rebookEmployeeId).toBe(EMPLOYEE_ID);
+    });
+
+    // wizyta wciąż stoi w kalendarzu (PENDING, CONFIRMED) albo firma już raz odmówiła
+    // temu klientowi (DECLINED) — powtarzanie jej to droga do drugiej odmowy
+    it.each([
+      BookingStatus.PENDING,
+      BookingStatus.CONFIRMED,
+      BookingStatus.DECLINED,
+    ])('%s → canRebook false', async (status) => {
+      const visit = await pastVisit(status);
+
+      expect(visit.canRebook).toBe(false);
+      expect(visit.rebookEmployeeId).toBeNull();
+    });
+
+    it('usługa wycofana → canRebook false', async () => {
+      const visit = await pastVisit(BookingStatus.COMPLETED, {
+        service: { isActive: false },
+      });
+
+      expect(visit.canRebook).toBe(false);
+      expect(visit.rebookEmployeeId).toBeNull();
+    });
+
+    it('firma zablokowana → canRebook false', async () => {
+      const visit = await pastVisit(BookingStatus.COMPLETED, {
+        business: { isBlocked: true },
+      });
+
+      expect(visit.canRebook).toBe(false);
+    });
+
+    it('firma niezaakceptowana → canRebook false', async () => {
+      const visit = await pastVisit(BookingStatus.COMPLETED, {
+        business: { status: BusinessStatus.PENDING },
+      });
+
+      expect(visit.canRebook).toBe(false);
+    });
+
+    // select zawęża employees do isActive, więc nieaktywny pracownik po prostu nie ma go
+    // na liście usługi — z punktu widzenia flagi to ten sam przypadek co odpięcie
+    it('pracownik nieaktywny → canRebook zostaje, rebookEmployeeId null', async () => {
+      const visit = await pastVisit(BookingStatus.COMPLETED, {
+        service: { employees: [] },
+      });
+
+      expect(visit.canRebook).toBe(true);
+      expect(visit.rebookEmployeeId).toBeNull();
+    });
+
+    it('pracownik odpięty od usługi → rebookEmployeeId null', async () => {
+      const visit = await pastVisit(BookingStatus.COMPLETED, {
+        service: { employees: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] },
+      });
+
+      expect(visit.canRebook).toBe(true);
+      expect(visit.rebookEmployeeId).toBeNull();
+    });
+
+    // podział list idzie po endsAt, nie po statusie: odwołana wizyta z jutra leży
+    // w „nadchodzących" i ma dostać przycisk tak samo jak minione odwołanie
+    it('odwołana wizyta z przyszłości leży w upcoming z canRebook true', async () => {
+      respond(
+        [booking(FUTURE, BookingStatus.CANCELLED_BY_CLIENT)],
+        [],
+      );
+
+      const [visit] = (await service.findMine(CLIENT_ID)).upcoming;
+
+      expect(visit.canRebook).toBe(true);
+      expect(visit.rebookEmployeeId).toBe(EMPLOYEE_ID);
+    });
+
+    it('flagi są na każdym elemencie obu list', async () => {
+      respond(
+        [booking(FUTURE, BookingStatus.CONFIRMED, 'b-1')],
+        [booking(PAST, BookingStatus.COMPLETED, 'b-2')],
+      );
+
+      const { upcoming, past } = await service.findMine(CLIENT_ID);
+
+      for (const visit of [...upcoming, ...past]) {
+        expect(visit).toHaveProperty('canRebook');
+        expect(visit).toHaveProperty('rebookEmployeeId');
+      }
     });
   });
 });

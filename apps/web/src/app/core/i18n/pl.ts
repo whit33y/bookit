@@ -634,7 +634,9 @@ export const pl = {
   'favorites.empty.searchLink': 'Znajdź firmę w wyszukiwarce',
   'favorites.empty.title': 'Nie masz jeszcze ulubionych firm.',
   'favorites.loading': 'Wczytuję ulubione…',
-  'favorites.remove': 'Usuń z ulubionych — {name}',
+  // Etykieta z nazwą firmy: na liście stoi kilkanaście identycznych serc, więc samo
+  // „Usuń z ulubionych" nie powiedziałoby czytnikowi, którą firmę zdejmuje ten przycisk.
+  'favorites.removeNamed': 'Usuń z ulubionych — {name}',
   'favorites.title': 'Ulubione firmy',
   'favorites.unavailable': 'Ta firma jest obecnie niedostępna',
 
@@ -894,8 +896,10 @@ export const pl = {
 
   // ── Ulubione (shared/favorites) ─────────────────────────────────────
   // Etykieta opisuje akcję, którą klik wykona, a nie stan serca (#182) — dlatego przycisk
-  // nie ma aria-pressed, a te dwa klucze są jedynymi tekstami tej funkcji.
+  // nie ma aria-pressed, a te dwa klucze są jedynymi tekstami tej funkcji. Wariant z nazwą
+  // firmy ma własny klucz (`favorites.removeNamed`), bo tu w etykiecie nie ma na nią miejsca.
   'favorites.add': 'Dodaj do ulubionych',
+  'favorites.remove': 'Usuń z ulubionych',
 
   // ── Wspólne stany UI (shared/ui) ────────────────────────────────────
   'ui.loading': 'Ładowanie…',

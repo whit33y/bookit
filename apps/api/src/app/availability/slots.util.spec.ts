@@ -30,6 +30,83 @@ const busy = (startsAt: string, endsAt: string): BusyInterval => ({
 });
 
 describe('generateSlots', () => {
+  // #191 pyta o 31 dni naraz i z każdego bierze jeden slot — bez limitu liczyłby całą
+  // siatkę każdego dnia, żeby wyrzucić wszystko poza pierwszym elementem
+  describe('limit', () => {
+    it('limit: 1 daje najwcześniejszy slot dnia', () => {
+      const slots = iso(
+        generateSlots({
+          intervals: [interval('2026-01-15', '09:00', '13:00')],
+          busy: [],
+          durationMin: 60,
+          notBefore: PAST,
+          limit: 1,
+        }),
+      );
+
+      expect(slots).toEqual(['2026-01-15T08:00:00.000Z']); // 09:00 lokalnie
+    });
+
+    it('przedziały podane od tyłu → limit nadal zwraca najwcześniejszy', () => {
+      const slots = iso(
+        generateSlots({
+          intervals: [
+            interval('2026-01-15', '15:00', '19:00'),
+            interval('2026-01-15', '09:00', '13:00'),
+          ],
+          busy: [],
+          durationMin: 60,
+          notBefore: PAST,
+          limit: 1,
+        }),
+      );
+
+      expect(slots).toEqual(['2026-01-15T08:00:00.000Z']);
+    });
+
+    it('limit przeskakuje zajęte i pusty dzień zostaje pusty', () => {
+      const busy: BusyInterval[] = [
+        {
+          startsAt: at('2026-01-15T08:00:00.000Z'),
+          endsAt: at('2026-01-15T09:00:00.000Z'), // 09:00–10:00 lokalnie
+        },
+      ];
+
+      expect(
+        iso(
+          generateSlots({
+            intervals: [interval('2026-01-15', '09:00', '13:00')],
+            busy,
+            durationMin: 60,
+            notBefore: PAST,
+            limit: 1,
+          }),
+        ),
+      ).toEqual(['2026-01-15T09:00:00.000Z']); // 10:00 lokalnie
+
+      expect(
+        generateSlots({
+          intervals: [],
+          busy,
+          durationMin: 60,
+          notBefore: PAST,
+          limit: 1,
+        }),
+      ).toEqual([]);
+    });
+
+    it('bez limitu liczy cały dzień — zachowanie /availability bez zmian', () => {
+      const slots = generateSlots({
+        intervals: [interval('2026-01-15', '09:00', '13:00')],
+        busy: [],
+        durationMin: 60,
+        notBefore: PAST,
+      });
+
+      expect(slots).toHaveLength(13);
+    });
+  });
+
   it('wiele przedziałów w dniu (9–13, 15–19): sloty z obu, luka pusta', () => {
     const slots = iso(
       generateSlots({

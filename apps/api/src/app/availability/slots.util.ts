@@ -23,6 +23,12 @@ export interface GenerateSlotsParams {
   busy: BusyInterval[];
   durationMin: number;
   notBefore: Date;
+  /**
+   * Ile slotów wystarczy. Bez limitu liczymy cały dzień (widok kalendarza w kreatorze);
+   * z `limit: 1` przerywamy po pierwszym trafieniu — tego chce lista pierwszych wolnych
+   * terminów (#191), która pyta o 31 dni naraz i z każdego bierze jeden slot.
+   */
+  limit?: number;
 }
 
 // [aStart, aEnd) ∩ [bStart, bEnd) ≠ ∅ — styk na granicy nie jest kolizją,
@@ -57,10 +63,20 @@ export const generateSlots = ({
   busy,
   durationMin,
   notBefore,
+  limit,
 }: GenerateSlotsParams): Date[] => {
   const slots: Date[] = [];
 
-  for (const interval of intervals) {
+  // Przedziały posortowane, zanim wejdziemy w pętlę: przy `limit` przerywamy wcześnie,
+  // więc kolejność przeglądania musi być kolejnością czasu — inaczej „pierwszy slot"
+  // byłby pierwszym z przypadkowego przedziału, a nie najwcześniejszym w dniu.
+  const ordered = [...intervals].sort((a, b) => a.startUtc.getTime() - b.startUtc.getTime());
+
+  for (const interval of ordered) {
+    if (limit !== undefined && slots.length >= limit) {
+      break;
+    }
+
     // start siatki wyrównany do pełnego kwadransa, nie do startTime przedziału —
     // #25 wymaga, żeby startsAt rezerwacji leżał na siatce 15 min
     let start = ceilToSlotGrid(interval.startUtc);
@@ -80,6 +96,9 @@ export const generateSlots = ({
         continue;
       }
       slots.push(start);
+      if (limit !== undefined && slots.length >= limit) {
+        break;
+      }
     }
   }
 
