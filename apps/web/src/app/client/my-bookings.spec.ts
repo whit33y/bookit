@@ -11,6 +11,7 @@ import { authGuard } from '../core/auth/auth.guard';
 import { setLocale } from '../core/i18n/locale';
 import { settle } from '../public/testing-helpers';
 import MyBookings from './my-bookings';
+import { rebookFrom } from './rebook-link';
 import { verifyIgnoringProfile } from '../core/auth/auth-testing';
 
 @Component({ selector: 'app-blank', template: '' })
@@ -55,6 +56,13 @@ const deposit = (status: string, amountCents = 6000) => ({
   amountCents,
 });
 
+/** Flagi ponownej rezerwacji (#191) — domyślnie zgaszone, jak przy wizycie, z której
+ *  backend nie pozwala powtórzyć (PENDING, CONFIRMED, DECLINED). */
+const rebook = (
+  canRebook: boolean,
+  rebookEmployeeId: string | null = canRebook ? 'e1' : null,
+) => ({ canRebook, rebookEmployeeId });
+
 const booking = (
   id: string,
   status: string,
@@ -62,6 +70,7 @@ const booking = (
   serviceName: string,
   bookingReview: typeof review | null = null,
   payment: ReturnType<typeof deposit> | null = null,
+  rebookFlags: ReturnType<typeof rebook> = rebook(false),
 ) => ({
   id,
   startsAt: '2026-08-03T07:00:00.000Z',
@@ -81,6 +90,7 @@ const booking = (
   canCancel,
   review: bookingReview,
   payment,
+  ...rebookFlags,
 });
 
 const MOCK = {
@@ -129,6 +139,10 @@ async function setup(response: unknown = MOCK, url = '/client') {
     [...el().querySelectorAll<HTMLButtonElement>('button')].filter(
       (b) => b.textContent?.trim() === 'Oceń wizytę',
     );
+  const rebookLinks = () =>
+    [...el().querySelectorAll<HTMLAnchorElement>('a')].filter(
+      (a) => a.textContent?.trim() === 'Zarezerwuj ponownie',
+    );
   const dialog = () => el().querySelector('dialog') as HTMLDialogElement;
   const dialogOpen = () => dialog().hasAttribute('open');
 
@@ -167,6 +181,7 @@ async function setup(response: unknown = MOCK, url = '/client') {
     tabs,
     click,
     reviewButtons,
+    rebookLinks,
     dialog,
     dialogOpen,
     rateBooking,
@@ -487,6 +502,132 @@ describe('MyBookings', () => {
   });
 
   // ── #53: stan zaliczki na karcie wizyty ────────────────────────────────
+  describe('zarezerwuj ponownie', () => {
+    const past = '2026-08-03T07:00:00.000Z';
+    // odwołana wizyta z terminem w przyszłości leży w „Nadchodzących" — przycisk ma tam być
+    const ahead = new Date(Date.now() + 3 * 24 * 3600_000).toISOString();
+
+    const withRebook = () => ({
+      upcoming: [
+        {
+          ...booking('b1', 'CANCELLED_BY_BUSINESS', false, 'Koloryzacja', null, null, rebook(true)),
+          startsAt: ahead,
+        },
+        booking('b2', 'PENDING', true, 'Strzyżenie męskie'),
+      ],
+      past: [
+        booking('b3', 'COMPLETED', false, 'Masaż', null, null, rebook(true)),
+        booking('b4', 'DECLINED', false, 'Trymowanie brody'),
+      ],
+    });
+
+    it('link pokazuje się dokładnie przy canRebook, w obu zakładkach', async () => {
+      const ctx = await setup(withRebook());
+
+      expect(ctx.rebookLinks()).toHaveLength(1);
+
+      await ctx.click(ctx.tabs()[1]);
+
+      expect(ctx.rebookLinks()).toHaveLength(1);
+    });
+
+    it('prowadzi do kreatora z usługą, pracownikiem i punktem startowym', async () => {
+      const ctx = await setup(withRebook());
+      await ctx.click(ctx.tabs()[1]);
+
+      const href = ctx.rebookLinks()[0].getAttribute('href') ?? '';
+      const params = new URL(href, 'http://localhost').searchParams;
+
+      expect(href.startsWith('/studio-fryzur/rezerwacja')).toBe(true);
+      expect(params.get('serviceId')).toBe('s1');
+      expect(params.get('employeeId')).toBe('e1');
+      expect(params.get('rebookFrom')).toBe(
+        rebookFrom({ startsAt: past, status: 'COMPLETED', service: { id: 's1' }, rebookEmployeeId: 'e1' }),
+      );
+      expect(params.get('rebookEmployeeGone')).toBeNull();
+    });
+
+    it('notatka klienta nie jedzie do nowego terminu', async () => {
+      const ctx = await setup({
+        upcoming: [],
+        past: [
+          {
+            ...booking('b3', 'COMPLETED', false, 'Masaż', null, null, rebook(true)),
+            clientNote: 'Spóźnię się 5 minut',
+          },
+        ],
+      });
+      await ctx.click(ctx.tabs()[1]);
+
+      const href = ctx.rebookLinks()[0].getAttribute('href') ?? '';
+
+      expect(ctx.text()).toContain('Spóźnię się 5 minut');
+      expect(href).not.toContain('clientNote');
+      expect(href).not.toContain('Sp%C3%B3%C5%BAni');
+    });
+
+    it('pracownik zniknął: dowolny plus flaga degradacji wyboru', async () => {
+      const ctx = await setup({
+        upcoming: [],
+        past: [booking('b3', 'COMPLETED', false, 'Masaż', null, null, rebook(true, null))],
+      });
+      await ctx.click(ctx.tabs()[1]);
+
+      const params = new URL(
+        ctx.rebookLinks()[0].getAttribute('href') ?? '',
+        'http://localhost',
+      ).searchParams;
+
+      expect(params.get('employeeId')).toBe('any');
+      expect(params.get('rebookEmployeeGone')).toBe('1');
+    });
+
+    it('dostępna nazwa odróżnia karty: usługa i firma, nie samo „zarezerwuj ponownie"', async () => {
+      const ctx = await setup(withRebook());
+      await ctx.click(ctx.tabs()[1]);
+
+      expect(ctx.rebookLinks()[0].getAttribute('aria-label')).toBe(
+        'Zarezerwuj ponownie: Masaż w Studio Fryzur',
+      );
+    });
+
+    it('obie akcje karty biorą fokus w kolejności DOM — nawigacja klawiaturą', async () => {
+      const ctx = await setup({
+        upcoming: [],
+        past: [booking('b3', 'COMPLETED', false, 'Masaż', null, null, rebook(true))],
+      });
+      await ctx.click(ctx.tabs()[1]);
+
+      const order = [ctx.reviewButtons()[0], ctx.rebookLinks()[0]];
+      // jsdom nie emuluje Taba; sprawdzamy to, co Tab respektuje: element jest natywnie
+      // ogniskowalny (żadnego tabindex=-1) i bierze fokus, a kolejność DOM ustala kolejność
+      order.forEach((element) => {
+        expect(element.getAttribute('tabindex')).toBeNull();
+        element.focus();
+        expect(document.activeElement).toBe(element);
+      });
+      expect(order[0].compareDocumentPosition(order[1])).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+
+    it('stoi po „Oceń wizytę" w tym samym rzędzie akcji', async () => {
+      const ctx = await setup({
+        upcoming: [],
+        past: [booking('b3', 'COMPLETED', false, 'Masaż', null, null, rebook(true))],
+      });
+      await ctx.click(ctx.tabs()[1]);
+
+      const row = ctx.rebookLinks()[0].parentElement as HTMLElement;
+
+      expect(row.contains(ctx.reviewButtons()[0])).toBe(true);
+      expect(
+        row.firstElementChild === ctx.reviewButtons()[0] &&
+          row.lastElementChild === ctx.rebookLinks()[0],
+      ).toBe(true);
+    });
+  });
+
   describe('zaliczka', () => {
     /** Karta jednej wizyty z zaliczką w podanym stanie, ze znormalizowaną twardą spacją. */
     const cardWith = async (paymentStatus: string) => {

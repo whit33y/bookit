@@ -702,6 +702,8 @@ export const en: Dictionary = {
   'myBookings.field.phone': 'Phone',
   'myBookings.field.slot': 'Time',
   'myBookings.loading': 'Loading appointments…',
+  'myBookings.rebook': 'Book again',
+  'myBookings.rebookAria': 'Book again: {service} at {business}',
   'myBookings.review': 'Rate this visit',
   'myBookings.reviewGiven': 'Your rating',
   'myBookings.reviewGivenAt': 'Submitted {when}',
