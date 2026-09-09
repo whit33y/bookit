@@ -1,4 +1,4 @@
-import { todayInBusinessTz } from '../shared/business-time';
+import { addLocalDays, todayInBusinessTz } from '../shared/business-time';
 
 /** Ten sam sentinel „dowolny pracownik", którym posługuje się kreator rezerwacji. */
 const ANY_EMPLOYEE = 'any';
@@ -21,12 +21,6 @@ export interface RebookQueryParams {
   rebookFrom: string;
   rebookEmployeeGone?: '1';
 }
-
-const addDays = (date: string, days: number): string => {
-  const shifted = new Date(`${date}T00:00:00Z`);
-  shifted.setUTCDate(shifted.getUTCDate() + days);
-  return shifted.toISOString().slice(0, 10);
-};
 
 /** 31 stycznia + miesiąc to 28 lutego, nie 3 marca — natywne przesunięcie miesiąca w `Date`
  *  przelewa nadmiarowe dni do kolejnego miesiąca, więc dzień przycinamy do długości celu. */
@@ -58,10 +52,10 @@ export function rebookFrom(booking: RebookSource, now = new Date()): string {
       ? addMonth(visitDate)
       : stillAhead
         ? today
-        : addDays(visitDate, WEEK_DAYS);
+        : addLocalDays(visitDate, WEEK_DAYS);
 
   // porównanie leksykalne wystarcza: YYYY-MM-DD sortuje się chronologicznie
-  return suggested < today ? addDays(today, WEEK_DAYS) : suggested;
+  return suggested < today ? addLocalDays(today, WEEK_DAYS) : suggested;
 }
 
 /**
